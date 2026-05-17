@@ -3976,11 +3976,10 @@ globalThis.tick = function () {
         }
     }
 
-    /* Deferred Rpt1 lane switch (coalescing workaround: must be sole set_param in its tick) */
-    if (S.pendingRepeatLane >= 0) {
-        host_module_set_param('t' + S.pendingRepeatLaneTrack + '_drum_repeat_lane', String(S.pendingRepeatLane));
-        S.pendingRepeatLane = -1;
-    }
+    /* Phase 1 / Bundle 2C-Rpt1: pendingRepeatLane queue removed. Lane swap
+     * while holding a rate pad is now fired immediately on press from the
+     * lane-pad branch in _onPadPress (different set_param key from the
+     * other lane-pad pushes — no coalescing). */
 
 
     /* Set change detected in init(): send UUID so DSP constructs path and loads.
@@ -6627,7 +6626,14 @@ function _onPadPressTrackView(status, d1, d2) {
                 const lane    = S.activeDrumLane[t];
                 const vel     = d2;
                 if (S.drumRepeatLatched[t] && S.drumRepeatHeldPad[t] === padIdx) {
-                    /* Same latched pad pressed again: unlatch and stop */
+                    /* Same latched pad pressed again: unlatch and stop.
+                     * Phase 1 / Bundle 2C-Rpt1: on patched Schwung, DSP
+                     * drum_pad_event detects the same gesture synchronously
+                     * on the audio thread (reads tr->drum_repeat_latched
+                     * mirror) and calls drum_repeat_stop_internal — closes
+                     * the JS-tick race that would otherwise fire one extra
+                     * repeat at fast rates. The set_param below stays as
+                     * idempotent backstop + stock-Schwung path. */
                     S.drumRepeatLatched[t]  = false;
                     S.drumRepeatHeldPad[t]  = -1;
                     S.drumRepeatHeldPadsStack[t].length = 0;
@@ -6643,8 +6649,27 @@ function _onPadPressTrackView(status, d1, d2) {
                     S.drumRepeatHeldPad[t]    = padIdx;
                     S.drumRepeatHeldPadVel[t] = vel;
                     S.drumRepeatLatched[t]    = S.loopHeld;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_drum_repeat_start', lane + ' ' + rateIdx + ' ' + vel);
+                    if (typeof host_module_set_param === 'function') {
+                        /* Phase 1 / Bundle 2C-Rpt1: on patched Schwung the
+                         * audio-thread drum_pad_event has already called
+                         * drum_repeat_start_internal for this press. Firing
+                         * the set_param here too would re-prime phase=0
+                         * after the first hit has already played, producing
+                         * an audible double-trigger. Gate to stock-only.
+                         * The release-side stack-resume drum_repeat_start
+                         * push (elsewhere in this file) is NOT gated — DSP
+                         * doesn't classify release events, so JS owns that
+                         * path on both stock and patched. */
+                        if (!S.dspInboundEnabled)
+                            host_module_set_param('t' + t + '_drum_repeat_start', lane + ' ' + rateIdx + ' ' + vel);
+                        /* Edge push of latched flag (both paths).
+                         * drum_repeat_start_internal clears the flag at entry,
+                         * so this is the only push JS ever needs (no 0-edge).
+                         * Lets drum_pad_event detect re-tap-to-unlatch on the
+                         * audio thread with zero JS-tick race. */
+                        if (S.loopHeld)
+                            host_module_set_param('t' + t + '_drum_repeat_latched', '1');
+                    }
                 }
                 S.screenDirty = true;
                 return;
@@ -6891,10 +6916,14 @@ function _onPadPressTrackView(status, d1, d2) {
                                                  vel: recVel, isDrum: true,
                                                  pressedAtTick: S.tickCount, countInStart: S.countInStartTick };
                     }
-                    /* Rpt1: defer lane switch to tick (onMidiMessage set_params coalesce) */
+                    /* Phase 1 / Bundle 2C-Rpt1: lane-swap-while-holding-a-rate-pad.
+                     * Fire immediately on press (was: deferred 1 tick via
+                     * pendingRepeatLane). drum_repeat_lane is a different
+                     * set_param key from the other lane-pad pushes in this
+                     * onMidiMessage, so no coalescing. */
                     if (S.drumPerformMode[t] === 1 && (S.drumRepeatHeldPad[t] >= 0 || S.drumRepeatLatched[t])) {
-                        S.pendingRepeatLane = lane;
-                        S.pendingRepeatLaneTrack = t;
+                        if (typeof host_module_set_param === 'function')
+                            host_module_set_param('t' + t + '_drum_repeat_lane', String(lane));
                     }
                     forceRedraw();
                 }

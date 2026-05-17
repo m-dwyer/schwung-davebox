@@ -3910,40 +3910,23 @@ static void set_param(void *instance, const char *key, const char *val) {
         }
 
         if (!strcmp(sub, "drum_repeat_start")) {
-            /* tN_drum_repeat_start "lane rate_idx vel" — activate repeat for a drum lane */
+            /* tN_drum_repeat_start "lane rate_idx vel" — activate repeat for a drum lane.
+             * Phase 1 / Bundle 2C: delegates to drum_repeat_start_internal so the
+             * on_midi path (drum_pad_event) and set_param path share one body. */
             const char *sp = val;
             while (*sp == ' ') sp++;
             int lane_r = 0;
             while (*sp >= '0' && *sp <= '9') { lane_r = lane_r * 10 + (*sp++ - '0'); }
-            lane_r = clamp_i(lane_r, 0, DRUM_LANES - 1);
             while (*sp == ' ') sp++;
             int rate_r = 0;
             while (*sp >= '0' && *sp <= '9') { rate_r = rate_r * 10 + (*sp++ - '0'); }
-            rate_r = clamp_i(rate_r, 0, 7);
             while (*sp == ' ') sp++;
             int vel_r = 100;
             if (*sp >= '0' && *sp <= '9') {
                 vel_r = 0;
                 while (*sp >= '0' && *sp <= '9') { vel_r = vel_r * 10 + (*sp++ - '0'); }
             }
-            vel_r = clamp_i(vel_r, 1, 127);
-            tr->drum_repeat_lane     = (uint8_t)lane_r;
-            tr->drum_repeat_rate_idx = (uint8_t)rate_r;
-            tr->drum_repeat_vel      = (uint8_t)vel_r;
-            tr->drum_repeat_step     = 0;
-            tr->drum_repeat_phase    = 0;
-            tr->drum_repeat_active   = 1;
-            /* InQ sync: if playing and InQ is set, arm pending if in second half of interval */
-            { uint8_t diq = tr->drum_inp_quant;
-              if (diq > 0 && inst->playing) {
-                  int qt = (int)DRUM_INQ_TICKS[diq];
-                  uint32_t abs = inst->global_tick * (uint32_t)TICKS_PER_STEP + inst->master_tick_in_step;
-                  int phase = (int)(abs % (uint32_t)qt);
-                  tr->drum_repeat_pending = (phase >= qt / 2) ? 1 : 0;
-              } else {
-                  tr->drum_repeat_pending = 0;
-              }
-            }
+            drum_repeat_start_internal(inst, tr, lane_r, rate_r, vel_r);
             return;
         }
 
@@ -3954,15 +3937,27 @@ static void set_param(void *instance, const char *key, const char *val) {
         }
 
         if (!strcmp(sub, "drum_repeat_stop")) {
-            /* tN_drum_repeat_stop — deactivate repeat; silence any open note */
-            tr->drum_repeat_active  = 0;
-            tr->drum_repeat_pending = 0;
+            /* tN_drum_repeat_stop — deactivate repeat; also clears latch mirror */
+            drum_repeat_stop_internal(tr);
             return;
         }
 
         if (!strcmp(sub, "drum_repeat_lane")) {
             /* tN_drum_repeat_lane "lane" — switch active lane without resetting phase/step */
-            tr->drum_repeat_lane = (uint8_t)clamp_i(my_atoi(val), 0, DRUM_LANES - 1);
+            drum_repeat_lane_internal(tr, my_atoi(val));
+            return;
+        }
+
+        if (!strcmp(sub, "drum_repeat_latched")) {
+            /* Phase 1 / Bundle 2C: JS one-shot edge push. Set to 1 immediately
+             * after firing tN_drum_repeat_start when Loop is held at press time.
+             * drum_repeat_start_internal clears this back to 0 on every start,
+             * so JS never needs to push the 0-edge — set_param ordering across
+             * latched/unlatched transitions is self-cleaning. drum_pad_event
+             * reads this to detect "re-tap of latched pad = stop NOW" on the
+             * audio thread, avoiding the JS-tick race that would otherwise
+             * fire one extra repeat at fast rates. */
+            tr->drum_repeat_latched = (uint8_t)(my_atoi(val) ? 1 : 0);
             return;
         }
 
