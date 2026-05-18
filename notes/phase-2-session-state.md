@@ -1,6 +1,31 @@
-# Phase 2 — Session Checkpoint (PR #93 opened upstream, branches consolidated, A/B latency measured)
+# Phase 2 — Session Checkpoint (partial drop landed, PR #93 still open upstream)
 
-**Saved:** 2026-05-18. **Status: ✓ Phase 2 implementation COMPLETE + DEVICE-VERIFIED + A/B-MEASURED + PR #93 OPEN upstream.**
+**Saved:** 2026-05-18. **Status: ✓ Phase 2 implementation COMPLETE + DEVICE-VERIFIED + A/B-MEASURED + PARTIAL DROP LANDED on our side + PR #93 OPEN upstream.**
+
+---
+
+## 2026-05-18 — partial drop landed (later in the same day)
+
+Decision reversal vs the "no piecemeal merges" plan documented below: after the vanilla-Schwung verify test passed cleanly, we did **steps 1, 2, and 3 of the coordinated drop without waiting for PR #93 to merge upstream**. Steps 4 (cleanup pass) and 5 (release) were explicitly held.
+
+What changed today:
+
+- **dAVEBOx `main` advanced from `770a2b0` (v0.4.0) to `8f09032`.** All 32 commits from the refactor branch (Phase 1 Bundles 1 / 1.5 / 1.6 / 2.0 / 2A / 2A-fixup / 2B / 2C-Rpt1 / 2C-Rpt2 + Phase 2 Bundle 2A redesign + Bundle 2B + session-state docs + jitter tools + design records) live on `main` now. `phase-2-ext-worker` force-updated to the same commit (rebased onto the two GitHub README updates that landed on `origin/main` between sessions). Pushed `origin/main` + `origin/phase-2-ext-worker`.
+- **Fork `main` (`legsmechanical/schwung`) advanced from `24a437a8` to `d7076bc2`.** Rebased onto upstream `origin/main` (= v0.9.15 + PR #92 merge), pulled in 44 upstream commits at the base (v0.9.14: bypass shortcut, Latency Comp, wav_position zoom; v0.9.15: version bump; PR #92's merge commits). 9 fork-only co-run commits + 1 Phase 2 commit replayed cleanly on top. One trivial keep-both adjacency conflict resolved in `shadow_ui.c`. Duplicate Phase 1 sentinel commit auto-dropped via `git rebase --onto`. `patches/davebox-local.patch` regenerated against the new base (commit `d7076bc2`). Force-pushed `fork/main` + `fork/phase-2-ext-worker` with `--force-with-lease`.
+- **`fork/phase-2-ext-only` (PR #93 head) untouched** — PR is still open, do not rewrite.
+- **CHANGELOG.md `[Unreleased]`** picked up two new entries today: Phase 2 ROUTE_EXTERNAL jitter improvement (Performance / UX) and the modal pad-interception fix (Fixes).
+- **Move device** is still running the pre-rebase build (from `phase-2-ext-worker` HEAD `e69345c7`, base v0.9.13). Functionally equivalent for everything verified, but does NOT include v0.9.14's Latency Comp etc. Rebuild from `~/schwung` to pull those in if needed.
+
+What still needs PR #93 to land before triggering:
+
+- **Step 4 (cleanup pass)** — delete `PHASE-1:` / `PHASE-2:` gate comments, delete `ext_queue` storage + `ext_queue_push` + `EXT_QUEUE_SIZE` + `get_param("ext_queue")` handler + JS `tick()` ext_queue drain. User decision 2026-05-18: scrap the stock-fallback path entirely. Deferred until vanilla = patched (= PR #93 in a tagged Schwung release).
+- **Step 5 (release)** — cut dAVEBOx `v0.5.0`+ once everything is in. CHANGELOG `[Unreleased]` is ready to finalize.
+
+So the current state asymmetry: dAVEBOx-side Phase 2 code lives on `main` (just merged); shim-side Phase 2 code lives on our fork `main` but is NOT yet upstream. A user running dAVEBOx + stock Schwung gets the fallback path (verified today). A user running dAVEBOx + our fork's shim gets full Phase 2.
+
+---
+
+## Original 2026-05-18 plan (for historical reference — SHAs and "main untouched" statements below are now stale; the partial-drop block above supersedes them)
 
 Phase 1 (PR #92) + Phase 2 (PR #93) are now both at upstream Schwung. Phase 1 merged 2026-05-17; Phase 2 opened 2026-05-18, awaiting review. Until both ship in a tagged Schwung release, dAVEBOx still requires the `legsmechanical/schwung` fork for full Phase 1 + Phase 2 behavior.
 
@@ -80,6 +105,8 @@ Build a stock Schwung shim from `charlesvestal/schwung:main` (currently does NOT
 This is the safety net for users running stock Schwung; never executed this session.
 
 ### End-of-refactor coordinated drop (deferred until both PRs ship in a tagged Schwung release)
+> **Feasibility pre-checked 2026-05-18 — see `notes/upstream-sync-feasibility.md`.** Fork-main sync against current upstream is textually trivial (one keep-both adjacency conflict in `shadow_ui.c`); zero API breakage from v0.9.14 features. Held per coordinated-drop discipline until PR #93 ships in a tagged release.
+
 1. Once Charles cuts a release containing PR #92 + PR #93: merge dAVEBOx `phase-2-ext-worker` → `main` (linear FF, 29 commits).
 2. Merge fork `phase-2-ext-worker` → fork `main` (after first syncing fork main from upstream — 41+ commits to pull in).
 3. Regenerate `patches/davebox-local.patch` from `git -C ~/schwung diff <new-base-tag>..main -- src/`.
