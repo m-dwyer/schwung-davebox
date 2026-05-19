@@ -630,14 +630,20 @@ function playMetronomeClick() {
     /* DSP handles click audio via render_block; nothing to do here */
 }
 
-/* Clear all steps in a clip (single atomic DSP write). */
+/* Clear all steps in a clip. clearClip runs in on_midi context and schedules
+ * its tN_cC_clear via pendingDefaultSetParams. The drain at tick() bottom
+ * fires on the SAME audio buffer as the synchronous set_param fan-out from
+ * resetPerClipBankParamsToDefault below — and the host coalesces all of them
+ * down to a single survivor, eating the queued _clear. clearDrainHold defers
+ * the drain by one tick so _clear lands in a clean buffer. */
 function clearClip(t, ac, keepPlaying) {
     if (typeof host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
     if (S.trackPadMode[t] === PAD_MODE_DRUM) {
         /* Drum clip clear: wipe all lane step data; keep transport if S.playing */
         const keep = (keepPlaying && S.trackClipPlaying[t] && ac === S.trackActiveClip[t]) ? '1' : '0';
-        host_module_set_param('t' + t + '_c' + ac + '_drum_clear', keep);
+        S.pendingDefaultSetParams.unshift({ key: 't' + t + '_c' + ac + '_drum_clear', val: keep });
+        S.clearDrainHold = 1;
         for (let l = 0; l < DRUM_LANES; l++) {
             for (let s = 0; s < 256; s++) S.drumLaneSteps[t][l][s] = '0';
             S.drumLaneHasNotes[t][l] = false;
@@ -658,7 +664,10 @@ function clearClip(t, ac, keepPlaying) {
     const cmd = (keepPlaying && S.trackClipPlaying[t] && ac === S.trackActiveClip[t])
         ? 't' + t + '_c' + ac + '_clear_keep'
         : 't' + t + '_c' + ac + '_clear';
-    host_module_set_param(cmd, '1');
+    S.pendingDefaultSetParams.unshift({ key: cmd, val: '1' });
+    /* Defer drain 1 tick: the same buffer's sync set_param fan-out (pendingClearLength,
+     * resetPerClipBankParamsToDefault) otherwise coalesces _clear away. */
+    S.clearDrainHold = 1;
     const len = S.clipLength[t][ac];
     for (let s = 0; s < len; s++) S.clipSteps[t][ac][s] = 0;
     S.clipNonEmpty[t][ac] = false;
@@ -680,7 +689,8 @@ function hardResetClip(t, ac) {
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
     if (S.trackPadMode[t] === PAD_MODE_DRUM) {
         /* Drum clip reset: clip_init all 32 lanes; midi_note preserved */
-        host_module_set_param('t' + t + '_c' + ac + '_drum_reset', '1');
+        S.pendingDefaultSetParams.unshift({ key: 't' + t + '_c' + ac + '_drum_reset', val: '1' });
+        S.clearDrainHold = 1;
         for (let l = 0; l < DRUM_LANES; l++) {
             for (let s = 0; s < 256; s++) S.drumLaneSteps[t][l][s] = '0';
             S.drumLaneHasNotes[t][l] = false;
@@ -698,7 +708,8 @@ function hardResetClip(t, ac) {
         }
         return;
     }
-    host_module_set_param('t' + t + '_c' + ac + '_hard_reset', '1');
+    S.pendingDefaultSetParams.unshift({ key: 't' + t + '_c' + ac + '_hard_reset', val: '1' });
+    S.clearDrainHold = 1;
     const defaultLen = 16;
     for (let s = 0; s < NUM_STEPS; s++) S.clipSteps[t][ac][s] = 0;
     S.clipLength[t][ac] = defaultLen;
@@ -4160,8 +4171,11 @@ globalThis.tick = function () {
         host_module_set_param('state_load', S.currentSetUuid || '');
     }
 
-    /* Drain first-run default set_params one per tick, after state is fully settled. */
-    if (S.pendingDefaultSetParams.length > 0 && !S.pendingSetLoad && S.pendingDspSync === 0
+    /* Drain first-run default set_params one per tick, after state is fully settled.
+     * clearDrainHold defers the drain past the on_midi-context buffer where
+     * a clearClip caller fired synchronous set_params (see clearClip comment). */
+    if (S.clearDrainHold > 0) S.clearDrainHold--;
+    else if (S.pendingDefaultSetParams.length > 0 && !S.pendingSetLoad && S.pendingDspSync === 0
             && typeof host_module_set_param === 'function') {
         const _dp = S.pendingDefaultSetParams.shift();
         host_module_set_param(_dp.key, _dp.val);

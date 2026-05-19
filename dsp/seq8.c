@@ -4835,6 +4835,15 @@ static int clip_insert_note(clip_t *cl, uint32_t tick, uint16_t gate,
     cl->notes[idx].active            = 1;   /* activate last */
     cl->note_count++;
     cl->occ_dirty = 1;
+    /* Z4 probe: log every insertion into t1/c0 with caller-trace stub */
+    if (g_inst && cl == &g_inst->tracks[1].clips[0]) {
+        char _zb[160]; snprintf(_zb, sizeof(_zb),
+            "Z4 INSERT t1/c0 tick=%u pitch=%u vel=%u gate=%u nc_after=%u rec=%d cit=%d",
+            (unsigned)tick, (unsigned)pitch, (unsigned)vel, (unsigned)gate,
+            (unsigned)cl->note_count, (int)g_inst->tracks[1].recording,
+            (int)g_inst->count_in_ticks);
+        seq8_ilog(g_inst, _zb);
+    }
     return idx;
 }
 
@@ -6372,23 +6381,29 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
     if (!key || !out || out_len <= 0) return -1;
 
     if (!strcmp(key, "state_full")) {
-        if (inst->state_dirty) {
-            FILE *_fp = fmemopen(inst->state_buf, sizeof(inst->state_buf) - 1, "w");
-            if (_fp) {
-                seq8_do_serialize(inst, _fp);
-                long _pos = ftell(_fp);
-                fclose(_fp);
-                if (_pos >= 0 && _pos < (long)(sizeof(inst->state_buf) - 1)) {
-                    inst->state_buf[_pos] = '\0';
-                } else {
-                    /* overflow — fall back to synchronous file write */
-                    seq8_ilog(inst, "state_full: overflow, falling back to file write");
-                    seq8_save_state(inst);
-                    inst->state_buf[0] = '\0';
-                }
-            }
-            inst->state_dirty = 0;
+        /* Only return a payload when state is dirty. Returning the cached
+         * state_buf when clean made JS pollDSP unconditionally overwrite the
+         * on-disk file with stale state — defeating Clear Session and the
+         * deferred clear path. */
+        if (!inst->state_dirty) {
+            out[0] = '\0';
+            return 0;
         }
+        FILE *_fp = fmemopen(inst->state_buf, sizeof(inst->state_buf) - 1, "w");
+        if (_fp) {
+            seq8_do_serialize(inst, _fp);
+            long _pos = ftell(_fp);
+            fclose(_fp);
+            if (_pos >= 0 && _pos < (long)(sizeof(inst->state_buf) - 1)) {
+                inst->state_buf[_pos] = '\0';
+            } else {
+                /* overflow — fall back to synchronous file write */
+                seq8_ilog(inst, "state_full: overflow, falling back to file write");
+                seq8_save_state(inst);
+                inst->state_buf[0] = '\0';
+            }
+        }
+        inst->state_dirty = 0;
         size_t _len = strlen(inst->state_buf);
         if (_len >= (size_t)out_len) _len = (size_t)(out_len - 1);
         memcpy(out, inst->state_buf, _len);

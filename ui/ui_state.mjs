@@ -283,6 +283,7 @@ export const S = {
     pendingEditEntryTrack: -1,  /* Shift+Step3: deferred co-run entry. -1 = none; track idx = fire on Shift release so Shift state doesn't leak into Move/Schwung */
     pendingUndoSync: 0,
     pendingDefaultSetParams: [],
+    clearDrainHold: 0,       /* clearClip sets this so the next pendingDefaultSetParams drain skips one tick — keeps the queued _clear out of the same buffer as the sync set_param fan-out from clearClip's call site */
     pendingStepsReread: 0,
     pendingStepsRereadTrack: 0,
     pendingStepsRereadClip: 0,

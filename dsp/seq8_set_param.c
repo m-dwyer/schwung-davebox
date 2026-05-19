@@ -1988,6 +1988,10 @@ static void set_param(void *instance, const char *key, const char *val) {
                 tr->recording = 0;
                 if (tr->queued_clip == cidx) tr->queued_clip = -1;
                 inst->state_dirty = 1;
+                { char _zb[160]; snprintf(_zb, sizeof(_zb),
+                    "Z3 _clear_keep DONE t%d c%d nc_after=%u rec=%d",
+                    tidx, cidx, (unsigned)cl->note_count, (int)tr->recording);
+                  seq8_ilog(inst, _zb); }
                 return;
             }
             if (!strncmp(p, "_hard_reset", 11) && p[11] == '\0') {
