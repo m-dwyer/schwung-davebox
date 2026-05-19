@@ -2318,15 +2318,23 @@ function applyTrackConfig(t, key, val) {
             syncDrumClipContent(t);
         } else {
             if (t === S.activeTrack && S.activeBank === 7) S.activeBank = 0;
-            /* Leaving DRUM mode: clear JS drum vel-zone state and push DSP
-             * dispatch mirrors to safe values so on_midi can't ghost-fire a
-             * vel-zone press on the right-half pads after the switch. */
+            /* Leaving DRUM mode: clear JS drum vel-zone state and defer all
+             * downstream DSP pushes. When tN_pad_mode='0' is followed
+             * synchronously by another tN_* push from the same JS callback,
+             * the pad_mode push is silently dropped — verified empirically.
+             * The entering-DRUM branch escapes this by running sync*
+             * get_params between pad_mode and the tN_padmap push (the
+             * get_param round-trips act as a sync barrier on the audio
+             * thread). For leaving-DRUM we defer instead: adl/dpm via
+             * the queue (one per tick), and computePadNoteMap via a
+             * pending flag handled at the top of next tick. */
             S.drumVelZoneArmed[t] = false;
             S.drumLastVelZone[t]  = 0;
-            host_module_set_param('t' + t + '_active_drum_lane', '0');
-            host_module_set_param('t' + t + '_drum_perform_mode', '0');
+            S.pendingDefaultSetParams.push({ key: 't' + t + '_active_drum_lane',  val: '0' });
+            S.pendingDefaultSetParams.push({ key: 't' + t + '_drum_perform_mode', val: '0' });
+            if (t === S.activeTrack) { S.pendingPadNoteMapRecompute = true; forceRedraw(); }
         }
-        if (t === S.activeTrack) { computePadNoteMap(); forceRedraw(); }
+        if (t === S.activeTrack && val === PAD_MODE_DRUM) { computePadNoteMap(); forceRedraw(); }
     }
     else if (key === 'track_vel_override') S.trackVelOverride[t] = val;
     else if (key === 'track_looper')    S.trackLooper[t] = val;
@@ -3951,6 +3959,19 @@ var _lastSessionView = false;
 
 globalThis.tick = function () {
     S.tickCount++;
+
+    /* Deferred padmap recompute for leaving-DRUM (see applyTrackConfig
+     * else branch). Fire ONLY when the pendingDefaultSetParams queue is
+     * empty — otherwise the tN_padmap push would land in the same tick
+     * as a queue-drained tN_* push for the same track, and the empirically-
+     * observed same-track set_param interference drops the padmap push.
+     * (See the val=1 case: it works because syncDrum* get_params between
+     * the pad_mode and padmap pushes flush the buffer.) */
+    if (S.pendingPadNoteMapRecompute && S.pendingDefaultSetParams.length === 0
+            && S.clearDrainHold === 0) {
+        S.pendingPadNoteMapRecompute = false;
+        computePadNoteMap();
+    }
 
     /* PHASE-1: edge-detect modal pad-dispatch mute changes that aren't
      * caught by explicit hooks (dialogs, ARP-step-edit, knob-touch state).

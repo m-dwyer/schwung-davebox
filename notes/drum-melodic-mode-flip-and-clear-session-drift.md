@@ -1,6 +1,18 @@
-# Parked: drum→melodic Mode flip + Clear Session pad_mode drift
+# Parked: ~~drum→melodic Mode flip~~ + Clear Session pad_mode drift
 
-**Status:** PARKED 2026-05-19. Hang half shipped on `1.0-tweaks`; mode-flip drop + Clear Session drift remain unfixed.
+**Status:** Mode-flip half **FIXED 2026-05-19** on `1.0-tweaks` (see CHANGELOG `[Unreleased]` and `applyTrackConfig` else branch + tick `pendingPadNoteMapRecompute` gate). Hang half + this fix shipped. **Clear Session pad_mode drift remains parked** — read on for that half only.
+
+## Mode-flip fix summary (for trail)
+
+Root cause: 4 synchronous `tN_*` set_params for the same track in the same tick from `applyTrackConfig`'s leaving-DRUM branch (`pad_mode`, `active_drum_lane`, `drum_perform_mode`, `padmap`). The FIRST push (pad_mode) was silently dropped by same-buffer set_param interference. The entering-DRUM branch escapes only because its `syncDrum*` get_params flush the buffer between the two surviving pushes.
+
+Fix: defer the 3 extra pushes — `adl` + `dpm` via `pendingDefaultSetParams` queue (one-per-tick drain), `padmap` via `pendingPadNoteMapRecompute` flag that gates on queue-empty + `clearDrainHold === 0`. Final sequence: pad_mode (tick N alone) → adl (N+1) → dpm (N+2) → padmap (N+3). Each push lands clean.
+
+Empirically verified end-to-end with JS-side `host_write_file` trace log + DSP `seq8_ilog` probes on every relevant set_param handler. 4/4 val=0 transitions succeed in the final test run (vs 0/4 before the fix).
+
+Related: same family as the zombie-clip bug fix (commit 2a00073) — same-buffer set_param interference — but a different specific mechanism. Zombie-B was queued-vs-sync (`clearDrainHold` fix). This is multiple-sync-same-track (queue-empty-gate fix). The memory `[[feedback_set_param_per_buffer_per_key]]` ("different keys survive") is now decisively contradicted for the same-track same-tick case.
+
+---
 
 ## What the user sees
 
