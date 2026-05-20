@@ -7198,7 +7198,7 @@ function _onPadPressTrackView(status, d1, d2) {
             }
         }
         /* Drum mode pad handling */
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && (!S.shiftHeld || S.muteHeld)) {
+        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && (!S.shiftHeld || S.muteHeld || S.copyHeld)) {
             const t = S.activeTrack;
             const lane = drumPadToLane(padIdx);
             const velZone = drumPadToVelZone(padIdx);
