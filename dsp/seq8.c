@@ -3598,6 +3598,7 @@ static void arp_fire_step(seq8_instance_t *inst, seq8_track_t *tr) {
     a->step_pos = (uint8_t)step_idx;
 
     uint8_t level = a->step_vel[step_idx];
+    if (a->steps_mode == 0) level = 4;
     int step_off = (a->steps_mode != 0) && (level == 0);
 
     /* Step mode + step off: skip — no fire, no cycle advance, leave sounding alone.
@@ -4329,6 +4330,7 @@ static void tarp_fire_step(seq8_instance_t *inst, seq8_track_t *tr) {
     a->step_pos = (uint8_t)step_idx;
 
     uint8_t level = a->step_vel[step_idx];
+    if (a->steps_mode == 0) level = 4;
     int step_off = (a->steps_mode != 0) && (level == 0);
 
     if (step_off && a->steps_mode == 2) {
@@ -5464,14 +5466,7 @@ static void on_midi(void *instance, const uint8_t *msg, int len, int source) {
      * stale value can't leak to the next call. */
     inst->pad_source_scratch[t] = (uint8_t)PAD_SRC_NORMAL;
     if (is_on) {
-        /* Bundle 2B: apply VelIn (track_vel_override) for plain pad presses
-         * via the existing effective_vel helper. Mirrors JS liveSendNote at
-         * ui.js:2317 (PHASE-1-marked there). PAD_SRC_NORMAL is the bypass
-         * control point — vel-zone presses fire live_note_on from inside
-         * drum_pad_event with their own zone velocity and don't pass
-         * through here. Incidental fix: TARP arp output now respects VelIn
-         * for free because tarp_tick reads held-pad state populated by
-         * live_note_on (no code change in tarp_fire_step). */
+        if (inst->pad_dispatch_muted) { inst->pad_source_scratch[t] = (uint8_t)PAD_SRC_NORMAL; return; }
         live_note_on(inst, tr, pitch, (uint8_t)effective_vel(tr, (int)d2));
     } else {
         live_note_off(inst, tr, pitch);
@@ -5833,6 +5828,7 @@ static int bake_stage_arp_out(play_fx_t *fx, uint32_t clip_ticks,
         uint32_t mp = master_tick - a.master_anchor;
         a.step_pos  = (uint8_t)((mp / rate) & 7u);
         uint8_t slevel = a.step_vel[a.step_pos];
+        if (a.steps_mode == 0) slevel = 4;
         int step_off   = (a.steps_mode != 0) && (slevel == 0);
 
         if (step_off && a.steps_mode == 2) {

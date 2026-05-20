@@ -21,14 +21,11 @@ The batch on `1.0-tweaks` shipped items #5, #8, #10, #14, #16, #20, #29, #32 fro
 - **Press Record during playback** starts recording mid-page. Should start at the beginning of the next page.
 - **Drum lane copy/paste broken.** Notes and params appear to copy in UI, but the destination lane is empty after paste. Regression — likely DSP-side paste path mismatched to drum-lane struct.
 - **Note duration hold+tap should extend THROUGH the last tapped step.** Currently sets duration TO the tapped step, not through it. Hold step 0, tap step 4 → notes should hold until start of step 5 (step-resolution boundary, not note-window).
-- **SEQ ARP responds to step-param grid even when Step Param = Off.** Off should fully bypass.
 - **Lowest pad octave bug:** at the bottom octave setting on melodic tracks, the three left-most pads on the bottom row all light up when any one is pressed. Investigate octave-aware pad lighting logic.
-- **Focused clip should be active by default.** In track mode, selecting a clip with the side clip button should make it the active clip; Shift + clip button = focus-without-activate. Currently focus and activation are split in a confusing way.
-- **Octave shift while holding pads** — verified fixed for melodic but verify drums + drum-lane-page behaves.  (carryover sanity check from the batch)
+- **Shift+clip = focus-without-activate.** Companion to the focused-clip-active default (shipped 2026-05-19). Needs a JS-side "focused vs DSP-active" split so edits target the focused clip even when DSP is still playing the prior one. Deferred — requires deeper refactor.
 - **Re-sync after lane / clip length change.** When user edits lane length or clip length, playback should re-anchor cleanly. Current behavior can phase-shift.
 - **Reclaim ceded LEDs after split-UI exit.** dAVEBOx needs to re-fire all LEDs that were yielded to Move/Schwung native during co-run. Today some LEDs remain stuck on the native value until next state change. (Partial mitigation shipped in this batch via `invalidateLEDCache()`; verify whether the broader reclaim is still needed.)
 - **Knob position alignment** of similar params across banks/track types. Example: InQ value should sit at the same knob angle across all places it appears (ALL LANES, CLIP K6 melodic, etc.).
-- **Drums↔keys mode change LED weirdness** — partial fix shipped (`forceRedraw` + `computePadNoteMap`). Verify the drum→melodic vel-zone ghost (parked separately in memory) and audit other LED state that may not be cleaned up.
 - **Re-sync playback after sub-page loop length adjust.** Adjusting loop within a sub-page should re-anchor — both clip and lane scopes.
 - **Native Move knob hang.** Turning a Move-native knob from within dAVEBOx (or in native co-run when controlling Move-native) hangs the dAVEBOx sequencer MIDI output. Suspect shared SPI path. Diagnose.
 

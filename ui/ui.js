@@ -1419,8 +1419,11 @@ function computePadNoteMap() {
         let payload = '';
         for (let i = 0; i < 32; i++) {
             let out;
-            if (padDispatchMuted) {
+            if (padDispatchMuted && S.sessionView) {
                 out = 0xFF;
+            } else if (padDispatchMuted) {
+                const p = S.padNoteMap[i];
+                out = (p === 0xFF) ? 0xFF : Math.max(0, Math.min(127, p + octShift));
             } else {
                 const p = S.padNoteMap[i];
                 out = (p === 0xFF) ? 0xFF : Math.max(0, Math.min(127, p + octShift));
@@ -2405,6 +2408,10 @@ function applyBankParam(t, bankIdx, knobIdx, val) {
             return;
         }
         if (pm.dspKey === 'clip_length' && S.recordArmed && !S.recordCountingIn && S.recordArmedTrack === t) return;
+        if (pm.dspKey === 'seq_arp_steps_mode' || pm.dspKey === 'tarp_steps_mode') {
+            S.pendingDefaultSetParams.push({ key: 't' + t + '_' + pm.dspKey, val: strVal });
+            return;
+        }
         host_module_set_param('t' + t + '_' + pm.dspKey, strVal);
         if (pm.dspKey === 'clip_length') {
             const ac = S.trackActiveClip[t];
@@ -6146,15 +6153,16 @@ function _onCC_side(d1, d2) {
                 if (typeof host_module_set_param === 'function')
                     host_module_set_param('t' + t + '_deactivate', '1');
             } else {
-                /* Launch: legato if S.playing, queued if not */
-                if (!S.playing) {
-                    S.trackActiveClip[t]  = clipIdx;
-                    S.trackCurrentPage[t] = 0;
-                    refreshPerClipBankParams(t);
-                    if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-                        S.pendingDrumResync      = 2;
-                        S.pendingDrumResyncTrack = t;
-                    }
+                /* Focus immediately so pads/OLED show the selected clip even
+                 * while the prior clip is still playing toward its legato
+                 * switch boundary. pollDSP will keep trackActiveClip in sync
+                 * when DSP actually crosses the boundary. */
+                S.trackActiveClip[t]  = clipIdx;
+                S.trackCurrentPage[t] = 0;
+                refreshPerClipBankParams(t);
+                if (S.trackPadMode[t] === PAD_MODE_DRUM) {
+                    S.pendingDrumResync      = 2;
+                    S.pendingDrumResyncTrack = t;
                 }
                 if (typeof host_module_set_param === 'function')
                     host_module_set_param('t' + t + '_launch_clip', String(clipIdx));
@@ -8150,11 +8158,27 @@ function _onPadRelease(status, d1, d2) {
     /* Swallow pad releases while SEQ ARP step-level editor is open. */
     if (!S.sessionView && S.activeBank === 4 && S.knobTouched === 4 &&
             (S.bankParams[S.activeTrack][4][4] | 0) !== 0 &&
-            d1 >= 68 && d1 <= 99) return;
+            d1 >= 68 && d1 <= 99) {
+        const _pi = d1 - TRACK_PAD_BASE;
+        if (_pi >= 0 && _pi < 32 && padPitch[_pi] >= 0) {
+            liveSendNote(S.activeTrack, 0x80, padPitch[_pi], 0);
+            S.liveActiveNotes.delete(padPitch[_pi]);
+            padPitch[_pi] = -1;
+        }
+        return;
+    }
     /* Swallow pad releases while TRACK ARP step-level editor is open. */
     if (!S.sessionView && S.activeBank === 5 && S.knobTouched === 4 &&
             (S.bankParams[S.activeTrack][5][4] | 0) !== 0 &&
-            d1 >= 68 && d1 <= 99) return;
+            d1 >= 68 && d1 <= 99) {
+        const _pi = d1 - TRACK_PAD_BASE;
+        if (_pi >= 0 && _pi < 32 && padPitch[_pi] >= 0) {
+            liveSendNote(S.activeTrack, 0x80, padPitch[_pi], 0);
+            S.liveActiveNotes.delete(padPitch[_pi]);
+            padPitch[_pi] = -1;
+        }
+        return;
+    }
     /* Perf Mode pad release: handle R0 rate pad pop + mod pad release. */
     if (S.sessionView && (S.loopHeld || S.perfViewLocked) && d1 >= 68 && d1 <= 99) {
         if (d1 >= 68 && d1 <= 75) {
