@@ -1009,6 +1009,7 @@ static void set_param(void *instance, const char *key, const char *val) {
             if (srcT == dstT && srcC == dstC) return;
             undo_begin_single(inst, dstT, dstC);
             dst->length        = src->length;
+            dst->loop_start    = src->loop_start;
             dst->ticks_per_step = src->ticks_per_step;
             dst->pfx_params    = src->pfx_params;
             memcpy(dst->steps,           src->steps,           SEQ_STEPS);
@@ -1041,6 +1042,7 @@ static void set_param(void *instance, const char *key, const char *val) {
             clip_t *src = &inst->tracks[t].clips[srcRow];
             clip_t *dst = &inst->tracks[t].clips[dstRow];
             dst->length         = src->length;
+            dst->loop_start     = src->loop_start;
             dst->ticks_per_step = src->ticks_per_step;
             dst->pfx_params     = src->pfx_params;
             memcpy(dst->steps,           src->steps,           SEQ_STEPS);
@@ -1071,6 +1073,7 @@ static void set_param(void *instance, const char *key, const char *val) {
                 memcpy(dc->step_gate,        sc->step_gate,        SEQ_STEPS * sizeof(uint16_t));
                 memcpy(dc->note_tick_offset, sc->note_tick_offset, SEQ_STEPS * 8 * sizeof(int16_t));
                 dc->length         = sc->length;
+                dc->loop_start     = sc->loop_start;
                 dc->ticks_per_step = sc->ticks_per_step;
                 dc->active         = sc->active;
                 ddst->lanes[l].midi_note = dst_midi_note;
@@ -1102,6 +1105,7 @@ static void set_param(void *instance, const char *key, const char *val) {
             clip_t *dst = &dstTr->clips[dstC];
             undo_begin_clip_pair(inst, srcT, srcC, dstT, dstC);
             dst->length         = src->length;
+            dst->loop_start     = src->loop_start;
             dst->ticks_per_step = src->ticks_per_step;
             dst->pfx_params     = src->pfx_params;
             memcpy(dst->steps,            src->steps,            SEQ_STEPS);
@@ -1143,6 +1147,7 @@ static void set_param(void *instance, const char *key, const char *val) {
             clip_t *src = &tr->clips[srcRow];
             clip_t *dst = &tr->clips[dstRow];
             dst->length         = src->length;
+            dst->loop_start     = src->loop_start;
             dst->ticks_per_step = src->ticks_per_step;
             dst->pfx_params     = src->pfx_params;
             memcpy(dst->steps,            src->steps,            SEQ_STEPS);
@@ -1181,6 +1186,7 @@ static void set_param(void *instance, const char *key, const char *val) {
                 memcpy(dc->step_gate,        sc->step_gate,        SEQ_STEPS * sizeof(uint16_t));
                 memcpy(dc->note_tick_offset, sc->note_tick_offset, SEQ_STEPS * 8 * sizeof(int16_t));
                 dc->length         = sc->length;
+                dc->loop_start     = sc->loop_start;
                 dc->ticks_per_step = sc->ticks_per_step;
                 dc->active         = sc->active;
                 ddst->lanes[l].midi_note = dst_midi_note;
@@ -1224,6 +1230,7 @@ static void set_param(void *instance, const char *key, const char *val) {
                 memcpy(dc->step_gate,        sc->step_gate,        SEQ_STEPS * sizeof(uint16_t));
                 memcpy(dc->note_tick_offset, sc->note_tick_offset, SEQ_STEPS * 8 * sizeof(int16_t));
                 dc->length        = sc->length;
+                dc->loop_start    = sc->loop_start;
                 dc->ticks_per_step = sc->ticks_per_step;
                 dc->active        = sc->active;
                 dst->lanes[l].pfx_params = src->lanes[l].pfx_params;
@@ -1270,6 +1277,7 @@ static void set_param(void *instance, const char *key, const char *val) {
                 memcpy(dc->step_gate,        sc->step_gate,        SEQ_STEPS * sizeof(uint16_t));
                 memcpy(dc->note_tick_offset, sc->note_tick_offset, SEQ_STEPS * 8 * sizeof(int16_t));
                 dc->length        = sc->length;
+                dc->loop_start    = sc->loop_start;
                 dc->ticks_per_step = sc->ticks_per_step;
                 dc->active        = sc->active;
                 dst->lanes[l].pfx_params = src->lanes[l].pfx_params;
@@ -2934,6 +2942,7 @@ static void set_param(void *instance, const char *key, const char *val) {
                     memcpy(dst->clip.step_gate,        dlc->step_gate,        SEQ_STEPS * sizeof(uint16_t));
                     memcpy(dst->clip.note_tick_offset, dlc->note_tick_offset, SEQ_STEPS * 8 * sizeof(int16_t));
                     dst->clip.length        = dlc->length;
+                    dst->clip.loop_start    = dlc->loop_start;
                     dst->clip.ticks_per_step = dlc->ticks_per_step;
                     dst->clip.active        = dlc->active;
                     dst->midi_note          = dst_midi_note;
@@ -2965,6 +2974,7 @@ static void set_param(void *instance, const char *key, const char *val) {
                     memcpy(dst->clip.step_gate,        dlc->step_gate,        SEQ_STEPS * sizeof(uint16_t));
                     memcpy(dst->clip.note_tick_offset, dlc->note_tick_offset, SEQ_STEPS * 8 * sizeof(int16_t));
                     dst->clip.length        = dlc->length;
+                    dst->clip.loop_start    = dlc->loop_start;
                     dst->clip.ticks_per_step = dlc->ticks_per_step;
                     dst->clip.active        = dlc->active;
                     dst->midi_note          = dst_midi_note;

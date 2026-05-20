@@ -735,6 +735,7 @@ function copyClip(srcT, srcC, dstT, dstC) {
     S.pendingDefaultSetParams.push({ key: 'clip_copy', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
     S.clipSteps[dstT][dstC] = S.clipSteps[srcT][srcC].slice();
     S.clipLength[dstT][dstC] = S.clipLength[srcT][srcC];
+    S.clipLoopStart[dstT][dstC] = S.clipLoopStart[srcT][srcC];
     S.clipNonEmpty[dstT][dstC] = S.clipNonEmpty[srcT][srcC];
     S.clipTPS[dstT][dstC] = S.clipTPS[srcT][srcC];
     if (dstC === S.trackActiveClip[dstT]) {
@@ -751,6 +752,7 @@ function cutClip(srcT, srcC, dstT, dstC) {
     S.pendingDefaultSetParams.push({ key: 'clip_cut', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
     S.clipSteps[dstT][dstC] = S.clipSteps[srcT][srcC].slice();
     S.clipLength[dstT][dstC] = S.clipLength[srcT][srcC];
+    S.clipLoopStart[dstT][dstC] = S.clipLoopStart[srcT][srcC];
     S.clipNonEmpty[dstT][dstC] = S.clipNonEmpty[srcT][srcC];
     S.clipTPS[dstT][dstC] = S.clipTPS[srcT][srcC];
     if (dstC === S.trackActiveClip[dstT]) {
@@ -759,6 +761,7 @@ function cutClip(srcT, srcC, dstT, dstC) {
     }
     for (let s = 0; s < NUM_STEPS; s++) S.clipSteps[srcT][srcC][s] = 0;
     S.clipLength[srcT][srcC] = 16;
+    S.clipLoopStart[srcT][srcC] = 0;
     S.clipNonEmpty[srcT][srcC] = false;
     S.clipTPS[srcT][srcC] = 24;
     if (srcC === S.trackActiveClip[srcT]) {
@@ -776,6 +779,7 @@ function copyRow(srcRow, dstRow) {
     for (let t = 0; t < NUM_TRACKS; t++) {
         S.clipSteps[t][dstRow] = S.clipSteps[t][srcRow].slice();
         S.clipLength[t][dstRow] = S.clipLength[t][srcRow];
+        S.clipLoopStart[t][dstRow] = S.clipLoopStart[t][srcRow];
         S.clipNonEmpty[t][dstRow] = S.clipNonEmpty[t][srcRow];
         S.clipTPS[t][dstRow] = S.clipTPS[t][srcRow];
         S.drumClipNonEmpty[t][dstRow] = S.drumClipNonEmpty[t][srcRow];
@@ -798,6 +802,7 @@ function cutRow(srcRow, dstRow) {
     for (let t = 0; t < NUM_TRACKS; t++) {
         S.clipSteps[t][dstRow] = S.clipSteps[t][srcRow].slice();
         S.clipLength[t][dstRow] = S.clipLength[t][srcRow];
+        S.clipLoopStart[t][dstRow] = S.clipLoopStart[t][srcRow];
         S.clipNonEmpty[t][dstRow] = S.clipNonEmpty[t][srcRow];
         S.clipTPS[t][dstRow] = S.clipTPS[t][srcRow];
         S.drumClipNonEmpty[t][dstRow] = S.drumClipNonEmpty[t][srcRow];
@@ -810,6 +815,7 @@ function cutRow(srcRow, dstRow) {
         }
         for (let s = 0; s < NUM_STEPS; s++) S.clipSteps[t][srcRow][s] = 0;
         S.clipLength[t][srcRow] = 16;
+        S.clipLoopStart[t][srcRow] = 0;
         S.clipNonEmpty[t][srcRow] = false;
         S.clipTPS[t][srcRow] = 24;
         S.drumClipNonEmpty[t][srcRow] = false;
@@ -6323,9 +6329,15 @@ function _onCC_side(d1, d2) {
                 /* Focus immediately so pads/OLED show the selected clip even
                  * while the prior clip is still playing toward its legato
                  * switch boundary. pollDSP will keep trackActiveClip in sync
-                 * when DSP actually crosses the boundary. */
+                 * when DSP actually crosses the boundary.
+                 * Page snaps to the page containing the clip's loop_start so
+                 * a clip with a non-zero loop window doesn't briefly render
+                 * its OOB region on select. Drum tracks: leave at 0 (drum
+                 * loop_start is per-lane and refreshed by pendingDrumResync). */
                 S.trackActiveClip[t]  = clipIdx;
-                S.trackCurrentPage[t] = 0;
+                S.trackCurrentPage[t] = S.trackPadMode[t] === PAD_MODE_DRUM
+                    ? 0
+                    : Math.floor((S.clipLoopStart[t][clipIdx] | 0) / 16);
                 refreshPerClipBankParams(t);
                 if (S.trackPadMode[t] === PAD_MODE_DRUM) {
                     S.pendingDrumResync      = 2;
@@ -7824,7 +7836,12 @@ function _onPadPress(status, d1, d2) {
                                 if (!S.playing) {
                                     const prevClip = S.trackActiveClip[t];
                                     S.trackActiveClip[t]  = clipIdx;
-                                    S.trackCurrentPage[t] = 0;
+                                    /* Snap to page containing loop_start so
+                                     * non-zero-start clips don't show OOB
+                                     * region on initial select. */
+                                    S.trackCurrentPage[t] = S.trackPadMode[t] === PAD_MODE_DRUM
+                                        ? 0
+                                        : Math.floor((S.clipLoopStart[t][clipIdx] | 0) / 16);
                                     refreshPerClipBankParams(t);
                                     if (S.trackPadMode[t] === PAD_MODE_DRUM && prevClip !== clipIdx) {
                                         S.pendingDrumResync      = 2;
