@@ -30,13 +30,11 @@ echo "Compiling DSP..."
     -lm
 
 cp module.json           "dist/${MODULE_ID}/"
-cp ui/ui.js              "dist/${MODULE_ID}/"
-cp ui/ui_constants.mjs   "dist/${MODULE_ID}/"
-cp ui/ui_state.mjs       "dist/${MODULE_ID}/"
-cp ui/ui_persistence.mjs "dist/${MODULE_ID}/"
-cp ui/ui_dialogs.mjs     "dist/${MODULE_ID}/"
-cp ui/ui_scene.mjs       "dist/${MODULE_ID}/"
-cp ui/ui_leds.mjs        "dist/${MODULE_ID}/"
+# Bundle the JS module tree (ui.js + ui_*.mjs) into a single QuickJS-loadable
+# dist/${MODULE_ID}/ui.js. Earlier versions copied the raw dev ui.js, which
+# clobbers the bundled output and ships ES-module imports that QuickJS can't
+# resolve — manifests on device as "failed to load tool".
+python3 scripts/bundle_ui.py
 # Convert source (24-bit stereo 44100Hz) → normalized 16-bit mono 48000Hz for DSP render_block
 python3 - <<'PYEOF'
 import wave, struct, audioop, warnings
