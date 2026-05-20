@@ -6,7 +6,6 @@
 7. **State snapshots** (16 slots)
 9. **MIDI clock sync**
 10. **Track conversion** (`tN_convert_to_drum`/`tN_convert_to_melodic`): Global Menu Mode item or dedicated dialog.
-20. **Scene bake**: bake all 8 tracks at a given clip index. Needs: DSP `bake_scene` set_param handler (loop over tracks, call bake_clip/bake_drum_clip per type); JS multi-track post-bake resync; new confirm dialog. Per-clip bake functions already exist; `launch_scene` is the precedent for scene-level DSP loops.
 
 ## 1.0 fixes/tweaks — remaining (carried over from the May 2026 batch)
 
@@ -40,5 +39,9 @@ The batch on `1.0-tweaks` shipped items #5, #8, #10, #14, #16, #20, #29, #32 fro
 - **Delay `retrig` param** — new knob. When a note is received while repeats are still playing, the existing repeats stop immediately; only the most recent press's repeats are audible.
 - **All-track clip merge.**
 - **Shift + row button** launches the row from the beginning of the next bar.
+
+## Post-1.0 investigations
+
+- **Move-native state readback via Sentry breadcrumbs.** Sentry SDK writes per-process breadcrumb files under `/data/UserData/Sentry/<uuid>.run/__sentry-breadcrumb{1,2}` (MessagePack ring buffer). MoveOriginal emits `Set MainMode (new state: note|session|songOverview)`, `Set ShiftMode`, `Push/Pop MomentaryMode`, `Song opened (UUID ...)` — a real read-only side channel into Move-native firmware state. Would let co-run auto-detect exit, mirror Shift state, and sync set loads. Investigation parked with full vocabulary + caveats in `notes/sentry-breadcrumb-state-readback.md`. Next step: live capture during a co-run handoff while exercising Note/Session/device-edit/preset-browser, then prototype a msgpack parser.
 
 Source: `~/Downloads/1.0 fixes tweaks.txt` (user-maintained). When user adds new items there, they should be mirrored here.

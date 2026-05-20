@@ -1062,7 +1062,7 @@ These are two ways to commit transformations into clip data. They operate on the
 
 ## 9.1 Bake
 
-Press **Sample** to open the bake dialog.
+In **Track View**, press **Sample** to open the bake dialog for the active track's active clip. (In Session View, a bare Sample tap is a no-op — Sample acts as a modifier for scene bake there; see § 9.1.3.)
 
 ### Melodic bake
 
@@ -1091,6 +1091,12 @@ Three dialogs in sequence:
 If the clip is empty, bake does nothing.
 
 > **Try this.** Bake a clip at 4x, then load fresh effects on top of the baked result and bake again. Layer by layer, you can build patterns that would be impossible to sequence by hand.
+
+### 9.1.3 Scene bake
+
+In **Session View**, **hold Sample + tap a scene row button** to open the scene bake dialog at that column. Bakes the column's clip on every track in one pass — each track runs the same chain its per-clip bake would run (melodic uses the full chain; drum uses CLIP-mode semantics).
+
+Dialog: **CANCEL / 1x / 2x / 4x** (default 1x). Jog scrolls; click confirms. Empty clips on a given track are skipped silently.
 
 ## 9.2 Live Merge
 

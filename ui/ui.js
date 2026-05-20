@@ -2131,21 +2131,24 @@ function updateNameIndex() {
 }
 
 /* Reset NOTE FX, HARMZ, and MIDI DLY banks to DSP defaults for track t.
- * Sends a single tN_pfx_reset command (Schwung only delivers the last
- * set_param per tick — individual per-param sends would be coalesced). */
+ * The pfx_reset push itself is deferred via pendingDefaultSetParams — when
+ * called from a MIDI handler (jog click), a synchronous push competes with
+ * the same-buffer MIDI delivery and is silently coalesced away, leaving DSP
+ * with no reset despite the OLED reporting success. The delay_level=127
+ * override is queued after the reset so it lands on a later tick (DSP zeros
+ * delay_level during the reset). */
 function resetFxBanks(t) {
     if (typeof host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false;
     if (S.trackPadMode[t] === PAD_MODE_DRUM) {
         const lane = S.activeDrumLane[t];
-        host_module_set_param('t' + t + '_l' + lane + '_pfx_reset', '1');
-        /* Defer delay_level=127 override; DSP zeros it during pfx_reset. */
+        S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + lane + '_pfx_reset', val: '1' });
         S.pendingDefaultSetParams.push({
             key: 't' + t + '_l' + lane + '_pfx_set',
             val: 'delay_level 127'
         });
     } else {
-        host_module_set_param('t' + t + '_pfx_reset', '1');
+        S.pendingDefaultSetParams.push({ key: 't' + t + '_pfx_reset', val: '1' });
         const _ac = S.trackActiveClip[t];
         S.pendingDefaultSetParams.push({
             key: 't' + t + '_c' + _ac + '_pfx_set',
@@ -2171,9 +2174,8 @@ function resetSingleFxBank(t, bankIdx) {
     S.undoAvailable = true; S.redoAvailable = false;
     if (S.trackPadMode[t] === PAD_MODE_DRUM) {
         const lane = S.activeDrumLane[t];
-        host_module_set_param('t' + t + '_l' + lane + '_pfx_set', dspCmd + ' 1');
-        /* After DSP zeroes delay_level, defer a 127 override onto the queue
-         * so it lands on a later tick (avoids set_param coalescing). */
+        /* Defer the reset push (same coalescing concern as resetFxBanks). */
+        S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + lane + '_pfx_set', val: dspCmd + ' 1' });
         if (bankIdx === 3) {
             S.pendingDefaultSetParams.push({
                 key: 't' + t + '_l' + lane + '_pfx_set',
@@ -2181,7 +2183,7 @@ function resetSingleFxBank(t, bankIdx) {
             });
         }
     } else {
-        host_module_set_param('t' + t + '_' + dspCmd, '1');
+        S.pendingDefaultSetParams.push({ key: 't' + t + '_' + dspCmd, val: '1' });
         if (bankIdx === 3) {
             const _ac = S.trackActiveClip[t];
             S.pendingDefaultSetParams.push({
@@ -5089,6 +5091,26 @@ function _onCC_jog(d1, d2) {
         return;
     }
     if (d1 === 3 && d2 === 127 && S.deleteHeld && !S.sessionView) {
+        /* CC PARAM bank (bank 6): Delete+jog clears all CC automation for the
+         * active clip. This branch must run regardless of pad mode or drum
+         * perform mode — previously it was nested inside the melodic branch,
+         * so on a drum track in Rpt mode it was silently shadowed by the
+         * repeat-groove reset path. */
+        if (S.activeBank === 6) {
+            const _t = S.activeTrack, _c = S.trackActiveClip[_t];
+            S.trackCCAutoBits[_t][_c] = 0;
+            S.trackCCLiveVal[_t] = new Array(8).fill(-1);
+            /* Reset the per-knob value array too — the bank 6 OLED draw reads
+             * trackCCVal directly (not trackCCLiveVal), so without this the
+             * pre-clear knob values stay on screen even after automation is
+             * gone. Matches the doClearSession init (zero-fill). */
+            S.trackCCVal[_t] = new Array(8).fill(0);
+            /* Defer clear push — synchronous from jog handler coalesces. */
+            S.pendingDefaultSetParams.push({ key: 't' + _t + '_cc_auto_clear', val: String(_c) });
+            showActionPopup('CC AUTO', 'CLEAR');
+            invalidateLEDCache();
+            return;
+        }
         if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
             if (S.drumPerformMode[S.activeTrack] > 0) {
                 /* Rpt/Rpt2 mode: Delete+jog = reset current lane groove params */
@@ -5100,8 +5122,8 @@ function _onCC_jog(d1, d2) {
                     S.drumRepeatVelScale[_rt][_rl][_s] = 100;
                     S.drumRepeatNudge[_rt][_rl][_s]    = 0;
                 }
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + _rt + '_l' + _rl + '_repeat_groove_reset', '1');
+                /* Defer reset push — synchronous from jog handler coalesces. */
+                S.pendingDefaultSetParams.push({ key: 't' + _rt + '_l' + _rl + '_repeat_groove_reset', val: '1' });
                 showActionPopup('RPT GROOVE', 'RESET');
             } else {
                 /* Drum: Delete+jog = reset only the active real-time FX bank */
@@ -5112,17 +5134,6 @@ function _onCC_jog(d1, d2) {
                 }
             }
         } else {
-            /* CC PARAM bank: Delete+jog clears all CC automation for active clip */
-            if (S.activeBank === 6) {
-                const _t = S.activeTrack, _c = S.trackActiveClip[_t];
-                S.trackCCAutoBits[_t][_c] = 0;
-                S.trackCCLiveVal[_t] = new Array(8).fill(-1);
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + _t + '_cc_auto_clear', String(_c));
-                showActionPopup('CC AUTO', 'CLEAR');
-                invalidateLEDCache();
-                return;
-            }
             resetFxBanks(S.activeTrack);
             S.undoSeqArpSnapshot = null;
             showActionPopup('BANK RESET');
@@ -5922,10 +5933,14 @@ function _onCC_transport(d1, d2) {
             /* LED stays green until DSP finalizes at page boundary */
         }
     }
-    /* Sample release (no modifier): open per-track bake if not used as modifier */
+    /* Sample release (no modifier): open per-track bake if not used as modifier.
+     * Clip bake is a Track View action only — in Session View, Sample is a
+     * modifier for scene bake (Sample + scene row), and a bare tap should be
+     * a no-op to avoid opening clip bake on whatever happens to be the active
+     * track at the time. */
     if (d1 === MoveSample && d2 === 0 && !S.shiftHeld) {
         S.sampleHeld = false;
-        if (!S.sampleUsedAsModifier) {
+        if (!S.sampleUsedAsModifier && !S.sessionView) {
             const _bt = S.activeTrack, _bc = S.trackActiveClip[_bt];
             const _isDrum = S.trackPadMode[_bt] === PAD_MODE_DRUM;
             S.confirmBake             = true;
