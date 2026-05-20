@@ -613,7 +613,7 @@ function refreshSeqNotesIfCurrent(t, ac, absIdx) {
 function clearStep(t, ac, absIdx) {
     if (typeof host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    host_module_set_param('t' + t + '_c' + ac + '_step_' + absIdx + '_clear', '1');
+    S.pendingDefaultSetParams.push({ key: 't' + t + '_c' + ac + '_step_' + absIdx + '_clear', val: '1' });
     S.clipSteps[t][ac][absIdx] = 0;
     if (S.clipNonEmpty[t][ac]) S.clipNonEmpty[t][ac] = clipHasContent(t, ac);
     refreshSeqNotesIfCurrent(t, ac, absIdx);
@@ -729,7 +729,7 @@ function copyClip(srcT, srcC, dstT, dstC) {
     if (srcT === dstT && srcC === dstC) return;
     if (typeof host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    host_module_set_param('clip_copy', `${srcT} ${srcC} ${dstT} ${dstC}`);
+    S.pendingDefaultSetParams.push({ key: 'clip_copy', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
     S.clipSteps[dstT][dstC] = S.clipSteps[srcT][srcC].slice();
     S.clipLength[dstT][dstC] = S.clipLength[srcT][srcC];
     S.clipNonEmpty[dstT][dstC] = S.clipNonEmpty[srcT][srcC];
@@ -745,7 +745,7 @@ function cutClip(srcT, srcC, dstT, dstC) {
     if (srcT === dstT && srcC === dstC) return;
     if (typeof host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    host_module_set_param('clip_cut', `${srcT} ${srcC} ${dstT} ${dstC}`);
+    S.pendingDefaultSetParams.push({ key: 'clip_cut', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
     S.clipSteps[dstT][dstC] = S.clipSteps[srcT][srcC].slice();
     S.clipLength[dstT][dstC] = S.clipLength[srcT][srcC];
     S.clipNonEmpty[dstT][dstC] = S.clipNonEmpty[srcT][srcC];
@@ -769,7 +769,7 @@ function copyRow(srcRow, dstRow) {
     if (srcRow === dstRow) return;
     if (typeof host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    host_module_set_param('row_copy', `${srcRow} ${dstRow}`);
+    S.pendingDefaultSetParams.push({ key: 'row_copy', val: `${srcRow} ${dstRow}` });
     for (let t = 0; t < NUM_TRACKS; t++) {
         S.clipSteps[t][dstRow] = S.clipSteps[t][srcRow].slice();
         S.clipLength[t][dstRow] = S.clipLength[t][srcRow];
@@ -791,7 +791,7 @@ function cutRow(srcRow, dstRow) {
     if (srcRow === dstRow) return;
     if (typeof host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    host_module_set_param('row_cut', `${srcRow} ${dstRow}`);
+    S.pendingDefaultSetParams.push({ key: 'row_cut', val: `${srcRow} ${dstRow}` });
     for (let t = 0; t < NUM_TRACKS; t++) {
         S.clipSteps[t][dstRow] = S.clipSteps[t][srcRow].slice();
         S.clipLength[t][dstRow] = S.clipLength[t][srcRow];
@@ -826,14 +826,14 @@ function copyStep(t, ac, srcAbs, dstAbs) {
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
     if (S.trackPadMode[t] === PAD_MODE_DRUM) {
         const lane = S.activeDrumLane[t];
-        host_module_set_param('t' + t + '_l' + lane + '_step_' + srcAbs + '_copy_to', String(dstAbs));
+        S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + lane + '_step_' + srcAbs + '_copy_to', val: String(dstAbs) });
         S.drumLaneSteps[t][lane][dstAbs] = S.drumLaneSteps[t][lane][srcAbs];
         if (S.drumLaneSteps[t][lane][srcAbs] !== '0') S.drumLaneHasNotes[t][lane] = true;
         S.pendingDrumLaneResync      = 2;
         S.pendingDrumLaneResyncTrack = t;
         S.pendingDrumLaneResyncLane  = lane;
     } else {
-        host_module_set_param('t' + t + '_c' + ac + '_step_' + srcAbs + '_copy_to', String(dstAbs));
+        S.pendingDefaultSetParams.push({ key: 't' + t + '_c' + ac + '_step_' + srcAbs + '_copy_to', val: String(dstAbs) });
         S.clipSteps[t][ac][dstAbs] = S.clipSteps[t][ac][srcAbs];
         if (S.clipSteps[t][ac][srcAbs] !== 0) S.clipNonEmpty[t][ac] = true;
         S.pendingStepsReread      = 2;
@@ -847,7 +847,7 @@ function copyDrumLane(t, srcLane, dstLane) {
     if (srcLane === dstLane) return;
     if (typeof host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    host_module_set_param('t' + t + '_l' + srcLane + '_copy_to', String(dstLane));
+    S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + srcLane + '_copy_to', val: String(dstLane) });
     const steps = S.drumLaneSteps[t];
     for (let s = 0; s < 256; s++) steps[dstLane][s] = steps[srcLane][s];
     S.drumLaneHasNotes[t][dstLane] = S.drumLaneHasNotes[t][srcLane];
@@ -866,7 +866,7 @@ function cutDrumLane(t, srcLane, dstLane) {
     if (srcLane === dstLane) return;
     if (typeof host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    host_module_set_param('t' + t + '_l' + srcLane + '_cut_to', String(dstLane));
+    S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + srcLane + '_cut_to', val: String(dstLane) });
     const steps = S.drumLaneSteps[t];
     for (let s = 0; s < 256; s++) { steps[dstLane][s] = steps[srcLane][s]; steps[srcLane][s] = '0'; }
     S.drumLaneHasNotes[t][dstLane] = S.drumLaneHasNotes[t][srcLane];
@@ -890,7 +890,7 @@ function copyDrumClip(srcT, srcC, dstT, dstC) {
     if (srcT === dstT && srcC === dstC) return;
     if (typeof host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    host_module_set_param('drum_clip_copy', `${srcT} ${srcC} ${dstT} ${dstC}`);
+    S.pendingDefaultSetParams.push({ key: 'drum_clip_copy', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
     S.drumClipNonEmpty[dstT][dstC] = S.drumClipNonEmpty[srcT][srcC];
     if (dstC === S.trackActiveClip[dstT]) { S.pendingDrumResync = 2; S.pendingDrumResyncTrack = dstT; }
 }
@@ -900,7 +900,7 @@ function cutDrumClip(srcT, srcC, dstT, dstC) {
     if (srcT === dstT && srcC === dstC) return;
     if (typeof host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    host_module_set_param('drum_clip_cut', `${srcT} ${srcC} ${dstT} ${dstC}`);
+    S.pendingDefaultSetParams.push({ key: 'drum_clip_cut', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
     S.drumClipNonEmpty[dstT][dstC] = S.drumClipNonEmpty[srcT][srcC];
     S.drumClipNonEmpty[srcT][srcC] = false;
     if (srcC === S.trackActiveClip[srcT]) {
@@ -918,7 +918,7 @@ function cutDrumClip(srcT, srcC, dstT, dstC) {
 function clearRow(rowIdx) {
     if (typeof host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    host_module_set_param('row_clear', String(rowIdx));
+    S.pendingDefaultSetParams.push({ key: 'row_clear', val: String(rowIdx) });
     for (let t = 0; t < NUM_TRACKS; t++) {
         const len = S.clipLength[t][rowIdx];
         for (let s = 0; s < len; s++) S.clipSteps[t][rowIdx][s] = 0;
@@ -5928,7 +5928,7 @@ function _onCC_transport(d1, d2) {
             S.sampleUsedAsModifier    = true;
             forceRedraw();
         } else if (S.dspMergeState !== 0) {
-            host_module_set_param('merge_stop', '1');
+            S.pendingDefaultSetParams.push({ key: 'merge_stop', val: '1' });
             S.sampleUsedAsModifier = true;
             /* LED stays green until DSP finalizes at page boundary */
         }
@@ -5958,10 +5958,10 @@ function _onCC_transport(d1, d2) {
     /* Shift+Sample (CC 118): arm / disarm Live Merge for S.activeTrack */
     if (d1 === MoveSample && d2 === 127 && S.shiftHeld) {
         if (S.dspMergeState !== 0) {
-            host_module_set_param('merge_stop', '1');
+            S.pendingDefaultSetParams.push({ key: 'merge_stop', val: '1' });
             /* LED stays green until DSP finalizes at page boundary */
         } else {
-            host_module_set_param('merge_arm', String(S.activeTrack));
+            S.pendingDefaultSetParams.push({ key: 'merge_arm', val: String(S.activeTrack) });
             S.dspMergeTrack    = S.activeTrack;
             S.pendingMergeArm  = true;
             setButtonLED(MoveSample, Red);
@@ -6186,8 +6186,7 @@ function _onCC_side(d1, d2) {
             else             showActionPopup('NOTHING', 'TO CAPTURE');
         } else if (S.sessionView) {
             S.sceneBtnFlashTick[idx] = S.tickCount;
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('launch_scene', String(clipIdx));
+            S.pendingDefaultSetParams.push({ key: 'launch_scene', val: String(clipIdx) });
         } else {
             const t            = S.activeTrack;
             const isActiveClip = S.trackActiveClip[t] === clipIdx;
@@ -7875,8 +7874,7 @@ function _onStepButtons(d1, d2) {
             showActionPopup('PERF PRESET', 'CLEARED');
         } else if (S.muteHeld) {
             S.snapshots[idx] = null;
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('snap_delete', String(idx));
+            S.pendingDefaultSetParams.push({ key: 'snap_delete', val: String(idx) });
             showActionPopup('MUTE STATE', 'CLEARED');
         }
         forceRedraw();
@@ -7900,8 +7898,7 @@ function _onStepButtons(d1, d2) {
             _doShiftStepCommon(idx);
             forceRedraw();
         } else if (!S.deleteHeld) {
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('launch_scene', String(idx));
+            S.pendingDefaultSetParams.push({ key: 'launch_scene', val: String(idx) });
         }
         /* S.deleteHeld (non-mute/shift) in Session View: swallow */
     } else if (S.loopHeld) {
@@ -8316,8 +8313,7 @@ function _onPadRelease(status, d1, d2) {
                             S.drumLaneSolo[_t] = 0;
                         }
                     }
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('snap_load', String(btn));
+                    S.pendingDefaultSetParams.push({ key: 'snap_load', val: String(btn) });
                 }
             }
             forceRedraw();
