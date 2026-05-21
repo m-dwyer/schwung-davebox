@@ -9,39 +9,20 @@
 
 ## 1.0 fixes/tweaks — remaining (carried over from the May 2026 batch)
 
-The batch on `1.0-tweaks` shipped items #5, #8, #10, #14, #16, #20, #29, #32 from the original 33-item list. These remain:
-
 ### Bugs
 
 - **Power button doesn't work within dAVEBOx.** Native Move power gesture is swallowed; need to either pass through or implement.
 - **Volume knob (master) inconsistent speed + pauses sequencer.** Turning the master vol knob causes MIDI output to drop momentarily. Suspect Schwung host running master-knob acceleration despite `claims_master_knob: true`. Diagnose shim/host interaction.
-- **Clear Session: other track-config fields likely still drift.** The 2026-05-19 fix resets `pad_mode` / `active_drum_lane` / `drum_perform_mode` in the DSP `state_load` set_param handler, but `tr->channel`, `tr->pfx.route`, `tr->pfx.looper_on`, `tr->pad_octave` (and likely tarp state) are still untouched. JS `doClearSession` resets the JS mirrors but never pushes them to DSP, so each field keeps its pre-clear value on the DSP side. User hasn't reported these as visible bugs (probably because non-default channel/route is uncommon), but if they do, the fix shape is identical: add to the same reset loop in `seq8_set_param.c` `state_load` handler. See `notes/drum-melodic-mode-flip-and-clear-session-drift.md`.
-- **Scene capture grabs all focused clips, including empty/inactive ones.** Should only capture clips that are *playing* or *will play* on next transport start.
-- **Press Record during playback** starts recording mid-page. Should start at the beginning of the next page.
-- **Drum lane copy/paste broken.** Notes and params appear to copy in UI, but the destination lane is empty after paste. Regression — likely DSP-side paste path mismatched to drum-lane struct.
-- **Lowest pad octave bug:** at the bottom octave setting on melodic tracks, the three left-most pads on the bottom row all light up when any one is pressed. Investigate octave-aware pad lighting logic.
 - **Shift+clip = focus-without-activate.** Companion to the focused-clip-active default (shipped 2026-05-19). Needs a JS-side "focused vs DSP-active" split so edits target the focused clip even when DSP is still playing the prior one. Deferred — requires deeper refactor.
-- **Re-sync after lane / clip length change.** When user edits lane length or clip length, playback should re-anchor cleanly. Current behavior can phase-shift.
-- **Reclaim ceded LEDs after split-UI exit.** dAVEBOx needs to re-fire all LEDs that were yielded to Move/Schwung native during co-run. Today some LEDs remain stuck on the native value until next state change. (Partial mitigation shipped in this batch via `invalidateLEDCache()`; verify whether the broader reclaim is still needed.)
 - **Knob position alignment** of similar params across banks/track types. Example: InQ value should sit at the same knob angle across all places it appears (ALL LANES, CLIP K6 melodic, etc.).
-- **Re-sync playback after sub-page loop length adjust.** Adjusting loop within a sub-page should re-anchor — both clip and lane scopes.
 - **Native Move knob hang.** Turning a Move-native knob from within dAVEBOx (or in native co-run when controlling Move-native) hangs the dAVEBOx sequencer MIDI output. Suspect shared SPI path. Diagnose.
 - **Step LEDs shouldn't blink under Shift.** When Shift is held to indicate shortcut availability, step LEDs should be solid white instead of blinking.
 - **Step LED duration rendering** should indicate the *last step the note fully plays through*. Step 1 with duration 4 should light through step 3 (not 4). Companion: hold + tap second step at duration=2 should set duration=1 (mirrors loop-length adjust gesture).
 - **Drum lane LEDs:** active lane should be dark grey by default; bright white only when the lane has notes.
 - **Tracks should remember active param bank** across track switches and across session reload. Currently resets.
-- **Loop double broken on clips with start > 0.** Sequence clear / clip clear sometimes stops the focused clip's playback, violating the "focused clip plays by default" spec.
-- **Sequence clear should NOT reset loop start/end.** Only Clip Clear should.
-- **Active-clip invert indicator margin bug** on session/track OLED overview: background drops far below the letters. Bottom margin should match top margin. Also: clips without data should never show highlighted. Promoted to P1 alongside Group D — without it, focused-clip auto-launch lights every empty clip as "active" which is visually misleading.
-- **Arp state persists across tracks on session clear.** Should reset like other per-track state.
-- **Arp rate has in-between/delayed values.** Some rate values are not clean musical divisions, or produce a delayed/glitched output. Needs value-list cleanup and/or rate→tick-period precision check.
-- **Clear Session leaves stale LEDs after the new session loads.** Some LEDs (pad / button / step) don't repaint to match the freshly-loaded session state. Likely needs an `invalidateLEDCache()` + `forceRedraw()` in the post-Clear-Session reload path (similar to the co-run-exit reclaim).
-- **Perf Mode looper sometimes leaves hanging notes** when looper is deactivated. Note-offs not flushed on looper-off transition. Lower priority within P1 — "next pass."
-- **Focused-clip auto-launch gaps.** The "focused clip plays by default" contract (shipped 2026-05-19) doesn't always fire. Repros: (a) first entry into a clip track in a new session, (b) sometimes after clip clear/reset. Likely a guard that bails when no clip is currently playing.
 
 ### Features
 
-- **Tap loop in drum track view** unlatches all latched repeats on that track. Rules: pad held + loop tapped → no-op; loop held for significant duration → no-op; loop tapped alone → unlatch all pads on the active track.
 - **Schwung: module favorites in picker.** Shift + jog in the picker favorites a module, which moves it to the top of the module list. (Schwung-side feature.)
 - **Reclaim Back button** from Schwung suspend — currently Back triggers suspend; offer a different gesture for suspend so dAVEBOx can use Back.
 - **Drum lane repeats respond to pad pressure** — pad pressure continuously sets velocity of incoming repeats.
@@ -53,7 +34,6 @@ The batch on `1.0-tweaks` shipped items #5, #8, #10, #14, #16, #20, #29, #32 fro
 - **Live merge post-stop placement dialog.** When live merge stops, OLED shows "Tap pad to place merged clip" with a Cancel option. Tapping a clip pad replaces that clip with the merged clip. Live merge no longer auto-populates a destination.
 - **Move bake to Capture button; live merge to Sample (no Shift).** Check for gesture conflicts.
 - **Hold inactive step → activate + open step edit overlay.** Single-gesture activation + edit.
-- **Lane delete undoable** via Delete + lane-pad re-press.
 - **Arp interval/step bank** (new feature). Knob bank where each knob controls the relative pitch of the corresponding arp step (±7 semitones/intervals, scale-aware). Access: press jog while on SEQ ARP or TARP bank in track view. Display persistent until jog turn/click. Visual similar to repeat groove; step-mode-muted steps (K5) hidden, mirroring repeat-groove + gate-mask. Step pad mode is displayed persistently while on this bank; the current K5-touch-into-step-pad-mode gesture on SEQ ARP/TARP is removed.
 
 ### Schwung-side (fork) features
