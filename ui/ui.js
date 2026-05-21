@@ -1734,8 +1734,10 @@ function refreshDrumLaneBankParams(t, lane) {
             S.bankParams[t][1][2] = parseInt(v[2], 10) | 0;  /* Qnt  */
             S.drumLaneQnt[t]      = S.bankParams[t][1][2];
             /* MIDI DLY bank (3): delay_time_idx, delay_level, repeat_times,
-               fb_velocity, fb_gate_time, fb_clock */
+               fb_velocity, fb_gate_time, fb_clock at v[3..8]; delay_retrig at v[9]
+               (K6 of the drum delay bank layout). */
             for (let k = 0; k < 6; k++) S.bankParams[t][3][k] = parseInt(v[3 + k], 10) | 0;
+            if (v.length >= 10) S.bankParams[t][3][6] = parseInt(v[9], 10) | 0;
         }
     }
     /* DRUM LANE bank (0): Res (K3=idx2), Eucl (K4=idx3), Len (K5=idx4), SqFl (K6=idx5) per-lane meta */
@@ -1783,7 +1785,8 @@ function refreshPerClipBankParams(t) {
     S.bankParams[t][1][5] = parseInt(v[4], 10) | 0;  /* qnt */
     /* HARMZ bank (2): K0=unis K1=oct K2=hrm1 K3=hrm2 */
     for (let k = 0; k < 4; k++) S.bankParams[t][2][k] = parseInt(v[5 + k], 10) | 0;
-    /* MIDI DLY bank (3): K0=dly K1=lvl K2=rep K3=vfb K4=pfb K5=gfb K6=clk K7=rnd */
+    /* MIDI DLY bank (3): K0=dly K1=lvl K2=rep K3=vfb K4=pfb K5=gfb K6=retrg K7=rnd
+     * (delay_clock_fb moved to Shift+K1 alt — read separately via tN_delay_clock_fb). */
     for (let k = 0; k < 8; k++) S.bankParams[t][3][k] = parseInt(v[9 + k], 10) | 0;
     /* SEQ ARP bank (4): K0=style K1=rate K2=oct K3=gate K4=steps K5=retrigger (length-aware) */
     if (v.length >= 23) {
@@ -2492,7 +2495,13 @@ function applyBankParam(t, bankIdx, knobIdx, val) {
             return;
         }
         if (pm.dspKey === 'clip_length' && S.recordArmed && !S.recordCountingIn && S.recordArmedTrack === t) return;
-        if (pm.dspKey === 'seq_arp_steps_mode' || pm.dspKey === 'tarp_steps_mode') {
+        if (pm.dspKey === 'seq_arp_steps_mode' || pm.dspKey === 'tarp_steps_mode'
+                || pm.dspKey === 'delay_retrig') {
+            /* Defer via pendingDefaultSetParams: same-track sync tN_* set_params
+             * fired in the same audio block can coalesce and silently drop the
+             * first one (see set-param-per-buffer-per-key memory). delay_retrig
+             * + a clip pad press (launch_clip) in quick succession was losing
+             * the retrig write. One-per-tick drain guarantees it lands alone. */
             S.pendingDefaultSetParams.push({ key: 't' + t + '_' + pm.dspKey, val: strVal });
             return;
         }

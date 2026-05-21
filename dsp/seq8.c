@@ -6748,11 +6748,14 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
             }
             if (!strcmp(p2, "_pfx_snapshot")) {
                 drum_pfx_params_t *dp = &dlane->pfx_params;
+                /* Slot 9 (10th value) is delay_retrig — K6 in the drum bank
+                 * layout after K7=Retrg was unblocked. JS reader at
+                 * refreshDrumLaneBankParams maps slot 9 → bankParams[3][6]. */
                 return snprintf(out, out_len,
-                    "%d %d %d %d %d %d %d %d %d",
+                    "%d %d %d %d %d %d %d %d %d %d",
                     dp->gate_time, dp->velocity_offset, dp->quantize,
                     dp->delay_time_idx, dp->delay_level, dp->repeat_times,
-                    dp->fb_velocity, dp->fb_gate_time, dp->fb_clock);
+                    dp->fb_velocity, dp->fb_gate_time, dp->fb_clock, dp->delay_retrig);
             }
             /* _repeat_state: gate vs0..vs7 n0..n7 (18 space-separated values) */
             if (!strcmp(p2, "_repeat_state")) {
@@ -6884,6 +6887,9 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
             }
             if (!strncmp(p, "_pfx_snapshot", 13)) {
                 clip_pfx_params_t *cp = &cl->pfx_params;
+                /* MIDI DLY slot 15 is K6 in the JS bank layout. K6 was
+                 * fb_clock pre-rebind; it is delay_retrig now (clock_fb
+                 * folded onto Shift+K1, read via tN_delay_clock_fb). */
                 return snprintf(out, out_len,
                     "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d "
                     "%d %d %d %d %d %d %d %d",
@@ -6892,7 +6898,7 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
                     cp->unison, cp->octaver, cp->harmonize_1, cp->harmonize_2,
                     cp->delay_time_idx, cp->delay_level, cp->repeat_times,
                     cp->fb_velocity, cp->fb_note, cp->fb_gate_time,
-                    cp->fb_clock, cp->fb_note_random,
+                    cp->delay_retrig, cp->fb_note_random,
                     cp->seq_arp_style, cp->seq_arp_rate,
                     cp->seq_arp_octaves, cp->seq_arp_gate,
                     cp->seq_arp_steps_mode, cp->seq_arp_retrigger,
