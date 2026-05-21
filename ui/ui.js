@@ -83,7 +83,7 @@ import { saveState, writeSidecar, doClearSession, showActionPopup, uuidToStatePa
 import { drawGlobalMenu } from '/data/UserData/schwung/modules/tools/davebox/ui_dialogs.mjs';
 import { trackClipHasContent, sceneAllQueued, updateSceneMapLEDs } from '/data/UserData/schwung/modules/tools/davebox/ui_scene.mjs';
 import { effectiveClip, updateStepLEDs, updateSessionLEDs, updateTrackLEDs, flashAtRate, drawPositionBar, invalidateLEDCache } from '/data/UserData/schwung/modules/tools/davebox/ui_leds.mjs';
-import { SPLASH_BITS, SPLASH_W, SPLASH_H } from '/data/UserData/schwung/modules/tools/davebox/ui_splash.mjs';
+import { SPLASH_FRAMES, SPLASH_COUNT, SPLASH_W, SPLASH_H, pickSplashIdx } from '/data/UserData/schwung/modules/tools/davebox/ui_splash.mjs';
 
 /* ------------------------------------------------------------------ */
 /* Parameter bank definitions                                           */
@@ -96,6 +96,9 @@ function bankHeader(bankIdx) {
 function drawBankHeading(name) {
     fill_rect(0, 0, 128, 9, 1);
     print(4, 1, name, 0);
+    /* Right-aligned active-track indicator. Width = "Tr" + 1 digit = 18px @ 6px/char.
+     * Placed at x=106 leaves a 4px right margin. */
+    print(106, 1, 'Tr' + (S.activeTrack + 1), 0);
 }
 
 function drawBankHeadingInverted(name) {
@@ -103,6 +106,7 @@ function drawBankHeadingInverted(name) {
     fill_rect(0, 0, 128, 1, 1);
     fill_rect(0, 8, 128, 1, 1);
     print(4, 1, name, 1);
+    print(106, 1, 'Tr' + (S.activeTrack + 1), 1);
 }
 
 function drawStepEditHeader() {
@@ -2988,16 +2992,24 @@ function drawUI() {
     /* Perf Mode OLED takeover (Session View + Loop held or locked) */
     if (S.sessionView && (S.loopHeld || S.perfViewLocked)) { drawPerfModeOled(); return; }
     if (S.stateLoading || S.bootSplashTicks > 0) {
+        /* Reroll the splash on entry edge — picks one of SPLASH_FRAMES at
+         * random per splash session (boot, set load, etc.). Stays stable
+         * across the splash duration thanks to splashWasVisible. */
+        if (!S.splashWasVisible) {
+            S.currentSplashIdx = pickSplashIdx();
+            S.splashWasVisible = true;
+        }
         clear_screen();
         /* 128x64 splash bitmap, MSB-first packed bytes (1024 bytes total).
          * Render via fill_rect runs of lit pixels per row — fewer host calls
          * than per-pixel set_pixel and the screen is only redrawn briefly. */
+        const _frame  = SPLASH_FRAMES[S.currentSplashIdx % SPLASH_COUNT];
         const rowBytes = SPLASH_W >> 3;
         for (let y = 0; y < SPLASH_H; y++) {
             let runStart = -1;
             const rowOff = y * rowBytes;
             for (let x = 0; x < SPLASH_W; x++) {
-                const bit = (SPLASH_BITS[rowOff + (x >> 3)] >> (7 - (x & 7))) & 1;
+                const bit = (_frame[rowOff + (x >> 3)] >> (7 - (x & 7))) & 1;
                 if (bit) {
                     if (runStart < 0) runStart = x;
                 } else if (runStart >= 0) {
@@ -3009,6 +3021,8 @@ function drawUI() {
         }
         return;
     }
+    /* Not in splash mode — clear the entry-edge flag so the next splash rerolls. */
+    if (S.splashWasVisible) S.splashWasVisible = false;
 
     clear_screen();
     if (S.sessionView) {
@@ -3294,6 +3308,7 @@ function drawUI() {
             ];
             fill_rect(0, 0, 128, 9, 1);
             print(4, 1, (Math.floor(S.tickCount / 24) % 2 === 0 ? 'ALL' : '   ') + ' LANES', 0);
+            print(106, 1, 'Tr' + (S.activeTrack + 1), 0);
             for (let k = 0; k < 8; k++) {
                 if (!allLabels[k]) continue;
                 const colX = 4 + (k % 4) * 30;

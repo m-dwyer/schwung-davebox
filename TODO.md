@@ -15,7 +15,6 @@
 - **Volume knob (master) inconsistent speed + pauses sequencer.** Turning the master vol knob causes MIDI output to drop momentarily. Suspect Schwung host running master-knob acceleration despite `claims_master_knob: true`. Diagnose shim/host interaction.
 - **Shift+clip = focus-without-activate.** Companion to the focused-clip-active default (shipped 2026-05-19). Needs a JS-side "focused vs DSP-active" split so edits target the focused clip even when DSP is still playing the prior one. Deferred — requires deeper refactor.
 - **Co-run step-button shortcut should only fire in Track View.** Shift+Step3 (Edit Slot / Edit Synth co-run entry) currently fires in Session View too. Restrict to Track View — Session View Shift+step should pass through to the existing menu shortcuts only.
-- **Live merge entry needs a brief OLED popup** describing the operation (decently long duration). Right now arming a multi-track merge has no explanatory feedback; new users won't know what's happening.
 - **Knob position alignment** of similar params across banks/track types. Example: InQ value should sit at the same knob angle across all places it appears (ALL LANES, CLIP K6 melodic, etc.).
 - **Native Move knob hang.** Turning a Move-native knob from within dAVEBOx (or in native co-run when controlling Move-native) hangs the dAVEBOx sequencer MIDI output. Suspect shared SPI path. Diagnose.
 
@@ -26,9 +25,6 @@
 - **Drum lane repeats respond to pad pressure** — pad pressure continuously sets velocity of incoming repeats.
 - **Enable pad pressure broadly** beyond drum repeats — investigate which features should be pressure-aware.
 - **Ableton Live set export** — MIDI data + clip structure. All clips with pfx baked down (4x loop bake for random pfx, wrap-around for delay).
-- **All-track clip merge.**
-- **Live merge post-stop placement dialog.** When live merge stops, OLED shows "Tap pad to place merged clip" with a Cancel option. Tapping a clip pad replaces that clip with the merged clip. Live merge no longer auto-populates a destination.
-- **Move bake to Capture button; live merge to Sample (no Shift).** Check for gesture conflicts.
 - **Arp interval/step bank** (new feature). Knob bank where each knob controls the relative pitch of the corresponding arp step (±7 semitones/intervals, scale-aware). Access: press jog while on SEQ ARP or TARP bank in track view. Display persistent until jog turn/click. Visual similar to repeat groove; step-mode-muted steps (K5) hidden, mirroring repeat-groove + gate-mask. Step pad mode is displayed persistently while on this bank; the current K5-touch-into-step-pad-mode gesture on SEQ ARP/TARP is removed.
 
 ### Schwung-side (fork) features
