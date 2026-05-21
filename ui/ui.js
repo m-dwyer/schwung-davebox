@@ -2055,20 +2055,22 @@ function pollDSP() {
     /* Transport transitions */
     if (!S.playingPrev && S.playing) {
         S.transportStartTick = S.tickCount;
-        /* Focused-clip-by-default on transport start: launch each track's
-         * focused clip if nothing on that track is already playing / queued /
-         * will-relaunch. Without this, pressing Play on a fresh session left
-         * every track silent with the playhead stuck at step 0.
-         * Queue through pendingDefaultSetParams so the 8 launch_clip set_params
-         * drain one-per-tick — same-buffer coalescing would otherwise drop all
-         * but the last, leaving only one track playing per transport start. */
-        for (let _tt = 0; _tt < NUM_TRACKS; _tt++) {
-            if (S.trackClipPlaying[_tt]) continue;
-            if (S.trackWillRelaunch[_tt]) continue;
-            if (S.trackQueuedClip[_tt] !== -1) continue;
-            const _tac = S.trackActiveClip[_tt];
-            S.pendingDefaultSetParams.push({ key: 't' + _tt + '_launch_clip', val: String(_tac) });
-            S.trackQueuedClip[_tt] = _tac;
+        /* Focused-clip-by-default on transport start: only the clip the user
+         * is currently *viewing* in Track View auto-launches. Session View
+         * launches whatever is already queued — explicit launch by the user.
+         * The "focused" concept is single-clip: the one open for editing on
+         * the active track in Track View; other tracks aren't focused and
+         * shouldn't auto-launch (otherwise Session-View Delete+Play to
+         * deactivate everything would be undone by the next transport start). */
+        if (!S.sessionView) {
+            const _at = S.activeTrack;
+            if (!S.trackClipPlaying[_at]
+                    && !S.trackWillRelaunch[_at]
+                    && S.trackQueuedClip[_at] === -1) {
+                const _tac = S.trackActiveClip[_at];
+                S.pendingDefaultSetParams.push({ key: 't' + _at + '_launch_clip', val: String(_tac) });
+                S.trackQueuedClip[_at] = _tac;
+            }
         }
         /* Auto-launch focused clip if record is armed and clip is inactive */
         if (S.recordArmed) {
