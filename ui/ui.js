@@ -3847,12 +3847,20 @@ function enterMoveNativeCoRun(t) {
     if (typeof move_midi_inject_to_move !== 'function') return;
     S.moveCoRunTrack = t;
     shadow_set_corun_move_native(t);
-    const ch = S.trackChannel[t] | 0;
-    if (ch >= 1 && ch <= 4) {
-        const cc = 44 - ch;  /* ch 1 -> CC 43 (Track 1) ... ch 4 -> CC 40 (Track 4) */
-        move_midi_inject_to_move([0x0B, 0xB0, cc, 127]);
-        move_midi_inject_to_move([0x0B, 0xB0, cc, 0]);
-    }
+    /* Let Move firmware's own LED writes (track buttons, knob rings, transport)
+     * reach hardware while it drives the device-edit UI. skip_led_clear makes the
+     * shim's overtake LED-strip loop early-return, so Move's LEDs pass through live.
+     * Toggled back off in exitMoveNativeCoRun(). This is a mid-overtake toggle — it
+     * does NOT hit the entry/exit snapshot path, so the suspend/exit native LED
+     * restore is unaffected. */
+    if (typeof shadow_set_skip_led_clear === 'function') shadow_set_skip_led_clear(1);
+    /* Defer the track-button "press" that lands Move on the device-edit page and
+     * makes it repaint its track + knob LEDs. Injecting it immediately fails: Move's
+     * repaint lands before the shim's co-run LED passthrough + OLED bypass go live
+     * (corun_move_native_track hasn't propagated to the shim yet), so the repaint is
+     * stripped and the LEDs don't show until a manual press. Fire it from tick() a
+     * few ticks later, once co-run is fully active. */
+    S.pendingMoveCoRunInject = 12;
     S.globalMenuOpen = false;
     S.lastSentMenuEditValue = null;
     S.screenDirty = true;
@@ -3867,8 +3875,12 @@ function enterMoveNativeCoRun(t) {
 function exitMoveNativeCoRun() {
     if (S.moveCoRunTrack < 0) return;
     S.moveCoRunTrack = -1;
+    S.pendingMoveCoRunInject = 0;  /* cancel any pending entry inject */
     if (typeof shadow_set_corun_move_native === 'function')
         shadow_set_corun_move_native(-1);
+    /* Resume the shim's overtake LED-strip loop so dAVEBOx owns the LEDs again
+     * (mirror of the skip_led_clear(1) in enterMoveNativeCoRun). */
+    if (typeof shadow_set_skip_led_clear === 'function') shadow_set_skip_led_clear(0);
     /* Modifier-key release CCs the user pressed inside Move firmware never
      * reach us during co-run — clear defensively so a stuck Shift/Mute/etc.
      * can't silence pad dispatch on return. Mirrors resume-from-suspend. */
@@ -4643,6 +4655,22 @@ globalThis.tick = function () {
             S.stateLoading = false;
             invalidateLEDCache();
             forceRedraw();
+        }
+    }
+
+    /* Deferred Move co-run entry inject — see enterMoveNativeCoRun(). Fire the
+     * track-button press now that the shim's co-run path is active, so Move's
+     * track + knob LED repaint passes through to hardware instead of being stripped. */
+    if (S.pendingMoveCoRunInject > 0) {
+        S.pendingMoveCoRunInject--;
+        if (S.pendingMoveCoRunInject === 0 && S.moveCoRunTrack >= 0 &&
+                typeof move_midi_inject_to_move === 'function') {
+            const ch = S.trackChannel[S.moveCoRunTrack] | 0;
+            if (ch >= 1 && ch <= 4) {
+                const cc = 44 - ch;  /* ch 1 -> CC 43 (Track 1) ... ch 4 -> CC 40 (Track 4) */
+                move_midi_inject_to_move([0x0B, 0xB0, cc, 127]);
+                move_midi_inject_to_move([0x0B, 0xB0, cc, 0]);
+            }
         }
     }
 
