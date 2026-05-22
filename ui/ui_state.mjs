@@ -260,6 +260,13 @@ export const S = {
     bpmWasEditing: false,
     lastSentMenuEditValue: null,
     confirmClearSession: false,
+    /* Keys->Drums track conversion confirm dialog (transient, not persisted). */
+    confirmConvertToDrum: false,
+    confirmConvertToDrumSel: 1,   /* 0=Yes, 1=No (default) */
+    confirmConvertTrack: 0,
+    /* Deferred track-type conversion request: {t, toDrum} or null. Drained in
+     * tick() so syncClipsFromDsp's get_param round-trips run in tick context. */
+    pendingTrackConvert: null,
     confirmBake: false,
     confirmBakeSel: 1,
     confirmBakeIsDrum: false,

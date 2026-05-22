@@ -2212,6 +2212,19 @@ static void set_param(void *instance, const char *key, const char *val) {
             tarp_silence(inst, tr); /* silence tarp when switching to drum mode */
             return;
         }
+        /* Track-type conversion: translate note content AND flip pad_mode
+         * atomically (single set_param, no coalescing drop). Idempotent guards
+         * make a redundant push a no-op. */
+        if (!strcmp(sub, "convert_to_drum")) {
+            if (tr->pad_mode != PAD_MODE_DRUM)
+                convert_track_melodic_to_drum(inst, tidx);
+            return;
+        }
+        if (!strcmp(sub, "convert_to_melodic")) {
+            if (tr->pad_mode == PAD_MODE_DRUM)
+                convert_track_drum_to_melodic(inst, tidx);
+            return;
+        }
 
         /* TRACK ARP set_param handlers */
         if (!strcmp(sub, "tarp_on")) {

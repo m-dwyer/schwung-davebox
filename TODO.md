@@ -5,7 +5,6 @@
 3. **Scale-aware key/scale changes** — transpose all clip notes on Key/Scale change. Design TBD.
 7. **State snapshots / multi-save per session.** Global Menu items "Save snapshot" + "Recall state". Current auto-save behavior unchanged; snapshots are explicit and independent. On state-version bump, dAVEBOx load shows confirm dialog before wiping incompatible snapshots: "dAVEBOx updated — Incompatible session snapshots will be deleted. Proceed? [Yes/No]" (No is default).
 9. **MIDI clock sync**
-10. **Track conversion** (`tN_convert_to_drum`/`tN_convert_to_melodic`): Global Menu Mode item or dedicated dialog.
 
 ## 1.0 fixes/tweaks — remaining (carried over from the May 2026 batch)
 
@@ -26,7 +25,6 @@
 - **Drum lane repeats respond to pad pressure** — pad pressure continuously sets velocity of incoming repeats.
 - **Enable pad pressure broadly** beyond drum repeats — investigate which features should be pressure-aware.
 - **Ableton Live set export** — MIDI data + clip structure. All clips with pfx baked down (4x loop bake for random pfx, wrap-around for delay).
-- **Arp interval/step bank** (new feature). Knob bank where each knob controls the relative pitch of the corresponding arp step (±7 semitones/intervals, scale-aware). Access: press jog while on SEQ ARP or TARP bank in track view. Display persistent until jog turn/click. Visual similar to repeat groove; step-mode-muted steps (K5) hidden, mirroring repeat-groove + gate-mask. Step pad mode is displayed persistently while on this bank; the current K5-touch-into-step-pad-mode gesture on SEQ ARP/TARP is removed.
 - **Mono param on CLIP param bank.** New on/off param in the clip parameter bank. When ON, every note-on triggers a note-off on any previously-playing note(s) on that track — monophonic voicing (last-note priority). When OFF, polyphonic (current behavior). Per-clip.
 
 ### Schwung-side (fork) features

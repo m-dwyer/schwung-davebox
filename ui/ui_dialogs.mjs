@@ -73,9 +73,39 @@ function drawClearSessionConfirm() {
     }
 }
 
+function drawConvertToDrumConfirm() {
+    clear_screen();
+    drawMenuHeader('CONVERT');
+    print(4, 16, 'Warning:', 1);
+    print(4, 25, 'Existing notes may', 1);
+    print(4, 34, 'be lost. Proceed?', 1);
+    const noX = 6, yesX = 74, btnY = 46, btnW = 46, btnH = 13;
+    if (S.confirmConvertToDrumSel === 1) {
+        fill_rect(noX, btnY, btnW, btnH, 1);
+        print(noX + 17, btnY + 3, 'No', 0);
+    } else {
+        fill_rect(noX, btnY, btnW, 1, 1);
+        fill_rect(noX, btnY + btnH - 1, btnW, 1, 1);
+        fill_rect(noX, btnY, 1, btnH, 1);
+        fill_rect(noX + btnW - 1, btnY, 1, btnH, 1);
+        print(noX + 17, btnY + 3, 'No', 1);
+    }
+    if (S.confirmConvertToDrumSel === 0) {
+        fill_rect(yesX, btnY, btnW, btnH, 1);
+        print(yesX + 14, btnY + 3, 'Yes', 0);
+    } else {
+        fill_rect(yesX, btnY, btnW, 1, 1);
+        fill_rect(yesX, btnY + btnH - 1, btnW, 1, 1);
+        fill_rect(yesX, btnY, 1, btnH, 1);
+        fill_rect(yesX + btnW - 1, btnY, 1, btnH, 1);
+        print(yesX + 14, btnY + 3, 'Yes', 1);
+    }
+}
+
 export function drawGlobalMenu() {
     if (S.tapTempoOpen)        { drawTapTempoScreen();       return; }
     if (S.confirmClearSession) { drawClearSessionConfirm();  return; }
+    if (S.confirmConvertToDrum){ drawConvertToDrumConfirm(); return; }
     clear_screen();
     const _inTrackSection = S.globalMenuState.selectedIndex < 5;
     const _hTitle = _inTrackSection ? 'Track ' + (S.activeTrack + 1) : 'Global';

@@ -328,3 +328,4 @@ export const TAP_TEMPO_RESET_MS    = 2000; /* inactivity reset threshold */
 export const PARAM_LED_BANKS = [1, 2, 3, 4, 5];
 
 export const PAD_MODE_DRUM = 1;
+export const PAD_MODE_MELODIC_SCALE = 0;

@@ -231,6 +231,13 @@ A track is either melodic or drum (set in Track Config). They share most concept
 
 Drum tracks unlock per-lane loop lengths (polyrhythm with no setup) and Note Repeat (live drum rolls). They lose live harmony and the step-arp on the chain.
 
+**Switching Mode converts the track's notes.** Changing **Mode** (Track Config) carries the sequenced notes across all 16 clips into the new type — your part follows the track instead of disappearing. Only the notes move (timing, pitch, velocity, gate); effects, arpeggiator, and harmony reset to defaults.
+
+- **Drums → Keys**: each lane's hits become pitched notes at the same times; hits that land together become chords.
+- **Keys → Drums**: each distinct pitch maps to its own drum lane (lowest pitch on the first pad, ascending). A part using more than 32 distinct pitches keeps the 32 most-used. Because drum-specific settings (Note Repeat, per-lane grooves) have no melodic equivalent, this direction shows a **`Warning: Existing notes may be lost. Proceed?`** confirm first — *only* when the track actually has notes.
+
+An empty track switches instantly with no prompt either way.
+
 ---
 
 # 3. Navigation & Layout

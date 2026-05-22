@@ -73,7 +73,7 @@ import {
     fmtDly, fmtBool, fmtRoute, fmtPlain, fmtNA, fmtGateMod,
     fmtArpStyle, fmtArpRate, fmtArpSteps, fmtArpOct, fmtVelOverride,
     col4, parseActionRaw, MCUFONT, pixelPrint, pixelPrintC,
-    BANKS, ACTION_POPUP_TICKS, PAD_MODE_DRUM,
+    BANKS, ACTION_POPUP_TICKS, PAD_MODE_DRUM, PAD_MODE_MELODIC_SCALE,
     POLL_INTERVAL, CC_SCRATCH_PALETTE_BASE, TAP_TEMPO_FLASH_TICKS, TAP_TEMPO_RESET_MS,
     PARAM_LED_BANKS
 } from '/data/UserData/schwung/modules/tools/davebox/ui_constants.mjs';
@@ -166,7 +166,31 @@ function buildGlobalMenuItems() {
         }),
         createEnum('Mode', {
             get: function() { return S.trackPadMode[S.activeTrack]; },
-            set: function(v) { applyTrackConfig(S.activeTrack, 'pad_mode', v); },
+            /* Flipping Mode CONVERTS the track's notes (see convertTrackType).
+             * set() is called as a live preview while editing AND on commit
+             * via set(get()); the v===cur guard makes those re-fires no-ops. */
+            set: function(v) {
+                const t = S.activeTrack;
+                if (v === S.trackPadMode[t]) return;
+                if (v === PAD_MODE_DRUM) {
+                    /* Keys -> Drums: warn only if there are notes to lose;
+                     * an empty track converts straight through (no dialog). */
+                    let hasData = false;
+                    for (let c = 0; c < NUM_CLIPS; c++)
+                        if (S.clipNonEmpty[t][c]) { hasData = true; break; }
+                    if (hasData) {
+                        S.confirmConvertToDrum    = true;
+                        S.confirmConvertToDrumSel = 1;   /* default No */
+                        S.confirmConvertTrack     = t;
+                        S.screenDirty = true;
+                    } else {
+                        S.pendingTrackConvert = { t: t, toDrum: true };
+                    }
+                } else {
+                    /* Drums -> Keys: no prompt. Defer to tick() (get_param-safe). */
+                    S.pendingTrackConvert = { t: t, toDrum: false };
+                }
+            },
             options: [0, 1],
             format: function(v) { return v ? 'Drums' : 'Keys'; }
         }),
@@ -2486,6 +2510,52 @@ function applyTrackConfig(t, key, val) {
     else if (key === 'track_looper')    S.trackLooper[t] = val;
 }
 
+/* Convert a track between melodic and drum, translating note content so the
+ * music follows the track. The DSP handler (tN_convert_to_drum/_to_melodic)
+ * does the data move AND flips pad_mode atomically in a single set_param, so
+ * there is no coalescing drop. We then resync JS from DSP — syncClipsFromDsp()'s
+ * get_param round-trips double as the audio-thread sync barrier. */
+function trackHasAnyData(t) {
+    for (let c = 0; c < NUM_CLIPS; c++)
+        if (S.clipNonEmpty[t][c] || S.drumClipNonEmpty[t][c]) return true;
+    return false;
+}
+
+function convertTrackType(t, toDrum) {
+    if (typeof host_module_set_param !== 'function') return;
+    host_module_set_param('t' + t + (toDrum ? '_convert_to_drum' : '_convert_to_melodic'), '1');
+    S.trackPadMode[t] = toDrum ? PAD_MODE_DRUM : PAD_MODE_MELODIC_SCALE;
+    /* Resync inline (this runs in tick(), so get_param works): the first get
+     * in syncClipsFromDsp flushes the queued convert, then reads post-convert
+     * state — it also runs the drum-side syncs when the result is a drum track.
+     * Skip the (heavy, all-track) resync entirely when the track has no notes:
+     * nothing to read back, so the flip stays instant. The convert set_param
+     * still drains on its own audio buffer; JS mirror state is already correct. */
+    if (trackHasAnyData(t)) syncClipsFromDsp();
+    if (toDrum) {
+        if (t === S.activeTrack && (S.activeBank === 2 || S.activeBank === 4)) S.activeBank = 0;
+    } else {
+        if (t === S.activeTrack && S.activeBank === 7) S.activeBank = 0;
+        /* DSP zeroed active_drum_lane/drum_perform_mode inside the convert
+         * handler; only JS-side mirror state needs clearing here. */
+        S.drumVelZoneArmed[t] = false;
+        S.drumLastVelZone[t]  = 0;
+    }
+    computePadNoteMap();   /* get_param-free — rebuild pad LEDs immediately */
+    invalidateLEDCache();
+    forceRedraw();
+}
+
+/* Tear down the Keys->Drums confirm dialog and the menu's edit state so a
+ * lingering enum edit doesn't replay. Call on Yes, No, and Back-cancel. */
+function closeConvertConfirm() {
+    S.confirmConvertToDrum = false;
+    if (S.globalMenuState) S.globalMenuState.editing = false;
+    if (S.globalMenuState) S.globalMenuState.editValue = null;
+    S.lastSentMenuEditValue = null;
+    S.bpmWasEditing = false;
+}
+
 /* Rewrite the cable-2 channel remap table for the active track.
  * When the active track is ROUTE_MOVE, incoming external MIDI is remapped to the
  * track's channel so Move's firmware routes it to the correct track instrument.
@@ -4268,6 +4338,15 @@ globalThis.tick = function () {
      * observed same-track set_param interference drops the padmap push.
      * (See the val=1 case: it works because syncDrum* get_params between
      * the pad_mode and padmap pushes flush the buffer.) */
+    /* Track-type conversion runs here (tick context) so the get_param
+     * round-trips inside convertTrackType -> syncClipsFromDsp work — they
+     * return null on the on_midi path where the triggers fire. */
+    if (S.pendingTrackConvert) {
+        const _pc = S.pendingTrackConvert;
+        S.pendingTrackConvert = null;
+        convertTrackType(_pc.t, _pc.toDrum);
+    }
+
     if (S.pendingPadNoteMapRecompute && S.pendingDefaultSetParams.length === 0
             && S.clearDrainHold === 0) {
         S.pendingPadNoteMapRecompute = false;
@@ -5393,6 +5472,16 @@ function _onCC_jog(d1, d2) {
             S.screenDirty = true;
             return;
         }
+        if (S.confirmConvertToDrum) {
+            const _ct = S.confirmConvertTrack;
+            const _yes = S.confirmConvertToDrumSel === 0;
+            closeConvertConfirm();
+            /* Defer to tick() — this runs in the on_midi path where get_param
+             * (inside convertTrackType -> syncClipsFromDsp) returns null. */
+            if (_yes) S.pendingTrackConvert = { t: _ct, toDrum: true };
+            S.screenDirty = true;
+            return;
+        }
         handleMenuInput({
             cc: 3, value: d2,
             items: S.globalMenuItems, state: S.globalMenuState, stack: S.globalMenuStack,
@@ -5606,6 +5695,9 @@ function _onCC_jog(d1, d2) {
             if (S.confirmClearSession) {
                 const delta = decodeDelta(d2);
                 if (delta !== 0) { S.confirmClearSel = S.confirmClearSel === 0 ? 1 : 0; S.screenDirty = true; }
+            } else if (S.confirmConvertToDrum) {
+                const delta = decodeDelta(d2);
+                if (delta !== 0) { S.confirmConvertToDrumSel = S.confirmConvertToDrumSel === 0 ? 1 : 0; S.screenDirty = true; }
             } else if (S.globalMenuState.editing) {
                 const delta = decodeDelta(d2);
                 if (delta !== 0) {
@@ -5869,6 +5961,9 @@ function _onCC_buttons(d1, d2) {
                 forceRedraw();
             } else if (S.globalMenuOpen && S.confirmClearSession) {
                 S.confirmClearSession = false;
+                forceRedraw();
+            } else if (S.globalMenuOpen && S.confirmConvertToDrum) {
+                closeConvertConfirm();
                 forceRedraw();
             } else if (S.globalMenuOpen) {
                 S.globalMenuOpen = false;
@@ -6152,6 +6247,9 @@ function _onCC_transport(d1, d2) {
             forceRedraw();
         } else if (S.globalMenuOpen && S.confirmClearSession) {
             S.confirmClearSession = false;
+            forceRedraw();
+        } else if (S.globalMenuOpen && S.confirmConvertToDrum) {
+            closeConvertConfirm();
             forceRedraw();
         } else if (S.globalMenuOpen) {
             S.globalMenuOpen = false;
@@ -6816,7 +6914,7 @@ function _onCC_knobs(d1, d2) {
     if (d1 >= 71 && d1 <= 78) {
         /* Exclusive overlays — knob turns have no visible effect and should be swallowed. */
         if (S.heldStep >= 0) return;
-        if (S.globalMenuOpen || S.tapTempoOpen || S.confirmBake || S.confirmClearSession) return;
+        if (S.globalMenuOpen || S.tapTempoOpen || S.confirmBake || S.confirmClearSession || S.confirmConvertToDrum) return;
         const knobIdx = d1 - 71;
         S.knobTouched          = knobIdx;
         S.knobTurnedTick[knobIdx] = S.tickCount;

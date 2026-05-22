@@ -6438,6 +6438,220 @@ static void bake_drum_clip(seq8_instance_t *inst, int t, int c, int loops, int w
     inst->state_dirty = 1;
 }
 
+/* ------------------------------------------------------------------ */
+/* Track-type conversion (melodic <-> drum) — preserves note content.   */
+/* Whole-track: all NUM_CLIPS clips convert. pad_mode flips INSIDE so    */
+/* the type change is atomic with the data move (single set_param).      */
+/* ------------------------------------------------------------------ */
+
+/* True if the track has no note data on either representation — used to skip the
+ * per-clip rewrite on an empty conversion. note_count is a conservative proxy
+ * (counts tombstoned slots too): only an all-zero track is treated as empty, so
+ * a track with deleted-but-not-compacted notes still takes the full path. */
+static int track_is_empty(seq8_track_t *tr) {
+    int c, l;
+    for (c = 0; c < NUM_CLIPS; c++)
+        if (tr->clips[c].note_count > 0) return 0;
+    for (c = 0; c < NUM_CLIPS; c++)
+        for (l = 0; l < DRUM_LANES; l++)
+            if (tr->drum_clips[c].lanes[l].clip.note_count > 0) return 0;
+    return 1;
+}
+
+/* Melodic -> Drum: per clip, map the clip's DISTINCT pitches to drum lanes,
+ * sorted ascending (lowest pitch -> lane 0). Each used pitch becomes one lane
+ * with midi_note = that pitch; all notes of that pitch route into the lane,
+ * preserving tick/vel/gate. A chord (several pitches at one tick) becomes
+ * several lanes firing together. >DRUM_LANES distinct pitches: keep the
+ * MOST-USED (tie -> higher pitch dropped first) so the groove survives. The
+ * source melodic clip is cleared afterward — the melodic note serialize block
+ * is NOT pad_mode-gated, so stale data would otherwise re-serialize and
+ * resurrect on a later flip. */
+static void convert_track_melodic_to_drum(seq8_instance_t *inst, int t) {
+    seq8_track_t *tr = &inst->tracks[t];
+    int c, l, ni, p;
+
+    /* Force-disarm recording so nothing writes into a clip mid-rewrite. */
+    tr->recording = 0;
+    tr->record_armed = 0;
+    tr->recording_pending_page = 0;
+
+    /* Empty track: skip the per-clip rewrite (nothing to translate or clear). */
+    if (!track_is_empty(tr))
+    for (c = 0; c < NUM_CLIPS; c++) {
+        clip_t *src = &tr->clips[c];
+        drum_clip_t *dc = &tr->drum_clips[c];
+
+        /* Clean slate for this clip's lanes. */
+        for (l = 0; l < DRUM_LANES; l++) {
+            clip_init(&dc->lanes[l].clip);
+            drum_pfx_params_init(&dc->lanes[l].pfx_params);
+            dc->lanes[l].midi_note = (uint8_t)(DRUM_BASE_NOTE + l);
+        }
+
+        if (src->note_count == 0) { clip_init(src); continue; }
+
+        /* Tally active notes per pitch. */
+        int pcount[128];
+        for (p = 0; p < 128; p++) pcount[p] = 0;
+        for (ni = 0; ni < (int)src->note_count; ni++)
+            if (src->notes[ni].active) pcount[src->notes[ni].pitch & 0x7F]++;
+
+        int distinct = 0;
+        for (p = 0; p < 128; p++) if (pcount[p] > 0) distinct++;
+
+        int lane_of[128];
+        for (p = 0; p < 128; p++) lane_of[p] = -1;
+
+        if (distinct <= DRUM_LANES) {
+            int lane = 0;
+            for (p = 0; p < 128; p++)
+                if (pcount[p] > 0) lane_of[p] = lane++;
+        } else {
+            /* Keep the DRUM_LANES most-used pitches; ascending p with strict
+             * '>' keeps the lower pitch on a tie, so a higher pitch is dropped
+             * first. Then assign survivors to lanes in ascending pitch order. */
+            uint8_t keep[128];
+            for (p = 0; p < 128; p++) keep[p] = 0;
+            int kept = 0;
+            while (kept < DRUM_LANES) {
+                int best = -1, bestcnt = 0;
+                for (p = 0; p < 128; p++)
+                    if (pcount[p] > 0 && !keep[p] && pcount[p] > bestcnt) {
+                        bestcnt = pcount[p]; best = p;
+                    }
+                if (best < 0) break;
+                keep[best] = 1; kept++;
+            }
+            int lane = 0;
+            for (p = 0; p < 128; p++)
+                if (keep[p]) lane_of[p] = lane++;
+            { char _cl[96]; snprintf(_cl, sizeof(_cl),
+                "convert M->D t%d c%d: %d distinct, kept %d, dropped %d",
+                t, c, distinct, kept, distinct - kept); seq8_ilog(inst, _cl); }
+        }
+
+        /* Lane metadata inherited from the source clip. */
+        for (p = 0; p < 128; p++) {
+            int lane = lane_of[p];
+            if (lane < 0) continue;
+            drum_lane_t *dl = &dc->lanes[lane];
+            dl->clip.length         = src->length;
+            dl->clip.ticks_per_step = src->ticks_per_step;
+            dl->clip.loop_start     = src->loop_start;
+            dl->midi_note           = (uint8_t)p;
+        }
+
+        /* Route every active note into its pitch's lane. */
+        for (ni = 0; ni < (int)src->note_count; ni++) {
+            note_t *n = &src->notes[ni];
+            if (!n->active) continue;
+            int lane = lane_of[n->pitch & 0x7F];
+            if (lane < 0) continue;
+            clip_insert_note(&dc->lanes[lane].clip, n->tick, n->gate, n->pitch, n->vel);
+        }
+
+        for (l = 0; l < DRUM_LANES; l++)
+            if (dc->lanes[l].clip.note_count > 0)
+                clip_build_steps_from_notes(&dc->lanes[l].clip);
+
+        clip_init(src);   /* clear source (melodic serialize is not pad_mode-gated) */
+    }
+
+    tr->pad_mode = PAD_MODE_DRUM;
+
+    /* Reset playheads for the now-drum track. */
+    tr->current_step = 0;
+    tr->tick_in_step = 0;
+    for (l = 0; l < DRUM_LANES; l++) {
+        tr->drum_current_step[l] = tr->drum_clips[tr->active_clip].lanes[l].clip.loop_start;
+        tr->drum_tick_in_step[l] = 0;
+    }
+
+    silence_track_notes_v2(inst, tr);
+    pfx_sync_from_clip(tr);   /* drum branch: reapply per-lane pfx */
+    inst->state_dirty = 1;
+}
+
+/* Drum -> Melodic: merge all lanes' notes per clip into the melodic clip.
+ * Each note keeps its own pitch (== lane midi_note unless retuned), tick, vel,
+ * gate; lanes firing at the same tick naturally become a chord. Clip meta
+ * (length/tps/loop_start) is inherited from the first non-empty lane. >512
+ * notes/clip: capped, later notes dropped (logged). Drum lane data is cleared
+ * afterward (keeps a future re-flip clean). Drum-only config (mute/solo,
+ * repeat, euclid, per-lane pfx) has no melodic equivalent and is discarded. */
+static void convert_track_drum_to_melodic(seq8_instance_t *inst, int t) {
+    seq8_track_t *tr = &inst->tracks[t];
+    int c, l, ni;
+
+    tr->recording = 0;
+    tr->record_armed = 0;
+    tr->recording_pending_page = 0;
+
+    /* Empty track: skip the per-clip rewrite (nothing to translate or clear). */
+    if (!track_is_empty(tr))
+    for (c = 0; c < NUM_CLIPS; c++) {
+        drum_clip_t *dc = &tr->drum_clips[c];
+        clip_t *dst = &tr->clips[c];
+
+        /* Meta from the first non-empty lane. */
+        uint16_t m_len = (uint16_t)SEQ_STEPS_DEFAULT;
+        uint16_t m_tps = (uint16_t)TICKS_PER_STEP;
+        uint16_t m_ls  = 0;
+        for (l = 0; l < DRUM_LANES; l++) {
+            if (dc->lanes[l].clip.note_count > 0) {
+                m_len = dc->lanes[l].clip.length;
+                m_tps = dc->lanes[l].clip.ticks_per_step;
+                m_ls  = dc->lanes[l].clip.loop_start;
+                break;
+            }
+        }
+
+        clip_init(dst);
+        dst->length         = m_len;
+        dst->ticks_per_step = m_tps;
+        dst->loop_start     = m_ls;
+
+        /* Merge lane notes (ascending lane, stored order -> deterministic drop). */
+        int full = 0;
+        for (l = 0; l < DRUM_LANES && !full; l++) {
+            clip_t *lc = &dc->lanes[l].clip;
+            for (ni = 0; ni < (int)lc->note_count; ni++) {
+                note_t *n = &lc->notes[ni];
+                if (!n->active) continue;
+                if (clip_insert_note(dst, n->tick, n->gate, n->pitch, n->vel) < 0) {
+                    seq8_ilog(inst, "convert D->M: clip full (512), notes dropped");
+                    full = 1; break;
+                }
+            }
+        }
+
+        if (dst->note_count > 0) clip_build_steps_from_notes(dst);
+
+        /* Clear drum lanes for a clean future re-flip. */
+        for (l = 0; l < DRUM_LANES; l++) {
+            clip_init(&dc->lanes[l].clip);
+            drum_pfx_params_init(&dc->lanes[l].pfx_params);
+            dc->lanes[l].midi_note = (uint8_t)(DRUM_BASE_NOTE + l);
+        }
+    }
+
+    tr->pad_mode = PAD_MODE_MELODIC_SCALE;
+
+    /* Reset drum-only track state (no melodic equivalent). */
+    tr->drum_lane_mute = 0;
+    tr->drum_lane_solo = 0;
+    tr->active_drum_lane = 0;
+    tr->drum_perform_mode = 0;
+
+    tr->current_step = tr->clips[tr->active_clip].loop_start;
+    tr->tick_in_step = 0;
+
+    silence_track_notes_v2(inst, tr);
+    pfx_sync_from_clip(tr);   /* melodic branch */
+    inst->state_dirty = 1;
+}
+
 #include "seq8_set_param.c"
 
 /* ------------------------------------------------------------------ */
