@@ -3876,6 +3876,7 @@ function exitMoveNativeCoRun() {
     if (S.moveCoRunTrack < 0) return;
     S.moveCoRunTrack = -1;
     S.pendingMoveCoRunInject = 0;  /* cancel any pending entry inject */
+    S.moveCoRunPressQueue = null;  /* cancel any in-flight track-row press sequence */
     if (typeof shadow_set_corun_move_native === 'function')
         shadow_set_corun_move_native(-1);
     /* Resume the shim's overtake LED-strip loop so dAVEBOx owns the LEDs again
@@ -4663,14 +4664,33 @@ globalThis.tick = function () {
      * track + knob LED repaint passes through to hardware instead of being stripped. */
     if (S.pendingMoveCoRunInject > 0) {
         S.pendingMoveCoRunInject--;
-        if (S.pendingMoveCoRunInject === 0 && S.moveCoRunTrack >= 0 &&
-                typeof move_midi_inject_to_move === 'function') {
+        if (S.pendingMoveCoRunInject === 0 && S.moveCoRunTrack >= 0) {
             const ch = S.trackChannel[S.moveCoRunTrack] | 0;
             if (ch >= 1 && ch <= 4) {
-                const cc = 44 - ch;  /* ch 1 -> CC 43 (Track 1) ... ch 4 -> CC 40 (Track 4) */
-                move_midi_inject_to_move([0x0B, 0xB0, cc, 127]);
-                move_midi_inject_to_move([0x0B, 0xB0, cc, 0]);
+                const coCC = 44 - ch;  /* ch 1 -> CC 43 (Track 1) ... ch 4 -> CC 40 (Track 4) */
+                /* Reliable landing: alternate a neighbor track-button with the
+                 * co-run track, ending on the co-run track (twice), so Move
+                 * definitively selects + shows the routed track. Each neighbor->co-run
+                 * transition forces a fresh selection; the doubled co-run tail covers
+                 * a missed/coalesced final press. Well-spaced (gap below) so Move
+                 * processes each as a distinct press. */
+                const nb = (coCC === 43) ? 42 : 43;  /* any track button != co-run */
+                S.moveCoRunPressQueue = [nb, coCC, nb, coCC];
+                S.moveCoRunPressGap = 0;
             }
+        }
+    }
+    /* Drain the co-run track-button press sequence (Option B full-row repaint):
+     * one injected press every few ticks until the queue empties. */
+    if (S.moveCoRunPressQueue && S.moveCoRunPressQueue.length > 0 &&
+            typeof move_midi_inject_to_move === 'function') {
+        if (S.moveCoRunPressGap > 0) {
+            S.moveCoRunPressGap--;
+        } else {
+            const cc = S.moveCoRunPressQueue.shift();
+            move_midi_inject_to_move([0x0B, 0xB0, cc, 127]);
+            move_midi_inject_to_move([0x0B, 0xB0, cc, 0]);
+            S.moveCoRunPressGap = 5;
         }
     }
 
