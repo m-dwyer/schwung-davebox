@@ -68,18 +68,26 @@ another function to stop sharing. While sharing:
 - The tool keeps running and keeps the controls it asked for.
 - The **Menu** button always exits co-run, so there's a consistent way out.
 
-**Public API (JS, available to any module):**
+**Public API (JS bindings, available to any module):**
 
 ```js
-// Start sharing. target: "chain_edit" | "move_native".
-// keep: control groups the tool retains; the rest cede to the co-run UI.
-shadow_corun_begin("chain_edit", ["pads", "steps", "transport"]);
+// target:  0 = chain_edit (id = chain slot 0-3)
+//          1 = move_native (id = tool track 0-7)
+// keepMask: bitfield of CORUN_GRP_* the tool RETAINS; 0 = default split.
+//           Everything not kept cedes to the co-run UI.
+shadow_corun_begin(/* move_native */ 1, trackIndex,
+                   CORUN_GRP_PADS | CORUN_GRP_STEPS | CORUN_GRP_TRANSPORT);
 
-// ...module keeps ticking; chain editor (or Move pages) owns the screen + the
-//    ceded controls...
+// ...module keeps ticking; the co-run UI owns the screen + the ceded controls...
 
-shadow_corun_end();   // restore full overtake ownership to the tool
+shadow_corun_end();              // restore full overtake ownership to the tool
+shadow_get_corun_keep_mask();    // read current mask (0 = default)
 ```
+
+This is the implemented primitive. The group **names** below map 1:1 to the
+`CORUN_GRP_*` bits, so a thin string/array sugar wrapper —
+`shadow_corun_begin("move_native", track, ["pads","steps","transport"])` — is
+trivial to layer on if you'd prefer that as the public face; happy to add it.
 
 **Control groups** (each maps to a fixed hardware set, defined once in Schwung):
 
@@ -126,10 +134,12 @@ In both cases the ceded vs kept decision comes from the same `keep_mask`.
 ## Backward compatibility
 
 - Purely additive. With no co-run target set, overtake behaves exactly as today.
-- The existing dAVEBOx fork calls become thin wrappers over the new API with a
-  default `keep_mask` that reproduces today's exact split
-  (`pads | steps | transport`), so the shipped fork behavior is byte-for-byte
-  preserved. The generalization is verified against it (see Testing).
+- A `keep_mask` of `0` means the default split
+  (`pads | steps | transport | menu` — `CORUN_KEEP_DEFAULT`), which reproduces
+  today's exact dAVEBOx behavior. Existing callers that set only the target gate
+  (the legacy `shadow_set_corun_*` setters) leave the mask 0, so their behavior
+  is byte-for-byte preserved with no call-site change. Verified against it (see
+  Testing).
 - `shadow_control_t` gains the `keep_mask` from existing reserved bytes; layout
   stays stable.
 
@@ -144,9 +154,12 @@ dAVEBOx is the proving ground — it runs both modes in production:
 - **move_native** (`Edit Synth…`): Move's preset browser / device pages co-run;
   Move drives screen + knobs + nav, the sequencer keeps pads/transport.
 
-Verification for this PR: confirm the generalized, manifest-driven routing
-reproduces the fork's existing behavior on-device for both modes (no regression),
-then confirm a second `keep` manifest routes differently as declared.
+Verified on-device (2026-05-22): the generalized, manifest-driven routing
+reproduces the fork's existing behavior for both targets with no regression —
+chain-edit (pads play, knobs turn+touch drive chain params, Menu exits),
+move_native (Move drives screen+knobs+nav, pads play, Menu exits), clean exit on
+both, and a cold boot (new struct field initializes from scratch). Exercising a
+non-default `keep` mask is the natural next test.
 
 ---
 
