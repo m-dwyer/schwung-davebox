@@ -572,11 +572,13 @@ export function updateTrackLEDs() {
         }
     }
 
-    /* Co-run: track buttons are owned by Schwung's chain editor — skip the
-     * scene/clip-color writes so the bright-White indicator written at the
-     * top of this function isn't overwritten. Knob LEDs below still update
-     * normally so dAVEBOx's sequencer-side controls stay legible. */
-  if (S.schwungCoRunSlot < 0) {
+    /* Co-run: track buttons are owned by the co-run UI — skip the scene/clip-color
+     * writes so they don't fight the co-run indicator. Schwung chain-edit co-run
+     * shows the bright-White indicator written at the top of this function;
+     * Move-native co-run blinks them dark-grey from drawUI. Either way, the
+     * per-frame clip-playback paint here must stand down. Knob LEDs below still
+     * update normally so dAVEBOx's sequencer-side controls stay legible. */
+  if (S.schwungCoRunSlot < 0 && (S.moveCoRunTrack | 0) < 0) {
     for (let idx = 0; idx < 4; idx++) {
         const row      = 3 - idx;
         const sceneIdx = S.sceneRow + row;
