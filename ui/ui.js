@@ -358,15 +358,15 @@ function buildGlobalMenuItems() {
         createAction('Load state', function() {
             openLoadSnapshot();
         }),
-        createAction('Quit', function() {
-            saveState();                       /* sets pendingSuspendSave */
-            S.pendingExitAfterSave = true;     /* drained one tick after save fires */
-            S.globalMenuOpen = false;
-        }),
         createAction('Clear Sess', function() {
             S.confirmClearSession = true;
             S.confirmClearSel     = 1;
             S.screenDirty         = true;
+        }),
+        createAction('Quit', function() {
+            saveState();                       /* sets pendingSuspendSave */
+            S.pendingExitAfterSave = true;     /* drained one tick after save fires */
+            S.globalMenuOpen = false;
         }),
     ];
 }
