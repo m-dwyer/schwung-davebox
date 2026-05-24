@@ -25,6 +25,9 @@ const EXPORT_MODULE_DIR = '/data/UserData/schwung/modules/tools/davebox';
 const EXPORT_OUT_DIR    = '/data/UserData/schwung/davebox-exports';
 const EXPORT_STAGING    = '/data/UserData/schwung/davebox-export-staging';
 const EXPORT_SCENES     = NUM_CLIPS;   /* dAVEBOx clip N -> scene N */
+/* DSP writes per-clip rendered notes here; JS reads them (must match
+ * EXPORT_RENDER_PATH in dsp/seq8.c). Sidesteps the 16KB get_param cap. */
+const EXPORT_RENDER_PATH = '/data/UserData/schwung/seq8-export-render.txt';
 
 /* Source-side reads for route-aware instrument mapping (Phase 2). */
 const EXPORT_SETS_BASE_DIR    = '/data/UserData/UserLibrary/Sets';
@@ -189,23 +192,27 @@ function legalizeNotes(notes) {
 }
 
 /* Baked notes for one melodic clip via the DSP non-destructive render
- * (tN_cC_export). Returns an Ableton clip object, or null for an empty/drum
- * clip (caller makes it an empty slot). DSP is authoritative — empty clips
- * return count 0. Ticks→beats = ÷96 (1 bar = 384 ticks, 4 beats/bar).
- * Phase 3: melodic only, single cycle. Drums = Phase 4. */
+ * (tN_cC_export). The DSP writes notes to EXPORT_RENDER_PATH and returns the
+ * "<total_ticks> <note_count>" header (no 16KB get_param cap); JS reads the
+ * file for the notes. Returns an Ableton clip object, or null for an
+ * empty/drum clip (caller makes it an empty slot) or a render/read error. DSP
+ * is authoritative — empty clips return count 0. Ticks→beats = ÷96 (1 bar =
+ * 384 ticks, 4 beats/bar). Phase 3: melodic only, single cycle. Drums = Phase 4. */
 function buildClip(t, c) {
-    if (typeof host_module_get_param !== 'function') return null;
-    const raw = host_module_get_param('t' + t + '_c' + c + '_export');
-    if (!raw) return null;
-    const nl = raw.indexOf('\n');
-    if (nl < 0) return null;
-    const header = raw.slice(0, nl).split(' ');
-    const span  = parseInt(header[0], 10) || 0;
-    const count = parseInt(header[1], 10) || 0;
-    if (count <= 0) return null;
+    if (typeof host_module_get_param !== 'function' || typeof host_read_file !== 'function')
+        return null;
+    const hdr = host_module_get_param('t' + t + '_c' + c + '_export');
+    if (!hdr) return null;
+    const parts = hdr.split(' ');
+    const span  = parseInt(parts[0], 10) || 0;
+    const count = parseInt(parts[1], 10);
+    if (!isFinite(count) || count <= 0) return null;   /* 0 = empty, -1 = render error */
+
+    const body = host_read_file(EXPORT_RENDER_PATH);
+    if (!body) return null;
 
     const notes = [];
-    const toks = raw.slice(nl + 1).split(';');
+    const toks = body.split(';');
     for (let i = 0; i < toks.length; i++) {
         if (!toks[i]) continue;
         const f = toks[i].split(':');
@@ -222,7 +229,7 @@ function buildClip(t, c) {
         });
     }
     if (notes.length < count)
-        showActionPopup('EXPORT WARN', 'CLIP TRUNCATED');   /* Phase 4b: >16KB transfer */
+        showActionPopup('EXPORT WARN', 'CLIP TRUNCATED');   /* should not happen via file */
 
     const legal = legalizeNotes(notes);   /* remove illegal same-pitch overlaps */
     if (legal.length === 0) return null;

@@ -207,6 +207,15 @@ Mapping pinned + empirically confirmed against the live set (4 Move + 4 Schwung 
   clip. Verified: BA Biggest One 2 overlaps → 0, no notes lost, opens + plays in Live.
 - Verified: simple clip (Test A) + pfx clip (Test B, SEQ ARP/HARMONY) both open + play in Live.
 
+### Transfer upgrade — 2026-05-24 (file-based DSP→JS note transfer; lifts the 16KB cap)
+Done before Phase 4 because drum LCM merges and multi-cycle (4b) bakes exceed the 16KB get_param
+buffer. `tN_cC_export` now writes the notes to `EXPORT_RENDER_PATH`
+(`/data/UserData/schwung/seq8-export-render.txt`, fixed path, defined in BOTH seq8.c and
+ui_export.mjs) and returns only the `<total_ticks> <note_count>` header; JS `buildClip` reads the
+file (`host_read_file`, 4MB cap — a single clip ≪ that). Per-clip file, overwritten each call. n=-1
+header signals a file-write failure. Verified: byte-identical clip output vs the old get_param path
+(Test B 16/6/8 notes, 0 overlaps). Internal plumbing — no user-visible change, no MANUAL/CHANGELOG.
+
 ## Phase 4 — Drums (flatten + LCM)
 - [ ] DSP: non-destructive render-to-buffer (drum) from `bake_drum_lane` compute; per-lane notes at
   `dl->midi_note`.

@@ -6062,6 +6062,12 @@ static uint32_t bake_apply_quantize(uint32_t tick, uint16_t tps, uint16_t length
     return (uint32_t)eff;
 }
 
+/* Scratch file for the Ableton-export note transfer. The host get_param buffer
+ * is 16KB, too small for big clips (drum LCM merges, multi-cycle bakes); the
+ * render writes notes here and get_param returns only the small header, JS reads
+ * this file (host_read_file handles up to 4MB; a single clip is well under). */
+#define EXPORT_RENDER_PATH "/data/UserData/schwung/seq8-export-render.txt"
+
 /* Non-destructive melodic clip render for Ableton export. MIRROR of the
  * bake_clip compute (lines ~6160-6250) — KEEP IN SYNC if the bake math changes.
  * Runs the same pfx pipeline (NOTE FX / HARMZ / SEQ ARP / MIDI DLY) and writes
@@ -7295,29 +7301,33 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
             if (!strncmp(p, "_tps", 4))
                 return snprintf(out, out_len, "%d", (int)cl->ticks_per_step);
             if (!strcmp(p, "_export")) {
-                /* Non-destructive melodic bake for Ableton export. Returns
-                 *   "<total_ticks> <note_count>\n<tick>:<pitch>:<vel>:<gate>;..."
-                 * Phase 3: single cycle (loops=1, wrap=0). Drum/empty clips →
-                 * "0 0\n". Capped at out_len (host buffer 16KB); a single cycle
-                 * (<=512 notes) fits. note_count in the header lets JS detect
-                 * truncation (a Phase 4b multi-cycle concern). */
+                /* Non-destructive melodic bake for Ableton export. Writes the
+                 * notes ("<tick>:<pitch>:<vel>:<gate>;...") to EXPORT_RENDER_PATH
+                 * and returns the header "<total_ticks> <note_count>" (always
+                 * tiny — no 16KB get_param cap). Phase 3: single cycle (loops=1,
+                 * wrap=0). Empty/drum clips → "0 0" and no file write. n=-1 on
+                 * file-write failure. */
                 int t_idx = (int)(tr - inst->tracks);
                 static bake_note_t rmc_export[BAKE_BUF];
                 uint32_t span = 0;
                 int n = render_melodic_clip(inst, t_idx, cidx, 1, 0,
                                             rmc_export, BAKE_BUF, &span);
-                int pos = snprintf(out, out_len, "%u %d\n", (unsigned)span, n);
-                int k;
-                for (k = 0; k < n; k++) {
-                    if (pos >= out_len - 28) break;   /* truncation guard */
-                    pos += snprintf(out + pos, (size_t)(out_len - pos),
-                                    "%u:%d:%d:%u;",
+                if (n > 0) {
+                    FILE *ef = fopen(EXPORT_RENDER_PATH, "w");
+                    if (ef) {
+                        int k;
+                        for (k = 0; k < n; k++)
+                            fprintf(ef, "%u:%d:%d:%u;",
                                     (unsigned)rmc_export[k].tick,
                                     (int)rmc_export[k].pitch,
                                     (int)rmc_export[k].vel,
                                     (unsigned)rmc_export[k].gate);
+                        fclose(ef);
+                    } else {
+                        n = -1;   /* JS treats <0 as no-clip */
+                    }
                 }
-                return pos;
+                return snprintf(out, out_len, "%u %d", (unsigned)span, n);
             }
             if (!strncmp(p, "_cc_auto_bits", 13)) {
                 int _bits = 0, _kb;
