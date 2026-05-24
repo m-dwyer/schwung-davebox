@@ -223,6 +223,26 @@ header signals a file-write failure. Verified: byte-identical clip output vs the
   `notes[]`; clip length = LCM (cap policy: clamp to N bars / max length, snap to clean loop).
 - [ ] **Verify:** a polymetric drum clip (lanes of differing lengths) loops correctly in Live.
 
+### Phase 4 RESULT — 2026-05-24 (device + desktop-Live verified ✅; on branch `ableton-export`)
+- **DEVIATION (intentional):** LCM/tile/merge done **in the DSP**, not JS as the plan said — the
+  file transfer made shuttling per-lane data to JS pointless; DSP has the lane data and writes the
+  finished merged clip to `EXPORT_RENDER_PATH`, JS reads it exactly like a melodic clip.
+- **DSP** `render_drum_lane_nd()` (mirror of bake_drum_lane compute, non-destructive, one cycle, emits
+  at `dl->midi_note`) + get_param `tN_cC_export_drum`: gathers active lanes, computes span =
+  LCM(lane loop-lengths in TICKS, `u32_gcd`), tile-copies each lane to fill span, merges into one pool
+  (each note at its lane's midi_note), writes to the shared render file. Header `"<span> <count>"`.
+- **Tile-copy** (not fresh-render-per-repeat) — a randomized lane's variation repeats within the span;
+  fresh-per-tile is a Phase 4b decision. **Caps:** pool `DRUM_BAKE_POOL` (2048); span
+  `EXPORT_DRUM_MAX_TICKS` (24576 = 64 bars), snapped to a clean multiple of the longest lane on
+  coprime blow-up (rare degenerate case). Edge cases handled: 0 active lanes → "0 0"; lane_ticks 0
+  skipped; single lane → span = its length.
+- **JS** `buildClip(t,c,isDrum)` now picks `_export` vs `_export_drum`; `buildTrack` routes drum tracks
+  (`trackPadMode!==0`) to the drum path. `legalizeNotes` (JS) handles same-lane same-pitch overlaps —
+  no second legalization in DSP.
+- Verified on device + Live: basic same-length drum clip (0 overlaps, correct lane pitches) AND a true
+  **polymeter clip** — span 12 beats = LCM of a 4-beat × 1.5-beat(6-step) lane; all lanes tile cleanly
+  with no drift, 0 overlaps, loops seamlessly in Live.
+
 ## Phase 4b — Bake options (loops/wrap + loop-brace layout)
 - [ ] Auto-detect per clip/lane from pfx: randomization → 4 cycles; delay → wrap (2-cycle layout);
   both → layered (cycle 1 clean, 2–4 random+wrapped); else 1 cycle.

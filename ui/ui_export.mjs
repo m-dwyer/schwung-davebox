@@ -198,10 +198,11 @@ function legalizeNotes(notes) {
  * empty/drum clip (caller makes it an empty slot) or a render/read error. DSP
  * is authoritative — empty clips return count 0. Ticks→beats = ÷96 (1 bar =
  * 384 ticks, 4 beats/bar). Phase 3: melodic only, single cycle. Drums = Phase 4. */
-function buildClip(t, c) {
+function buildClip(t, c, isDrum) {
     if (typeof host_module_get_param !== 'function' || typeof host_read_file !== 'function')
         return null;
-    const hdr = host_module_get_param('t' + t + '_c' + c + '_export');
+    const key = 't' + t + '_c' + c + (isDrum ? '_export_drum' : '_export');
+    const hdr = host_module_get_param(key);
     if (!hdr) return null;
     const parts = hdr.split(' ');
     const span  = parseInt(parts[0], 10) || 0;
@@ -251,11 +252,13 @@ function buildClip(t, c) {
 
 function buildTrack(t, ctx) {
     const r = resolveTrack(t, ctx);
-    /* Melodic tracks export baked clip notes; drum tracks stay empty (Phase 4). */
-    const isMelodic = !(S.trackPadMode && S.trackPadMode[t] !== 0);
+    /* Melodic tracks bake clip notes via _export; drum tracks flatten their
+     * polymetric lanes via _export_drum. DSP is authoritative — empty clips
+     * return count 0 → empty slot. */
+    const isDrum = !!(S.trackPadMode && S.trackPadMode[t] !== 0);
     const clipSlots = [];
     for (let i = 0; i < EXPORT_SCENES; i++) {
-        const clip = isMelodic ? buildClip(t, i) : null;
+        const clip = buildClip(t, i, isDrum);
         clipSlots.push({ hasStop: true, clip: clip });
     }
     return {

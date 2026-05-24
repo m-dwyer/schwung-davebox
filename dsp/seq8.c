@@ -6396,6 +6396,100 @@ static void bake_drum_lane(seq8_instance_t *inst, int t, int c, int lane, int lo
     inst->state_dirty = 1;
 }
 
+/* Cap for the exported drum-clip span (LCM of lane loop-lengths). Coprime lane
+ * lengths blow the LCM up; cap at 64 bars and snap to a clean multiple of the
+ * longest lane so that lane still loops seamlessly (rare degenerate case). */
+#define EXPORT_DRUM_MAX_TICKS 24576u   /* 64 bars * 384 ticks/bar */
+
+static uint32_t u32_gcd(uint32_t a, uint32_t b) {
+    while (b) { uint32_t t = a % b; a = b; b = t; }
+    return a;
+}
+
+/* Non-destructive single-cycle drum-lane render for Ableton export. MIRROR of
+ * the bake_drum_lane compute — KEEP IN SYNC. Emits notes at dl->midi_note (no
+ * pitch/HARMZ), one cycle, into `out`; returns count. *out_lane_ticks = the
+ * lane's loop span (length*tps) for LCM tiling. No clip mutation / undo / state. */
+static int render_drum_lane_nd(seq8_instance_t *inst, int t, int c, int lane,
+                               bake_note_t *out, int out_cap, uint32_t *out_lane_ticks) {
+    seq8_track_t *tr = &inst->tracks[t];
+    int ni, si, ri;
+    if (out_lane_ticks) *out_lane_ticks = 0;
+    drum_lane_t *dl = &tr->drum_clips[c].lanes[lane];
+    clip_t *cl = &dl->clip;
+    if (cl->note_count == 0) return 0;
+
+    play_fx_t fx;
+    pfx_init_defaults(&fx);
+    { drum_pfx_params_t *_dp = &dl->pfx_params;
+      fx.gate_time       = _dp->gate_time;
+      fx.velocity_offset = _dp->velocity_offset;
+      fx.quantize        = _dp->quantize;
+      fx.delay_time_idx  = _dp->delay_time_idx;
+      fx.delay_level     = _dp->delay_level;
+      fx.repeat_times    = _dp->repeat_times;
+      fx.fb_velocity     = _dp->fb_velocity;
+      fx.fb_gate_time    = _dp->fb_gate_time;
+      fx.fb_clock        = _dp->fb_clock; }
+    fx.track_idx = (uint8_t)t;
+    fx.route     = ROUTE_SCHWUNG;
+    fx.rng       = 0xDEADBEEFu;
+    fx.note_random_walk = 0;
+
+    int scale_aware = (int)inst->scale_aware;
+    uint16_t tps    = cl->ticks_per_step ? cl->ticks_per_step : (uint16_t)TICKS_PER_STEP;
+    uint16_t length = cl->length;
+    uint32_t clip_ticks     = (uint32_t)length * tps;
+    uint32_t win_start_tick = (uint32_t)cl->loop_start * tps;
+    if (out_lane_ticks) *out_lane_ticks = clip_ticks;
+    if (clip_ticks == 0) return 0;
+
+    static bake_note_t dnd_a[BAKE_BUF];
+    static bake_note_t dnd_b[BAKE_BUF];
+    int a_count = 0;
+    for (ni = 0; ni < cl->note_count && a_count < BAKE_BUF; ni++) {
+        note_t *nn = &cl->notes[ni];
+        if (nn->suppress_until_wrap) continue;
+        if (nn->tick < win_start_tick || nn->tick >= win_start_tick + clip_ticks)
+            continue;
+        uint32_t rel_tick = nn->tick - win_start_tick;
+        uint32_t gate = (uint32_t)nn->gate;
+        if (fx.gate_time != 100 && fx.gate_time > 0)
+            gate = gate * (uint32_t)fx.gate_time / 100u;
+        if (gate < 1) gate = 1; if (gate > 65535u) gate = 65535u;
+        int vel = (int)nn->vel + fx.velocity_offset;
+        if (vel < 1) vel = 1; if (vel > 127) vel = 127;
+        uint32_t eff_tick = bake_apply_quantize(rel_tick, tps, length, fx.quantize);
+        dnd_a[a_count++] = (bake_note_t){ eff_tick, (uint16_t)gate, dl->midi_note, (uint8_t)vel };
+    }
+
+    bake_note_t *in_buf = dnd_a, *out_buf = dnd_b;
+    int in_count = a_count;
+    for (si = 0; si < 2; si++) {
+        int out_count;
+        if (BAKE_STAGES[si] == BAKE_STAGE_MIDI_DLY)
+            out_count = bake_stage_midi_dly(inst, scale_aware, &fx, clip_ticks, clip_ticks,
+                                            in_buf, in_count, out_buf, BAKE_BUF);
+        else
+            out_count = bake_stage_arp_out(&fx, clip_ticks,
+                                           in_buf, in_count, out_buf, BAKE_BUF);
+        bake_note_t *tmp = in_buf; in_buf = out_buf; out_buf = tmp;
+        in_count = out_count;
+    }
+
+    int n = 0;
+    for (ri = 0; ri < in_count && n < out_cap; ri++) {
+        uint32_t tick = in_buf[ri].tick;
+        if (tick >= clip_ticks) continue;   /* single cycle, no wrap */
+        out[n].tick  = tick;
+        out[n].gate  = in_buf[ri].gate;
+        out[n].pitch = dl->midi_note;
+        out[n].vel   = in_buf[ri].vel;
+        n++;
+    }
+    return n;
+}
+
 /* Per-clip drum bake: applies full effects chain per lane including HARMZ.
  * Output notes are routed to lanes by pitch — HARMZ can redistribute hits
  * across lanes. Notes with no matching lane are dropped.
@@ -7328,6 +7422,75 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
                     }
                 }
                 return snprintf(out, out_len, "%u %d", (unsigned)span, n);
+            }
+            if (!strcmp(p, "_export_drum")) {
+                /* Drum-clip export: render every active lane one cycle, flatten
+                 * the polymeter onto a single clip of length LCM(lane loop-spans
+                 * in TICKS), tiling each lane to fill it. Merged notes (each at
+                 * its lane's midi_note) go to EXPORT_RENDER_PATH; header returns
+                 * "<span_ticks> <note_count>". Same file/format as _export so JS
+                 * reads it identically. Empty → "0 0". n=-1 on write failure.
+                 * Cap: pool DRUM_BAKE_POOL; span clamped to EXPORT_DRUM_MAX_TICKS
+                 * (snapped to a clean multiple of the longest lane). */
+                int t_idx = (int)(tr - inst->tracks);
+                static bake_note_t drm_tmp[BAKE_BUF];
+                static bake_note_t drm_pool[DRUM_BAKE_POOL];
+                uint64_t span64 = 0; uint32_t max_lt = 0;
+                int lane, any = 0;
+                for (lane = 0; lane < DRUM_LANES; lane++) {
+                    clip_t *lc = &tr->drum_clips[cidx].lanes[lane].clip;
+                    if (lc->note_count == 0) continue;
+                    uint16_t ltps = lc->ticks_per_step ? lc->ticks_per_step : (uint16_t)TICKS_PER_STEP;
+                    uint32_t lt = (uint32_t)lc->length * ltps;
+                    if (lt == 0) continue;
+                    any = 1;
+                    if (lt > max_lt) max_lt = lt;
+                    if (span64 == 0) span64 = lt;
+                    else {
+                        uint32_t g = u32_gcd((uint32_t)span64, lt);
+                        span64 = (span64 / g) * (uint64_t)lt;
+                        if (span64 > EXPORT_DRUM_MAX_TICKS) span64 = EXPORT_DRUM_MAX_TICKS;
+                    }
+                }
+                if (!any) return snprintf(out, out_len, "0 0");
+                uint32_t span = (uint32_t)span64;
+                if (span > EXPORT_DRUM_MAX_TICKS && max_lt > 0)
+                    span = (EXPORT_DRUM_MAX_TICKS / max_lt) * max_lt;
+                if (span < max_lt) span = max_lt;   /* at least one full longest cycle */
+
+                int pcount = 0;
+                for (lane = 0; lane < DRUM_LANES && pcount < DRUM_BAKE_POOL; lane++) {
+                    uint32_t lt = 0;
+                    int cnt = render_drum_lane_nd(inst, t_idx, cidx, lane, drm_tmp, BAKE_BUF, &lt);
+                    if (cnt == 0 || lt == 0) continue;
+                    uint32_t off;
+                    for (off = 0; off < span && pcount < DRUM_BAKE_POOL; off += lt) {
+                        int i;
+                        for (i = 0; i < cnt && pcount < DRUM_BAKE_POOL; i++) {
+                            uint32_t tick = drm_tmp[i].tick + off;
+                            if (tick >= span) continue;
+                            drm_pool[pcount].tick  = tick;
+                            drm_pool[pcount].gate  = drm_tmp[i].gate;
+                            drm_pool[pcount].pitch = drm_tmp[i].pitch;
+                            drm_pool[pcount].vel   = drm_tmp[i].vel;
+                            pcount++;
+                        }
+                    }
+                }
+                if (pcount > 0) {
+                    FILE *ef = fopen(EXPORT_RENDER_PATH, "w");
+                    if (ef) {
+                        int k;
+                        for (k = 0; k < pcount; k++)
+                            fprintf(ef, "%u:%d:%d:%u;",
+                                    (unsigned)drm_pool[k].tick, (int)drm_pool[k].pitch,
+                                    (int)drm_pool[k].vel, (unsigned)drm_pool[k].gate);
+                        fclose(ef);
+                    } else {
+                        pcount = -1;
+                    }
+                }
+                return snprintf(out, out_len, "%u %d", (unsigned)span, pcount);
             }
             if (!strncmp(p, "_cc_auto_bits", 13)) {
                 int _bits = 0, _kb;
