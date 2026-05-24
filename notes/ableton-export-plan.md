@@ -258,6 +258,26 @@ header signals a file-write failure. Verified: byte-identical clip output vs the
 - [ ] JS: poll for output bundle; show progress/done in OLED.
 - [ ] **Verify:** export on a machine *without* the packs → still opens with all sounds.
 
+### Phase 5 RESULT — 2026-05-24 (device + desktop-Live verified ✅; on branch `ableton-export`)
+- **JS** (`ui_export.mjs`): `collectSamples()` walks each cloned **Move** instrument subtree (ROUTE_MOVE
+  only — Dummy Drift has no samples), resolves each `sampleUri` via `resolveSampleUri`
+  (`ableton:/packs/abl-core-library/X`→`/data/CoreLibrary/X`, `ableton:/user-library/X`→
+  `/data/UserData/UserLibrary/X`, URL-decoded), rewrites the ref to `Samples/<encodeURIComponent(base)>`,
+  and records `{src,dest}` in a deduped manifest (`ctx.samples`/`sampleBySrc`/`usedDest`). Manifest →
+  `pack-args.json` → `pack.py` copies into staging `Samples/` (pack.py UNCHANGED from Phase 1).
+- **GOTCHA (cost a cycle):** do NOT `host_file_exists()` the resolved path to gate inclusion — the host
+  `validate_path` (schwung_host.c:1954) sandboxes ALL JS file APIs to `BASE_DIR`, so `/data/CoreLibrary`
+  + `/data/UserData/UserLibrary` always read as "missing" from JS. `pack.py` (unsandboxed python via
+  host_system_cmd) is authoritative — it copies what exists and reports the rest in `status.missing`
+  (JS shows "N SMP MISSING"). First attempt gated on host_file_exists → 0 samples bundled.
+- **Encoding contract (verified vs real Note bundle):** zip entry = DECODED basename (`Samples/Snare VB.wav`);
+  `sampleUri` ref = URL-ENCODED (`Samples/Snare%20VB.wav`); Live URL-decodes the ref to find the entry.
+- Verified: 16 refs → 15 files (one deduped), `copied=15 missing=0`, 0 leftover `ableton:` refs, every
+  ref matches a zip entry, `Snare VB.wav` 78284 bytes byte-identical source↔bundle. Opens + plays in Live.
+- **Known minor edge (Phase 6):** a genuinely-missing sample → ref rewritten to a dangling `Samples/X`
+  (pack.py can't copy it) rather than left as `ableton:`. Rare (a loaded set's samples are in CoreLibrary
+  by construction). Phase 6 could revert missing refs in pack.py.
+
 ## Phase 6 — Polish
 - [ ] Progress/most-recent-export feedback; error handling (missing sample, oversized clip, no clips).
 - [ ] MANUAL.md + CHANGELOG entries; capability-gate if any patched-Schwung dependency.

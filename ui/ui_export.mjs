@@ -90,6 +90,74 @@ function buildMoveChannelMap(moveSong) {
     return map;
 }
 
+/* ---- sample resolution (Phase 5: portable bundling) ---------------------- */
+
+/* Resolve a Move instrument `sampleUri` to its on-disk file, or null if it
+ * isn't a bundle-able local pack/user-library reference (presetUri/spriteUri
+ * and device-resource URIs are Live-resolved — not passed here, this only sees
+ * sampleUri values). URL-decode (%20→space etc.). */
+function resolveSampleUri(uri) {
+    const CORE = 'ableton:/packs/abl-core-library/';
+    const USER = 'ableton:/user-library/';
+    let root, rest;
+    if (uri.indexOf(CORE) === 0)      { root = '/data/CoreLibrary/';            rest = uri.slice(CORE.length); }
+    else if (uri.indexOf(USER) === 0) { root = '/data/UserData/UserLibrary/';   rest = uri.slice(USER.length); }
+    else return null;
+    let dec;
+    try { dec = decodeURIComponent(rest); } catch (e) { dec = rest; }
+    return root + dec;
+}
+
+/* Assign the bundle-relative dest basename for a source file, deduping so two
+ * different sources never collide on one name (and the same source reused
+ * across tracks shares one copy). Records {src,dest} in ctx.samples once. */
+function assignSampleDest(ctx, src) {
+    if (ctx.sampleBySrc[src]) return ctx.sampleBySrc[src];
+    const base = src.split('/').pop();
+    let dest = base;
+    if (ctx.usedDest[dest]) {
+        const dot  = base.lastIndexOf('.');
+        const stem = dot > 0 ? base.slice(0, dot) : base;
+        const ext  = dot > 0 ? base.slice(dot) : '';
+        let i = 2;
+        while (ctx.usedDest[stem + ' ' + i + ext]) i++;
+        dest = stem + ' ' + i + ext;
+    }
+    ctx.usedDest[dest] = true;
+    ctx.sampleBySrc[src] = dest;
+    ctx.samples.push({ src: src, dest: dest });
+    return dest;
+}
+
+/* Walk a (cloned) Move device subtree; for every resolvable `sampleUri`, copy
+ * the file into the bundle (via the manifest) and rewrite the ref to the
+ * bundle-relative, URL-encoded `Samples/<name>`. Zip entry = decoded name;
+ * Live URL-decodes the ref to find it (verified against a real Note bundle).
+ * Every reference site is rewritten, even when the source dedupes. */
+function collectSamples(node, ctx) {
+    if (Array.isArray(node)) {
+        for (let i = 0; i < node.length; i++) collectSamples(node[i], ctx);
+        return;
+    }
+    if (node && typeof node === 'object') {
+        for (const k in node) {
+            const v = node[k];
+            if (k === 'sampleUri' && typeof v === 'string') {
+                /* Resolve every bundle-able ref and rewrite optimistically. We do
+                 * NOT host_file_exists() it: the host sandboxes paths to BASE_DIR
+                 * (validate_path), so /data/CoreLibrary + /data/UserData/UserLibrary
+                 * always read as "missing" from JS. pack.py (unsandboxed python) is
+                 * authoritative — it copies what exists and reports the rest in
+                 * status.missing. */
+                const abs = resolveSampleUri(v);
+                if (abs) node[k] = 'Samples/' + encodeURIComponent(assignSampleDest(ctx, abs));
+            } else {
+                collectSamples(v, ctx);
+            }
+        }
+    }
+}
+
 /* ---- per-track instrument + name + color resolution ---------------------- */
 
 /* Resolve a dAVEBOx track to an export instrument subtree, display name, color,
@@ -119,8 +187,10 @@ function resolveTrack(t, ctx) {
             const preset = mt.devices[0].name || dbName;
             let mixer = null;
             if (mt.mixer) { mixer = deepClone(mt.mixer); mixer.sends = []; }  /* returnTracks is [] */
+            const movDevices = deepClone(mt.devices);
+            collectSamples(movDevices, ctx);   /* bundle + rewrite sampleUris (Move instruments only) */
             return {
-                devices: deepClone(mt.devices),
+                devices: movDevices,
                 name: preset,
                 color: (typeof mt.color === 'number') ? mt.color : defaultColor,
                 mixer: mixer
@@ -388,7 +458,10 @@ function pollPendingExport() {
         drift: drift,
         master: master,
         moveMap: buildMoveChannelMap(loadMoveSong()),
-        chainCfg: loadChainConfig()
+        chainCfg: loadChainConfig(),
+        samples: [],          /* {src,dest} manifest → pack.py copies into Samples/ */
+        sampleBySrc: {},      /* src → dest (dedupe shared samples) */
+        usedDest: {}          /* dest names taken (avoid basename collisions) */
     };
 
     let songJson;
@@ -416,7 +489,7 @@ function pollPendingExport() {
     const args = {
         staging: EXPORT_STAGING,
         out: outPath,
-        samples: [],          /* Phase 5 fills this */
+        samples: ctx.samples,   /* {src,dest} resolved from Move instrument sampleUris */
         status: statusP
     };
     host_write_file(EXPORT_STAGING + '/pack-args.json', JSON.stringify(args));
@@ -440,8 +513,12 @@ function pollPendingExport() {
     }
 
     if (okStatus) {
-        const bn = String(outPath).split('/').pop().replace(/\.ablbundle$/, '');
-        showActionPopup('EXPORTED', bn.slice(0, 18));
+        const miss = (okStatus.missing && okStatus.missing.length) ? okStatus.missing.length : 0;
+        if (miss > 0) showActionPopup('EXPORTED', miss + ' SMP MISSING');
+        else {
+            const bn = String(outPath).split('/').pop().replace(/\.ablbundle$/, '');
+            showActionPopup('EXPORTED', bn.slice(0, 18));
+        }
     } else {
         showActionPopup('EXPORT FAIL', String(errMsg).slice(0, 18));
     }

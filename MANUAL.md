@@ -1119,7 +1119,7 @@ So you can overlay a merged drum + bass onto a row that already has piano and gu
 | Confirm | A Yes/No dialog (No default) appears — jog to choose, click to confirm, **Back** to cancel. |
 | Export | The OLED shows **EXPORTING…**, then **EXPORTED &lt;name&gt;** when the bundle is written. |
 
-The bundle lands at `/data/UserData/schwung/davebox-exports/<set name>-<date>.ablbundle` (a same-day repeat gets `-2`, `-3`, …). Retrieve it over SFTP. It opens in Live as **8 MIDI tracks × 16 scene slots**, carrying your set's tempo and key.
+The bundle lands at `/data/UserData/schwung/davebox-exports/<set name>-<date>.ablbundle` (a same-day repeat gets `-2`, `-3`, …). Retrieve it over SFTP. It opens in Live as **8 MIDI tracks × 16 scene slots**, carrying your set's tempo and key. It is **self-contained** — the instruments' samples are bundled inside, so it opens with all sounds even on a computer that doesn't have the Move sample packs installed.
 
 **Track instruments and names follow each track's route:**
 
@@ -1133,7 +1133,6 @@ The bundle lands at `/data/UserData/schwung/davebox-exports/<set name>-<date>.ab
 
 > Move Drum Racks need **Live 12.1+** (older versions substitute Simpler and sound different). Export is **one-way** — a saved `.als` can't be loaded back onto Move.
 
-*(Move instruments are referenced from your installed Ableton packs for now; self-contained sample bundling is carried over as this feature completes.)*
 
 ---
 
