@@ -1129,9 +1129,11 @@ The bundle lands at `/data/UserData/schwung/davebox-exports/<set name>-<date>.ab
 | **Schwung** | A placeholder Drift instrument, named `SCH-<chain name>`. |
 | **External** | A placeholder Drift instrument, named `Ext ch <n>`. |
 
+**Clip notes are baked** — each melodic clip exports the *"what you hear"* result with its effects rendered into actual notes (SEQUENCE ARP runs, MIDI Delay echoes, Harmony stacks, gate length). The exported clip plays back in Live the same as it sounds in dAVEBOx, with no live effects needed.
+
 > Move Drum Racks need **Live 12.1+** (older versions substitute Simpler and sound different). Export is **one-way** — a saved `.als` can't be loaded back onto Move.
 
-*(Move instruments are referenced from your installed Ableton packs for now; self-contained sample bundling and baked clip notes are carried over as this feature completes.)*
+*(Move instruments are referenced from your installed Ableton packs for now; drum clips and self-contained sample bundling are carried over as this feature completes.)*
 
 ---
 

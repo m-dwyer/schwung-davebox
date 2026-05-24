@@ -6062,6 +6062,103 @@ static uint32_t bake_apply_quantize(uint32_t tick, uint16_t tps, uint16_t length
     return (uint32_t)eff;
 }
 
+/* Non-destructive melodic clip render for Ableton export. MIRROR of the
+ * bake_clip compute (lines ~6160-6250) — KEEP IN SYNC if the bake math changes.
+ * Runs the same pfx pipeline (NOTE FX / HARMZ / SEQ ARP / MIDI DLY) and writes
+ * the resulting "what you hear" notes into `out` (caller buffer, out_cap
+ * entries), returning the count. Does NOT mutate the clip / undo / state.
+ * `out_total_ticks` (nullable) receives the rendered span (new_length * tps). */
+static int render_melodic_clip(seq8_instance_t *inst, int t, int c, int loops,
+                               int wrap, bake_note_t *out, int out_cap,
+                               uint32_t *out_total_ticks) {
+    seq8_track_t *tr = &inst->tracks[t];
+    clip_t *cl;
+    int ni, si, ri;
+    if (out_total_ticks) *out_total_ticks = 0;
+    if (tr->pad_mode == PAD_MODE_DRUM) return 0;
+    cl = &tr->clips[c];
+    if (cl->note_count == 0) return 0;
+    if (loops < 1) loops = 1;
+    if (loops > 4) loops = 4;
+
+    play_fx_t fx;
+    pfx_init_defaults(&fx);
+    pfx_apply_params(&fx, &cl->pfx_params);
+    fx.track_idx = (uint8_t)t;
+    fx.route     = ROUTE_SCHWUNG;
+    fx.rng       = 0xDEADBEEFu;
+
+    int scale_aware = (int)inst->scale_aware;
+    uint16_t tps    = cl->ticks_per_step ? cl->ticks_per_step : (uint16_t)TICKS_PER_STEP;
+    uint16_t length = cl->length;
+    uint32_t clip_ticks     = (uint32_t)length * tps;
+    uint32_t win_start_tick = (uint32_t)cl->loop_start * tps;
+    uint16_t new_length  = (uint16_t)clamp_i(length * loops, 1, 256);
+    uint32_t total_ticks = (uint32_t)new_length * tps;
+    if (out_total_ticks) *out_total_ticks = total_ticks;
+
+    static bake_note_t rmc_a[BAKE_BUF];
+    static bake_note_t rmc_b[BAKE_BUF];
+    int total_out = 0;
+
+    int loop;
+    for (loop = 0; loop < loops; loop++) {
+        uint32_t tick_offset = (uint32_t)loop * clip_ticks;
+        int a_count = 0;
+        fx.note_random_walk = 0;
+        for (ni = 0; ni < cl->note_count && a_count < BAKE_BUF; ni++) {
+            note_t *nn = &cl->notes[ni];
+            if (nn->suppress_until_wrap) continue;
+            if (nn->tick < win_start_tick || nn->tick >= win_start_tick + clip_ticks)
+                continue;
+            uint32_t rel_tick = nn->tick - win_start_tick;
+            uint32_t gate = (uint32_t)nn->gate;
+            if (fx.gate_time != 100 && fx.gate_time > 0)
+                gate = gate * (uint32_t)fx.gate_time / 100u;
+            if (gate < 1) gate = 1; if (gate > 65535u) gate = 65535u;
+            int vel = (int)nn->vel + fx.velocity_offset;
+            if (vel < 1) vel = 1; if (vel > 127) vel = 127;
+            uint8_t gen[MAX_GEN_NOTES];
+            int gc = pfx_build_gen_notes(inst, scale_aware, &fx, (int)nn->pitch, gen);
+            int gi;
+            uint32_t eff_tick = bake_apply_quantize(rel_tick, tps, length, fx.quantize);
+            for (gi = 0; gi < gc && a_count < BAKE_BUF; gi++)
+                rmc_a[a_count++] = (bake_note_t){ eff_tick, (uint16_t)gate,
+                                                  gen[gi], (uint8_t)vel };
+        }
+
+        bake_note_t *in_buf = rmc_a, *out_buf = rmc_b;
+        int in_count = a_count;
+        for (si = 0; si < 2; si++) {
+            int out_count;
+            if (BAKE_STAGES[si] == BAKE_STAGE_MIDI_DLY)
+                out_count = bake_stage_midi_dly(inst, scale_aware, &fx, clip_ticks,
+                                                (wrap && loop == loops - 1) ? UINT32_MAX
+                                                    : (uint32_t)(loops - loop) * clip_ticks,
+                                                in_buf, in_count, out_buf, BAKE_BUF);
+            else
+                out_count = bake_stage_arp_out(&fx, clip_ticks,
+                                               in_buf, in_count, out_buf, BAKE_BUF);
+            bake_note_t *tmp = in_buf; in_buf = out_buf; out_buf = tmp;
+            in_count = out_count;
+        }
+
+        for (ri = 0; ri < in_count && total_out < out_cap; ri++) {
+            uint32_t tick = in_buf[ri].tick + tick_offset;
+            if (tick >= total_ticks) {
+                if (!wrap) continue;
+                tick %= total_ticks;
+            }
+            out[total_out].tick  = tick;
+            out[total_out].gate  = in_buf[ri].gate;
+            out[total_out].pitch = in_buf[ri].pitch;
+            out[total_out].vel   = in_buf[ri].vel;
+            total_out++;
+        }
+    }
+    return total_out;
+}
+
 static void bake_clip(seq8_instance_t *inst, int t, int c, int loops, int wrap) {
     seq8_track_t *tr = &inst->tracks[t];
     clip_t *cl;
@@ -7197,6 +7294,31 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
             }
             if (!strncmp(p, "_tps", 4))
                 return snprintf(out, out_len, "%d", (int)cl->ticks_per_step);
+            if (!strcmp(p, "_export")) {
+                /* Non-destructive melodic bake for Ableton export. Returns
+                 *   "<total_ticks> <note_count>\n<tick>:<pitch>:<vel>:<gate>;..."
+                 * Phase 3: single cycle (loops=1, wrap=0). Drum/empty clips →
+                 * "0 0\n". Capped at out_len (host buffer 16KB); a single cycle
+                 * (<=512 notes) fits. note_count in the header lets JS detect
+                 * truncation (a Phase 4b multi-cycle concern). */
+                int t_idx = (int)(tr - inst->tracks);
+                static bake_note_t rmc_export[BAKE_BUF];
+                uint32_t span = 0;
+                int n = render_melodic_clip(inst, t_idx, cidx, 1, 0,
+                                            rmc_export, BAKE_BUF, &span);
+                int pos = snprintf(out, out_len, "%u %d\n", (unsigned)span, n);
+                int k;
+                for (k = 0; k < n; k++) {
+                    if (pos >= out_len - 28) break;   /* truncation guard */
+                    pos += snprintf(out + pos, (size_t)(out_len - pos),
+                                    "%u:%d:%d:%u;",
+                                    (unsigned)rmc_export[k].tick,
+                                    (int)rmc_export[k].pitch,
+                                    (int)rmc_export[k].vel,
+                                    (unsigned)rmc_export[k].gate);
+                }
+                return pos;
+            }
             if (!strncmp(p, "_cc_auto_bits", 13)) {
                 int _bits = 0, _kb;
                 cc_auto_t *_ca = &tr->clip_cc_auto[cidx];

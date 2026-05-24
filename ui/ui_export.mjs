@@ -156,11 +156,101 @@ function defaultMixer() {
     return { pan: 0.0, 'solo-cue': false, speakerOn: true, volume: 0.6137250661849976, sends: [] };
 }
 
+/* Ableton clips forbid two same-pitch notes overlapping (or starting at the
+ * same time) — illegal there, though fine as live MIDI. The baked "what you
+ * hear" routinely produces these (long gates re-triggered, delay echoes, arp).
+ * Legalize: dedupe same-pitch notes at the same start, then clamp each note's
+ * duration so it ends just before the next same-pitch onset. Re-attacks (the
+ * actual rhythm) are preserved; only the held tail is shortened. */
+function legalizeNotes(notes) {
+    const EPS = 1e-4;
+    const byPitch = {};
+    for (let i = 0; i < notes.length; i++) {
+        const p = notes[i].noteNumber;
+        (byPitch[p] || (byPitch[p] = [])).push(notes[i]);
+    }
+    const out = [];
+    for (const p in byPitch) {
+        const ns = byPitch[p].sort(function(a, b) { return a.startTime - b.startTime; });
+        for (let i = 0; i < ns.length; i++) {
+            const cur = ns[i];
+            if (i > 0 && Math.abs(ns[i - 1].startTime - cur.startTime) < EPS) continue;  /* dup onset */
+            let nextStart = Infinity;
+            for (let j = i + 1; j < ns.length; j++) {
+                if (ns[j].startTime > cur.startTime + EPS) { nextStart = ns[j].startTime; break; }
+            }
+            if (cur.startTime + cur.duration > nextStart - EPS)
+                cur.duration = nextStart - cur.startTime - EPS;
+            if (cur.duration > 0) out.push(cur);
+        }
+    }
+    out.sort(function(a, b) { return a.startTime - b.startTime; });
+    return out;
+}
+
+/* Baked notes for one melodic clip via the DSP non-destructive render
+ * (tN_cC_export). Returns an Ableton clip object, or null for an empty/drum
+ * clip (caller makes it an empty slot). DSP is authoritative — empty clips
+ * return count 0. Ticks→beats = ÷96 (1 bar = 384 ticks, 4 beats/bar).
+ * Phase 3: melodic only, single cycle. Drums = Phase 4. */
+function buildClip(t, c) {
+    if (typeof host_module_get_param !== 'function') return null;
+    const raw = host_module_get_param('t' + t + '_c' + c + '_export');
+    if (!raw) return null;
+    const nl = raw.indexOf('\n');
+    if (nl < 0) return null;
+    const header = raw.slice(0, nl).split(' ');
+    const span  = parseInt(header[0], 10) || 0;
+    const count = parseInt(header[1], 10) || 0;
+    if (count <= 0) return null;
+
+    const notes = [];
+    const toks = raw.slice(nl + 1).split(';');
+    for (let i = 0; i < toks.length; i++) {
+        if (!toks[i]) continue;
+        const f = toks[i].split(':');
+        if (f.length < 4) continue;
+        const tick = parseInt(f[0], 10), pitch = parseInt(f[1], 10),
+              vel  = parseInt(f[2], 10), gate  = parseInt(f[3], 10);
+        if (!isFinite(tick) || !isFinite(pitch)) continue;
+        notes.push({
+            noteNumber: pitch,
+            startTime: tick / 96,
+            duration: Math.max(1, isFinite(gate) ? gate : 1) / 96,
+            velocity: isFinite(vel) ? vel : 100,
+            offVelocity: 0
+        });
+    }
+    if (notes.length < count)
+        showActionPopup('EXPORT WARN', 'CLIP TRUNCATED');   /* Phase 4b: >16KB transfer */
+
+    const legal = legalizeNotes(notes);   /* remove illegal same-pitch overlaps */
+    if (legal.length === 0) return null;
+
+    const lenBeats = (span > 0 ? span : 96) / 96;
+    return {
+        isPlaying: false,
+        name: '',
+        color: null,
+        isEnabled: true,
+        timeSignature: { upper: 4, lower: 4 },
+        region: { start: 0.0, end: lenBeats, loop: { start: 0.0, end: lenBeats, isEnabled: true } },
+        grooveId: null,
+        stepEditorScrollPosition: 0,
+        notes: legal,
+        envelopes: []
+    };
+}
+
 function buildTrack(t, ctx) {
     const r = resolveTrack(t, ctx);
+    /* Melodic tracks export baked clip notes; drum tracks stay empty (Phase 4). */
+    const isMelodic = !(S.trackPadMode && S.trackPadMode[t] !== 0);
     const clipSlots = [];
-    for (let i = 0; i < EXPORT_SCENES; i++)
-        clipSlots.push({ hasStop: true, clip: null });
+    for (let i = 0; i < EXPORT_SCENES; i++) {
+        const clip = isMelodic ? buildClip(t, i) : null;
+        clipSlots.push({ hasStop: true, clip: clip });
+    }
     return {
         kind: 'midi',
         name: r.name,

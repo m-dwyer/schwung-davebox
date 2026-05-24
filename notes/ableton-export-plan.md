@@ -183,6 +183,30 @@ Mapping pinned + empirically confirmed against the live set (4 Move + 4 Schwung 
   set `region`/`region.loop` per loop-brace design (Phase 4b adds the multi-cycle framing).
 - [ ] **Verify:** a melodic clip plays in Live identical to dAVEBOx (incl. pfx, since baked).
 
+### Phase 3 RESULT — 2026-05-24 (device + desktop-Live verified ✅; on branch `ableton-export`)
+- **DSP** `render_melodic_clip()` (seq8.c, before bake_clip): a **parallel** (NOT shared) mirror of
+  the bake_clip compute — runs the same pfx pipeline (NOTE FX / HARMZ / SEQ ARP / MIDI DLY) and
+  writes "what you hear" notes to a caller buffer, NO clip mutation / undo / state_dirty. Tagged
+  "MIRROR of bake_clip compute — keep in sync". (Deliberately did NOT refactor bake_clip — shipped
+  code, subtle behavior; revisit sharing after Phase 4.)
+- **DSP get_param** `tN_cC_export`: returns `"<total_ticks> <note_count>\n<tick>:<pitch>:<vel>:<gate>;..."`.
+  Phase 3 hardcodes loops=1, wrap=0 (single cycle). Host get_param buffer is **16KB** (`schwung_host.c`
+  `js_host_module_get_param` buf[16384]) → a single cycle (≤512 notes ≈11KB) fits; `note_count` header
+  lets JS detect truncation. **Phase 4b ≥4 loops can exceed 16KB → needs a different transfer (file or
+  chunking).** Note order is `tick:pitch:vel:gate` (DSP-native), NOT the plan's `tick:gate:pitch:vel`.
+- **JS** `buildClip(t,c)` (ui_export.mjs): renders every melodic clip via the get_param (DSP
+  authoritative — empty clips return count 0 → empty slot; drum tracks skipped, `trackPadMode`).
+  ticks→beats ÷96. Clip fields match the Live-verified Set38 shape exactly
+  (`{isPlaying,name,color,isEnabled,timeSignature,region,grooveId,stepEditorScrollPosition,notes,envelopes}`,
+  notes `{noteNumber,startTime,duration,velocity,offVelocity}`). Defaults: grooveId null, color null,
+  offVelocity 0, timeSignature 4/4, region single-cycle [0,L].
+- **CRITICAL FIX — same-pitch overlap legalization** (`legalizeNotes`): Ableton **rejects a clip with
+  two same-pitch notes overlapping** ("Document invariant violation" — hit by a harmony/long-gate clip).
+  JS clamps each note to end just before the next same-pitch onset + dedupes same-start. Baked pfx
+  (arp/delay/harmony/long gates) routinely produces these; they're fine as live MIDI but illegal in a
+  clip. Verified: BA Biggest One 2 overlaps → 0, no notes lost, opens + plays in Live.
+- Verified: simple clip (Test A) + pfx clip (Test B, SEQ ARP/HARMONY) both open + play in Live.
+
 ## Phase 4 — Drums (flatten + LCM)
 - [ ] DSP: non-destructive render-to-buffer (drum) from `bake_drum_lane` compute; per-lane notes at
   `dl->midi_note`.
