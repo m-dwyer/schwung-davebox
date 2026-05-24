@@ -160,15 +160,16 @@ export function updateStepLEDs() {
             else                                       color = (S.beatMarkersEnabled && i % 4 === 0) ? TRACK_DIM_COLORS[t] : LED_OFF;
             setLED(16 + i, color);
         }
-        /* Gate span overlay: fixed index 56 across steps covered by held step's gate */
+        /* Gate span overlay: fixed index 56 across the steps the held note sounds
+         * on = ceil(gate/tps) (gate of exactly N steps covers 0..N-1, not N). */
         if (S.heldStep >= 0 && S.heldStepNotes.length > 0) {
             const _sTps  = S.drumLaneTPS[t] || 24;
-            const _sSpan = Math.floor(S.stepEditGate / _sTps);
+            const _sSpan = Math.ceil(S.stepEditGate / _sTps);
             for (let i = 0; i < 16; i++) {
                 const absStep = base + i;
                 if (absStep < lsBase || absStep >= winEnd) continue;
                 const offset = (absStep - S.heldStep + len) % len;
-                if (offset <= _sSpan) setLED(16 + i, 56);
+                if (offset < _sSpan) setLED(16 + i, 56);
             }
         }
         /* Gate overlay: K1 (Dur) touched in drum step edit — White=full, DarkGrey=partial */
@@ -217,15 +218,17 @@ export function updateStepLEDs() {
         setLED(16 + i, color);
     }
 
-    /* Gate span overlay: fixed index 56 across all steps covered by the held step's gate. */
+    /* Gate span overlay: fixed index 56 across all steps the held note actually
+     * sounds on = ceil(gate/tps) steps (a gate of exactly N steps ends at the
+     * start of step N, so it covers steps 0..N-1 — NOT N). */
     if (S.heldStep >= 0 && S.heldStepNotes.length > 0) {
         const _spanTps  = S.clipTPS[S.activeTrack][effectiveClip(S.activeTrack)] || 24;
-        const spanFull  = Math.floor(S.stepEditGate / _spanTps);
+        const spanSteps = Math.ceil(S.stepEditGate / _spanTps);
         for (let i = 0; i < 16; i++) {
             const absStep = base + i;
             if (absStep < lsBase || absStep >= winEnd) continue;
             const offset = (absStep - S.heldStep + len) % len;
-            if (offset <= spanFull) setLED(16 + i, 56);
+            if (offset < spanSteps) setLED(16 + i, 56);
         }
     }
 
