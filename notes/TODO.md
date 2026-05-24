@@ -22,7 +22,7 @@
 - **Reclaim Back button** from Schwung suspend — currently Back triggers suspend; offer a different gesture for suspend so dAVEBOx can use Back.
 - **Drum lane repeats respond to pad pressure** — pad pressure continuously sets velocity of incoming repeats.
 - **Enable pad pressure broadly** beyond drum repeats — investigate which features should be pressure-aware.
-- **Ableton Live set export** — MIDI data + clip structure. All clips with pfx baked down (4x loop bake for random pfx, wrap-around for delay).
+- **Ableton Live set export** — MIDI data + clip structure. All clips with pfx baked down (4x loop bake for random pfx, wrap-around for delay). **Format feasibility CONFIRMED 2026-05-23** (`notes/ableton-export-bundle.md`): emit a Move-style `.ablbundle` (Song.abl at zip root + `Samples/`), which desktop Live opens (8×16 verified) and converts instruments natively → user saves as `.als`. Can carry over the mapped Move track presets/samples/colors/names. Every track MUST have an instrument (empty `devices` → "Document invariant violation"). Remaining: on-device zip, sample-ref mechanics, default instrument for unmapped tracks, MIDI/clip authoring + pfx bake.
 - **Mono param on CLIP param bank.** New on/off param in the clip parameter bank. When ON, every note-on triggers a note-off on any previously-playing note(s) on that track — monophonic voicing (last-note priority). When OFF, polyphonic (current behavior). Per-clip.
 
 ### LED polish

@@ -1152,10 +1152,11 @@ function _switchActiveTrack(newT) {
     S.trackActiveBank[S.activeTrack] = S.activeBank;
     S.activeTrack = newT | 0;
     S.activeBank = S.trackActiveBank[S.activeTrack] | 0;
-    /* Focused-clip-by-default: if transport is playing and the destination
-     * track has nothing playing / queued / willRelaunch, launch the focused
-     * clip so entering a track always lands on its focused clip live. Skip
-     * in session view since the user is launching clips explicitly there. */
+    /* Focused-clip-by-default: ONLY while transport is running — entering a track
+     * launches its focused clip so it's live. While stopped we do NOT arm (passive
+     * track-scrolling must not queue clips for the next transport start); the
+     * displayed clip is instead armed at transport start (see _onCC_transport).
+     * Skip if already live or in Session View. */
     if (S.playing && !S.sessionView
             && !S.trackClipPlaying[S.activeTrack]
             && !S.trackWillRelaunch[S.activeTrack]
