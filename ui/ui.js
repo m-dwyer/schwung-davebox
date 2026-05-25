@@ -72,10 +72,11 @@ import {
     fmtSign, fmtStretch, fmtLen, fmtRes, fmtPct, fmtNote, fmtPages, fmtUnis,
     fmtDly, fmtBool, fmtRoute, fmtPlain, fmtNA, fmtGateMod,
     fmtArpStyle, fmtArpRate, fmtArpSteps, fmtArpOct, fmtVelOverride,
-    col4, parseActionRaw, MCUFONT, pixelPrint, pixelPrintC,
+    col4, col5, parseActionRaw, MCUFONT, pixelPrint, pixelPrintC,
     BANKS, ACTION_POPUP_TICKS, PAD_MODE_DRUM, PAD_MODE_MELODIC_SCALE,
-    POLL_INTERVAL, CC_SCRATCH_PALETTE_BASE, TAP_TEMPO_FLASH_TICKS, TAP_TEMPO_RESET_MS,
-    PARAM_LED_BANKS, STATE_VERSION
+    POLL_INTERVAL, TAP_TEMPO_FLASH_TICKS, TAP_TEMPO_RESET_MS,
+    PARAM_LED_BANKS, STATE_VERSION,
+    CC_GRADIENT_BASE, CC_GRADIENT_LEVELS, CC_GRADIENT_SCALARS
 } from '/data/UserData/schwung/modules/tools/davebox/ui_constants.mjs';
 
 import { S, CC_ASSIGN_DEFAULTS, PERF_FACTORY_PRESETS } from '/data/UserData/schwung/modules/tools/davebox/ui_state.mjs';
@@ -2460,7 +2461,7 @@ function readBankParams(t, bankIdx) {
         }
         return;
     }
-    /* CC PARAM bank: read all 8 CC assignments from DSP */
+    /* CC PARAM bank: read all 8 CC assignments + per-knob type from DSP */
     if (bankIdx === 6) {
         const raw = host_module_get_param('t' + t + '_cc_assigns');
         if (raw) {
@@ -2468,9 +2469,23 @@ function readBankParams(t, bankIdx) {
             for (let k = 0; k < 8; k++)
                 S.trackCCAssign[t][k] = parseInt(parts[k], 10) || CC_ASSIGN_DEFAULTS[k];
         }
+        const typs = host_module_get_param('t' + t + '_cc_types');
+        if (typs) {
+            const tp = typs.split(' ');
+            for (let k = 0; k < 8; k++) S.trackCCType[t][k] = parseInt(tp[k], 10) || 0;
+        }
         for (let c = 0; c < NUM_CLIPS; c++) {
             const bits = host_module_get_param('t' + t + '_c' + c + '_cc_auto_bits');
             S.trackCCAutoBits[t][c] = bits !== null ? (parseInt(bits, 10) || 0) : 0;
+            /* Per-clip resting values ("—"=255 → -1). */
+            const rest = host_module_get_param('t' + t + '_c' + c + '_cc_rest');
+            if (rest) {
+                const rp = rest.split(' ');
+                for (let k = 0; k < 8; k++) {
+                    const rv = parseInt(rp[k], 10);
+                    S.clipCCVal[t][c][k] = (rv >= 0 && rv <= 127) ? rv : -1;
+                }
+            }
         }
         return;
     }
@@ -3337,7 +3352,9 @@ function drawUI() {
     if (S.heldStep >= 0) {
         drawStepEditHeader();
         if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-            /* CC step-edit: 8 knobs set CC values at this step's tick */
+            /* CC step-edit: per knob — a set point shows its value; an unset step
+             * shows the computed output value in (parens) (what plays here), or
+             * "—" when nothing is defined. */
             const _t6s = S.activeTrack;
             print(4, 10, 'CC  S' + (S.heldStep + 1), 1);
             for (let _k = 0; _k < 8; _k++) {
@@ -3345,9 +3362,17 @@ function drawUI() {
                 const _x = 4 + _col * 31, _y = 24 + _row * 20;
                 const _hi = (S.knobTouched === _k);
                 if (_hi) fill_rect(_x - 1, _y - 1, 29, 18, 1);
-                const _cc = S.trackCCAssign[_t6s][_k];
-                print(_x, _y,     col4(_cc > 0 ? 'C' + _cc : '--'), _hi ? 0 : 1);
-                print(_x, _y + 9, col4(String(S.ccStepEditVal[_k])),   _hi ? 0 : 1);
+                const _lbl = S.trackCCType[_t6s][_k] === 1 ? 'AT'
+                           : (S.trackCCAssign[_t6s][_k] > 0 ? 'C' + S.trackCCAssign[_t6s][_k] : '--');
+                let _vs;
+                if (S.ccStepEditSet[_k]) {
+                    _vs = String(S.ccStepEditVal[_k]);
+                } else {
+                    const _cv = S.ccStepEditComputed[_k];
+                    _vs = (_cv >= 0 && _cv <= 127) ? '(' + _cv + ')' : '--';
+                }
+                print(_x, _y,     col4(_lbl), _hi ? 0 : 1);
+                print(_x, _y + 9, col5(_vs),  _hi ? 0 : 1);  /* 5 chars so "(127)" isn't clipped */
             }
             return;
         }
@@ -3475,7 +3500,7 @@ function drawUI() {
 
     if (bank >= 0 && (S.knobTouched >= 0 || inTimeout ||
             (S.shiftHeld && bank === 5 && S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) ||
-            (S.shiftHeld && bank === 6 && !S.sessionView) ||
+            (bank === 6 && !S.sessionView && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) ||
             (S.shiftHeld && (bank === 1 || bank === 3) && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM))) {
         const isDrumLaneBank = (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 0);
         if (isDrumLaneBank) {
@@ -3621,16 +3646,22 @@ function drawUI() {
             print(Math.floor((128 - lw) / 2), y, ALG_NAMES[i], hi ? 0 : 1);
         }
         } else if (bank === 6) {
-        /* CC PARAM bank overview: label = assigned CC, value = current value */
-        const t = S.activeTrack;
+        /* CC PARAM bank overview: label = CC# or "AT" (aftertouch); value =
+         * stopped → clip resting value or "—"; playing → defined value at the
+         * playhead or "—". Active lane cell is always highlighted. */
+        const t  = S.activeTrack;
+        const ac = effectiveClip(t);
         drawBankHeadingInverted(BANKS[6].name);
         for (let k = 0; k < 8; k++) {
             const colX = 4 + (k % 4) * 30;
             const rowY = k < 4 ? 12 : 36;
-            const hi   = (S.knobTouched === k);
+            const hi   = (S.knobTouched === k) || (S.ccActiveLane[t] === k);
             if (hi) fill_rect(colX, rowY, 24, 24, 1);
-            print(colX, rowY,      col4(fmtCCLabel(S.trackCCAssign[t][k])), hi ? 0 : 1);
-            print(colX, rowY + 12, col4(String(S.trackCCVal[t][k])),        hi ? 0 : 1);
+            const lbl = S.trackCCType[t][k] === 1 ? 'AT' : fmtCCLabel(S.trackCCAssign[t][k]);
+            const rawV = S.playing ? S.trackCCLiveVal[t][k] : S.clipCCVal[t][ac][k];
+            const val  = (rawV >= 0 && rawV <= 127) ? String(rawV) : '--';
+            print(colX, rowY,      col4(lbl), hi ? 0 : 1);
+            print(colX, rowY + 12, col4(val), hi ? 0 : 1);
         }
         } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 3) {
         /* Drum MIDI DLY: K1-K4 same as melodic, K5=Gate, K6=Clk, K7=Retrg, K8 empty.
@@ -4790,9 +4821,28 @@ function _tickImpl() {
     if (S.ccStepEditActive && S.heldStep < 0)
         S.ccStepEditActive = false;
 
-    /* Poll live CC automation values for LED feedback when CC bank is visible and S.playing */
+    /* Deferred CC auto-bits/rest re-read (set from MIDI handlers where get_param
+     * is null, e.g. Delete+step whole-step clear). */
+    if (S.pendingCCBitsRefresh >= 0 && typeof host_module_get_param === 'function') {
+        const _rt = S.activeTrack, _rc = S.pendingCCBitsRefresh;
+        S.pendingCCBitsRefresh = -1;
+        const _bits = host_module_get_param('t' + _rt + '_c' + _rc + '_cc_auto_bits');
+        if (_bits !== null) S.trackCCAutoBits[_rt][_rc] = parseInt(_bits, 10) || 0;
+        const _rest = host_module_get_param('t' + _rt + '_c' + _rc + '_cc_rest');
+        if (_rest) {
+            const _rp = _rest.split(' ');
+            for (let _k = 0; _k < 8; _k++) {
+                const _rv = parseInt(_rp[_k], 10);
+                S.clipCCVal[_rt][_rc][_k] = (_rv >= 0 && _rv <= 127) ? _rv : -1;
+            }
+        }
+        invalidateLEDCache();
+    }
+
+    /* Poll the defined output value at the playhead per knob (255 = "—") for the
+     * realtime display + knob-LED feedback while the CC bank is visible & playing. */
     if (S.activeBank === 6 && S.playing && !S.sessionView && !S.ccStepEditActive) {
-        const _lv = host_module_get_param('t' + S.activeTrack + '_cc_live_vals');
+        const _lv = host_module_get_param('t' + S.activeTrack + '_cc_cur_vals');
         if (_lv) {
             const _lp = _lv.split(' ');
             for (let _k = 0; _k < 8 && _k < _lp.length; _k++) {
@@ -4802,42 +4852,25 @@ function _tickImpl() {
         }
     }
 
-    /* Update scratch palette entries for CC bank LED brightness (cached: only send SysEx on change) */
-    if (S.activeBank === 6 && !S.sessionView && !S.ccStepEditActive && (S.recordArmed || S.playing) &&
-            (S.tickCount % POLL_INTERVAL) === 0) {
-        if (S.recordArmed !== S.ccPaletteCacheArmed || S.activeTrack !== S.ccPaletteCacheTrack) {
-            S.ccPaletteCache.fill(-1);
-            S.ccPaletteCacheArmed = S.recordArmed;
-            S.ccPaletteCacheTrack = S.activeTrack;
+    /* CC-bank step-LED gradient palette: 6 white brightness levels (the playhead
+     * uses the track color instead). Written on bank-6 entry / track switch
+     * (not per frame); the step LEDs themselves are driven in updateStepLEDs. */
+    if (S.activeBank === 6 && !S.sessionView && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM &&
+            S.ccGradPaletteTrack !== S.activeTrack) {
+        S.ccGradPaletteTrack = S.activeTrack;
+        for (let _l = 0; _l < CC_GRADIENT_LEVELS; _l++) {
+            const _w = Math.round(255 * CC_GRADIENT_SCALARS[_l]);
+            setPaletteEntryRGB(CC_GRADIENT_BASE + _l, _w, _w, _w);
         }
-        let _paletteChanged = false;
-        for (let _k = 0; _k < 8; _k++) {
-            let _newVal;
-            if (S.recordArmed) {
-                _newVal = Math.round(S.trackCCVal[S.activeTrack][_k] / 127 * 255);
-            } else {
-                const _lv2 = S.trackCCLiveVal[S.activeTrack][_k];
-                _newVal = _lv2 >= 0 ? Math.round(_lv2 / 127 * 255) : -1;
-            }
-            if (_newVal !== S.ccPaletteCache[_k]) {
-                S.ccPaletteCache[_k] = _newVal;
-                if (_newVal >= 0) {
-                    if (S.recordArmed)
-                        setPaletteEntryRGB(CC_SCRATCH_PALETTE_BASE + _k, _newVal, 0, 0);
-                    else
-                        setPaletteEntryRGB(CC_SCRATCH_PALETTE_BASE + _k, 0, _newVal, 0);
-                    _paletteChanged = true;
-                }
-            }
-        }
-        if (_paletteChanged) {
-            reapplyPalette();
-            /* reapplyPalette resets CC LED hardware states; force-resend transport LEDs
-             * so input_filter.mjs buttonCache doesn't silently suppress them. */
-            setButtonLED(MovePlay,   S.playing ? Green : LED_OFF, true);
-            setButtonLED(MoveRec,    (S.recordArmed || S.recordScheduledStop) ? Red : LED_OFF, true);
-            setButtonLED(MoveSample, S.dspMergeState >= 2 ? Green : S.dspMergeState === 1 ? Red : LED_OFF, true);
-        }
+        reapplyPalette();
+        setButtonLED(MovePlay,   S.playing ? Green : LED_OFF, true);
+        setButtonLED(MoveRec,    (S.recordArmed || S.recordScheduledStop) ? Red : LED_OFF, true);
+        setButtonLED(MoveSample, S.dspMergeState >= 2 ? Green : S.dspMergeState === 1 ? Red : LED_OFF, true);
+        /* reapplyPalette reset the buttonCache — force-resend the 8 knob LEDs
+         * next render (their stopped-state named colors would otherwise be
+         * silently dropped) and the step LEDs. */
+        S._forceKnobReemit = true;
+        invalidateLEDCache();
     }
 
     /* Phase 1 / Bundle 2C-Rpt1: pendingRepeatLane queue removed. Lane swap
@@ -5178,9 +5211,22 @@ function _tickImpl() {
             S.stepBtnPressedTick[S.heldStepBtn] = -1;
             S.stepWasHeld = true;
             if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-                /* CC step-edit: init edit values from current live CC values */
-                for (let _ck = 0; _ck < 8; _ck++)
-                    S.ccStepEditVal[_ck] = S.trackCCVal[S.activeTrack][_ck];
+                /* CC step-edit: seed from the recorded point at this step (or "—"),
+                 * plus the computed output value the lane produces there. The
+                 * first knob-turn writes from the recorded point if set, else the
+                 * clip resting value, else 0. */
+                const _t6 = S.activeTrack, _c6 = effectiveClip(_t6);
+                const _info = (typeof host_module_get_param === 'function')
+                    ? host_module_get_param('t' + _t6 + '_c' + _c6 + '_ccstepinfo_' + S.heldStep) : null;
+                const _ip = _info ? _info.split(' ') : [];
+                for (let _ck = 0; _ck < 8; _ck++) {
+                    const _pv = _ip.length > _ck     ? parseInt(_ip[_ck], 10)     : -1;
+                    const _cv = _ip.length > _ck + 8 ? parseInt(_ip[_ck + 8], 10) : -1;
+                    S.ccStepEditSet[_ck]      = _pv >= 0;
+                    S.ccStepEditComputed[_ck] = (_cv >= 0 && _cv <= 127) ? _cv : -1;
+                    const _rest = S.clipCCVal[_t6][_c6][_ck];
+                    S.ccStepEditVal[_ck] = _pv >= 0 ? _pv : (_rest >= 0 ? _rest : 0);
+                }
                 S.screenDirty = true;
             } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
                 /* Drum: auto-assign empty step so knobs work immediately */
@@ -5835,17 +5881,15 @@ function _onCC_jog(d1, d2) {
          * so on a drum track in Rpt mode it was silently shadowed by the
          * repeat-groove reset path. */
         if (S.activeBank === 6) {
-            const _t = S.activeTrack, _c = S.trackActiveClip[_t];
+            const _t = S.activeTrack, _c = effectiveClip(_t);
             S.trackCCAutoBits[_t][_c] = 0;
             S.trackCCLiveVal[_t] = new Array(8).fill(-1);
-            /* Reset the per-knob value array too — the bank 6 OLED draw reads
-             * trackCCVal directly (not trackCCLiveVal), so without this the
-             * pre-clear knob values stay on screen even after automation is
-             * gone. Matches the doClearSession init (zero-fill). */
-            S.trackCCVal[_t] = new Array(8).fill(0);
+            /* Reset the resting values too → "—" (cc_auto_clear clears both
+             * automation and rest_val DSP-side). */
+            S.clipCCVal[_t][_c] = new Array(8).fill(-1);
             /* Defer clear push — synchronous from jog handler coalesces. */
             S.pendingDefaultSetParams.push({ key: 't' + _t + '_cc_auto_clear', val: String(_c) });
-            showActionPopup('CC AUTO', 'CLEAR');
+            showActionPopup('CC', 'CLEAR');
             invalidateLEDCache();
             return;
         }
@@ -7123,21 +7167,74 @@ function _onCC_side(d1, d2) {
 
 }
 
+/* CC-knob acceleration. The Move knobs fire ~2-4 ±1 detent messages per
+ * physical click at ~8-35ms apart, so timing can't tell slow from fast. We use
+ * a fractional accumulator: each message adds `gain` (1 at the start) to an
+ * accumulator and emits whole units of BASE. BASE=3 makes the slow/fine rate
+ * ~1 value per 3 messages; `gain` grows only
+ * after sustained continuous turning, so big sweeps accelerate. A direction
+ * change or a pause (>180ms) resets. Returns a signed integer step (0 if the
+ * accumulator hasn't reached a whole unit yet). */
+function ccKnobDelta(d2, k) {
+    const sign = (d2 >= 1 && d2 <= 63) ? 1 : (d2 >= 65 && d2 <= 127) ? -1 : 0;
+    if (!sign) return 0;
+    const now = Date.now();
+    const gap = now - (S.knobAccelLast[k] || 0);
+    S.knobAccelLast[k] = now;
+    if (sign !== S.knobAccelDir[k] || gap > 180) { S.knobAccelRun[k] = 0; S.knobAccelAcc[k] = 0; }
+    S.knobAccelDir[k] = sign;
+    S.knobAccelRun[k]++;
+    const run  = S.knobAccelRun[k];
+    const gain = run <= 12 ? 1 : run <= 24 ? 2 : run <= 36 ? 4 : 6;
+    const BASE = 3;
+    S.knobAccelAcc[k] += gain;
+    const units = Math.floor(S.knobAccelAcc[k] / BASE);
+    if (units === 0) return 0;
+    S.knobAccelAcc[k] -= units * BASE;
+    return sign * units;
+}
+
 function _onCC_stepedit(d1, d2) {
     /* CC step-edit: bank 6 + held step — all 8 knobs write CC automation at step's tick */
     if (S.heldStep >= 0 && S.activeBank === 6 &&
             S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM && d1 >= 71 && d1 <= 78) {
         const _kIdx = d1 - 71;
-        const _dir  = (d2 >= 1 && d2 <= 63) ? 1 : -1;
+        const _acc  = ccKnobDelta(d2, _kIdx);  /* run-length acceleration */
+        if (_acc === 0) return;
         const _t    = S.activeTrack;
         const _ac   = effectiveClip(_t);
         S.knobTouched          = _kIdx;
         S.knobTurnedTick[_kIdx] = S.tickCount;
+        S.ccActiveLane[_t]      = _kIdx;
         S.screenDirty  = true;
-        S.ccStepEditVal[_kIdx] = Math.max(0, Math.min(127, S.ccStepEditVal[_kIdx] + _dir));
         const _tps   = S.clipTPS[_t][_ac] || 24;
         const _tick  = S.heldStep * _tps;
         const _hold  = Math.min(65535, _tick + _tps - 1);
+        /* Floor at "—": from an unset step, down → stays "—" (clear this knob's
+         * point in the step window); up → writes the seed (recorded point if
+         * any, else clip resting value, else 0; computed at step-hold time).
+         * From a set step, down past 0 → clears back to "—". */
+        if (!S.ccStepEditSet[_kIdx]) {
+            if (_acc < 0) {
+                if (typeof host_module_set_param === 'function')
+                    host_module_set_param('t' + _t + '_cc_auto_clear_range',
+                        _ac + ' ' + _kIdx + ' ' + _tick + ' ' + _hold);
+                return;   /* stays "—" */
+            }
+            S.ccStepEditSet[_kIdx] = true;   /* keep the seed value */
+        } else {
+            const _nv = S.ccStepEditVal[_kIdx] + _acc;
+            if (_nv < 0) {
+                /* down past 0 → "—": drop this knob's point(s) in the step window */
+                S.ccStepEditSet[_kIdx] = false;
+                if (typeof host_module_set_param === 'function')
+                    host_module_set_param('t' + _t + '_cc_auto_clear_range',
+                        _ac + ' ' + _kIdx + ' ' + _tick + ' ' + _hold);
+                /* refresh the auto bit (knob may still have points elsewhere) */
+                return;
+            }
+            S.ccStepEditVal[_kIdx] = Math.min(127, _nv);
+        }
         if (typeof host_module_set_param === 'function')
             host_module_set_param('t' + _t + '_cc_auto_set2',
                 _ac + ' ' + _kIdx + ' ' + _tick + ' ' + _hold + ' ' + S.ccStepEditVal[_kIdx]);
@@ -7645,61 +7742,90 @@ function _onCC_knobs(d1, d2) {
             }
             return;
         }
-        /* CC PARAM bank (bank 6): normal turn = transmit CC, Shift+turn = reassign CC number */
+        /* CC PARAM bank (bank 6): see notes/cc-automation-redesign.md §5/§8.
+         * Shift+turn = pick type (AT) / CC number; normal turn = set the clip's
+         * resting value, record automation (armed), or audition (automated+playing);
+         * Delete+turn = clear the knob's automation + resting value → "—". */
         if (bank === 6) {
-            const t = S.activeTrack;
-            /* Delete+turn: clear this knob's automation for the active clip */
-            if (S.deleteHeld && !S.shiftHeld) {
-                const ac = S.trackActiveClip[t];
-                S.trackCCAutoBits[t][ac] &= ~(1 << knobIdx);
-                S.trackCCLiveVal[t][knobIdx] = -1;
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + t + '_cc_auto_clear_k', ac + ' ' + knobIdx);
-                showActionPopup('CC AUTO', 'CLEAR');
-                invalidateLEDCache();
-                return;
-            }
+            const t  = S.activeTrack;
+            if (S.trackPadMode[t] === PAD_MODE_DRUM) return;  /* CC bank is melodic-only */
+            const ac = effectiveClip(t);
+            const _setp = (k, v) => { if (typeof host_module_set_param === "function") host_module_set_param("t" + t + "_" + k, v); };
+            /* Active lane = last-touched knob; persistent (no timeout). */
+            S.ccActiveLane[t] = knobIdx;
             const dir = (d2 >= 1 && d2 <= 63) ? 1 : -1;
             if (dir !== S.knobLastDir[knobIdx]) { S.knobAccum[knobIdx] = 0; S.knobLastDir[knobIdx] = dir; }
             S.knobAccum[knobIdx]++;
+
+            /* Shift+turn: type/number ladder — AT (type 1) ↔ CC0 ↔ CC1 … CC127. sens=4 */
             if (S.shiftHeld) {
-                /* Shift+turn: reassign CC number 0-127, sens=4 */
                 if (S.knobAccum[knobIdx] >= 4) {
                     S.knobAccum[knobIdx] = 0;
-                    const nv = Math.max(0, Math.min(127, S.trackCCAssign[t][knobIdx] + dir));
-                    if (nv !== S.trackCCAssign[t][knobIdx]) {
-                        S.trackCCAssign[t][knobIdx] = nv;
-                        if (typeof host_module_set_param === 'function')
-                            host_module_set_param('t' + t + '_cc_assign', knobIdx + ' ' + nv);
-                        S.screenDirty = true;
+                    const cur = (S.trackCCType[t][knobIdx] === 1) ? -1 : S.trackCCAssign[t][knobIdx];
+                    const nx  = Math.max(-1, Math.min(127, cur + dir));
+                    if (nx < 0) {
+                        if (S.trackCCType[t][knobIdx] !== 1) { S.trackCCType[t][knobIdx] = 1; _setp('cc_type', knobIdx + ' 1'); }
+                    } else {
+                        if (S.trackCCType[t][knobIdx] !== 0) { S.trackCCType[t][knobIdx] = 0; _setp('cc_type', knobIdx + ' 0'); }
+                        if (nx !== S.trackCCAssign[t][knobIdx]) { S.trackCCAssign[t][knobIdx] = nx; _setp('cc_assign', knobIdx + ' ' + nx); }
                     }
+                    S.screenDirty = true;
                 }
-            } else {
-                /* Normal turn: send CC value 0-127, sens=2 */
-                if (S.knobAccum[knobIdx] >= 2) {
-                    S.knobAccum[knobIdx] = 0;
-                    const nv = Math.max(0, Math.min(127, S.trackCCVal[t][knobIdx] + dir));
-                    if (nv !== S.trackCCVal[t][knobIdx]) {
-                        S.trackCCVal[t][knobIdx] = nv;
-                        if (typeof host_module_set_param === 'function') {
-                            host_module_set_param('t' + t + '_cc_send', knobIdx + ' ' + nv);
-                            const ac = S.trackActiveClip[t];
-                            /* Step edit: write automation point at held step's tick */
-                            if (S.heldStep >= 0 && S.trackPadMode[t] !== PAD_MODE_DRUM) {
-                                const stepTick = S.heldStep * (S.clipTPS[t][ac] || 24);
-                                host_module_set_param('t' + t + '_cc_auto_set',
-                                    ac + ' ' + knobIdx + ' ' + stepTick + ' ' + nv);
-                                S.trackCCAutoBits[t][ac] |= (1 << knobIdx);
-                            }
-                            /* Live record: mark automation bit so LED updates immediately */
-                            if (S.recordArmed && !S.recordCountingIn && S.recordArmedTrack === t) {
-                                S.trackCCAutoBits[t][ac] |= (1 << knobIdx);
-                            }
-                        }
-                        S.screenDirty = true;
-                    }
-                }
+                return;
             }
+
+            /* Held step: the step editor (_onCC_stepedit) is the sole writer. */
+            if (S.heldStep >= 0 && S.trackPadMode[t] !== PAD_MODE_DRUM) return;
+
+            /* Delete+turn: clear this knob's automation AND resting value → "—". */
+            if (S.deleteHeld) {
+                S.trackCCAutoBits[t][ac] &= ~(1 << knobIdx);
+                S.trackCCLiveVal[t][knobIdx] = -1;
+                S.clipCCVal[t][ac][knobIdx]  = -1;
+                _setp('cc_auto_clear_k', ac + ' ' + knobIdx);
+                showActionPopup('CC', 'CLEAR');
+                invalidateLEDCache();
+                return;
+            }
+
+            /* Normal turn: run-length acceleration (first few clicks ±1, sustained turning ramps up). */
+            const accel = ccKnobDelta(d2, knobIdx);
+            if (accel === 0) return;
+            const armed   = S.recordArmed && !S.recordCountingIn && S.recordArmedTrack === t;
+            const hasAuto = (S.trackCCAutoBits[t][ac] >> knobIdx) & 1;
+
+            if (armed) {
+                /* Record automation. */
+                const base = (S.trackCCLiveVal[t][knobIdx] >= 0) ? S.trackCCLiveVal[t][knobIdx]
+                           : (S.clipCCVal[t][ac][knobIdx] >= 0 ? S.clipCCVal[t][ac][knobIdx] : 0);
+                const nv = Math.max(0, Math.min(127, base + accel));
+                S.trackCCLiveVal[t][knobIdx] = nv;
+                _setp('cc_send', knobIdx + ' ' + nv);
+                S.trackCCAutoBits[t][ac] |= (1 << knobIdx);
+                S.screenDirty = true;
+                return;
+            }
+            if (S.playing && hasAuto) {
+                /* Automated lane, playing, not armed: transient live audition only. */
+                const base = (S.trackCCLiveVal[t][knobIdx] >= 0) ? S.trackCCLiveVal[t][knobIdx] : 0;
+                const nv = Math.max(0, Math.min(127, base + accel));
+                S.trackCCLiveVal[t][knobIdx] = nv;
+                _setp('cc_send', knobIdx + ' ' + nv);
+                S.screenDirty = true;
+                return;
+            }
+            /* Stopped, or playing on an un-automated lane: set the clip resting value.
+             * "—" floor: crossing below 0 → "—"; from "—" the first up-step lands on 0. */
+            const cur = S.clipCCVal[t][ac][knobIdx];
+            let nv;
+            if (cur < 0) nv = (accel > 0) ? (accel - 1) : -1;
+            else        { nv = cur + accel; if (nv < 0) nv = -1; }
+            nv = Math.max(-1, Math.min(127, nv));
+            if (nv === cur) return;
+            S.clipCCVal[t][ac][knobIdx]  = nv;
+            S.trackCCLiveVal[t][knobIdx] = nv;
+            _setp('cc_rest', ac + ' ' + knobIdx + ' ' + (nv < 0 ? 255 : nv));
+            S.screenDirty = true;
             return;
         }
         /* Rnd knob in NOTE FX (K3) or MIDI DLY (K8) on melodic + Shift: scroll algorithm dialog */
@@ -8988,8 +9114,22 @@ function _onStepButtons(d1, d2) {
         }
         /* S.copySrc.kind !== 'step': swallow — don't mix copy types */
     } else if (S.deleteHeld) {
-        /* Delete + step button (Track View): clear all notes from that step */
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
+        /* Delete + step button (Track View): clear all notes from that step.
+         * On the CC bank (melodic), instead clear all knobs' points in the step. */
+        if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
+            const t = S.activeTrack, ac = effectiveClip(t);
+            const absIdx = S.trackCurrentPage[t] * 16 + idx;
+            const tps = S.clipTPS[t][ac] || 24;
+            const t1 = absIdx * tps, t2 = Math.min(65535, t1 + tps - 1);
+            if (typeof host_module_set_param === 'function')
+                host_module_set_param('t' + t + '_cc_auto_clear_step', ac + ' ' + t1 + ' ' + t2);
+            /* DSP may have emptied some lanes — refresh auto bits / rest on next tick
+             * (get_param is null from this MIDI handler). */
+            S.pendingCCBitsRefresh = ac;
+            showActionPopup('CC STEP', 'CLEAR');
+            invalidateLEDCache();
+            forceRedraw();
+        } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
             /* Drum mode: clear step in active lane */
             const t       = S.activeTrack;
             const lane    = S.activeDrumLane[t];
@@ -9600,6 +9740,12 @@ function _onMidiInternalImpl(data) {
             if (d2 === 127) {
                 if (d1 <= 7 && S.activeBank >= 0) {
                     S.knobTouched = d1; S.knobTurnedTick[d1] = -1; S.screenDirty = true;
+                    /* CC bank: touching a knob makes it the active lane (persistent
+                     * — drives the step-LED gradient and highlighted overview cell). */
+                    if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
+                        S.ccActiveLane[S.activeTrack] = d1;
+                        invalidateLEDCache();
+                    }
                     /* Perf view: touch knob k toggles looper for track k */
                     if (S.perfViewLocked) {
                         const _lt = d1;
@@ -9609,25 +9755,30 @@ function _onMidiInternalImpl(data) {
                         showActionPopup('LOOPER ' + (_newLooper ? 'ON' : 'OFF'), 'TRACK ' + (_lt + 1));
                         setButtonLED(71 + _lt, _newLooper ? TRACK_COLORS[_lt] : LED_OFF, true);
                     }
-                    /* CC bank: Delete+touch clears this knob's automation immediately */
+                    /* CC bank: Delete+touch clears this knob's automation + resting value → "—" */
                     if (S.activeBank === 6 && S.deleteHeld && !S.shiftHeld &&
                             S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-                        const _dt = S.activeTrack, _dac = S.trackActiveClip[_dt];
+                        const _dt = S.activeTrack, _dac = effectiveClip(_dt);
                         S.trackCCAutoBits[_dt][_dac] &= ~(1 << d1);
                         S.trackCCLiveVal[_dt][d1] = -1;
+                        S.clipCCVal[_dt][_dac][d1] = -1;
                         if (typeof host_module_set_param === 'function')
                             host_module_set_param('t' + _dt + '_cc_auto_clear_k', _dac + ' ' + d1);
-                        showActionPopup('CC AUTO', 'CLEAR');
+                        showActionPopup('CC', 'CLEAR');
                         invalidateLEDCache();
                     }
-                    /* CC bank: touch-record — start overwriting automation while held */
+                    /* CC bank: touch-record — start overwriting automation while held.
+                     * Initial value = current live/output value, else clip rest, else 0. */
                     if (S.activeBank === 6 && !S.deleteHeld && !S.sessionView &&
                             S.recordArmed && !S.recordCountingIn &&
                             S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-                        const _tv = S.trackCCVal[S.activeTrack][d1];
+                        const _dac = effectiveClip(S.activeTrack);
+                        const _lv  = S.trackCCLiveVal[S.activeTrack][d1];
+                        const _rv  = S.clipCCVal[S.activeTrack][_dac][d1];
+                        const _tv  = _lv >= 0 ? _lv : (_rv >= 0 ? _rv : 0);
                         host_module_set_param('t' + S.activeTrack + '_cc_touch',
                             d1 + ' 1 ' + _tv);
-                        S.trackCCAutoBits[S.activeTrack][S.trackActiveClip[S.activeTrack]] |= (1 << d1);
+                        S.trackCCAutoBits[S.activeTrack][_dac] |= (1 << d1);
                     }
                     /* SEQ ARP K5 / TRACK ARP K5 touch: switch pads to vel-slider editor immediately. */
                     if ((S.activeBank === 4 && d1 === 4) || (S.activeBank === 5 && d1 === 4)) forceRedraw();

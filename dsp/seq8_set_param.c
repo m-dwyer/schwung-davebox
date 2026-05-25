@@ -290,6 +290,9 @@ static void set_param(void *instance, const char *key, const char *val) {
                                 _tr->drum_clips[_tr->active_clip].lanes[_dl].clip.loop_start;
                     }
                     memset(_tr->drum_tick_in_step, 0, sizeof(_tr->drum_tick_in_step));
+                    /* Re-assert CC automation at the playhead on play: force the
+                     * next tick to resend every knob's value (emit-on-change). */
+                    memset(_tr->cc_auto_last_sent, 0xFF, 8);
                     if (_tr->will_relaunch) {
                         _tr->clip_playing      = 1;
                         _tr->will_relaunch     = 0;
@@ -780,6 +783,14 @@ static void set_param(void *instance, const char *key, const char *val) {
                 { int _rl; for (_rl = 0; _rl < DRUM_LANES; _rl++) tr2->drum_lane_pfx[_rl].route = tr2->pfx.route; }
                 for (c2 = 0; c2 < NUM_CLIPS; c2++)
                     clip_init(&tr2->clips[c2]);
+                /* CC automation isn't part of clip_t — reset it explicitly so
+                 * points don't accumulate (loader appends) and rest_val
+                 * defaults back to "—" across set switches. */
+                for (c2 = 0; c2 < NUM_CLIPS; c2++)
+                    cc_auto_reset(&tr2->clip_cc_auto[c2]);
+                memset(tr2->cc_type, 0, 8);
+                memset(tr2->cc_auto_last_sent, 0xFF, 8);
+                memset(tr2->cc_auto_cur_val, 0xFF, 8);
                 drum_track_init(tr2, t2);
                 { int _rl; for (_rl = 0; _rl < DRUM_LANES; _rl++) tr2->drum_lane_pfx[_rl].route = tr2->pfx.route; }
                 drum_repeat_init_defaults(tr2);
@@ -1161,7 +1172,7 @@ static void set_param(void *instance, const char *key, const char *val) {
             if ((int)dstTr->active_clip == dstC) pfx_sync_from_clip(dstTr);
             silence_track_notes_v2(inst, srcTr);
             clip_init(src);
-            memset(&srcTr->clip_cc_auto[srcC], 0, sizeof(cc_auto_t));
+            cc_auto_reset(&srcTr->clip_cc_auto[srcC]);
             if ((int)srcTr->active_clip == srcC) pfx_sync_from_clip(srcTr);
             srcTr->rec_pending_count = 0;
             srcTr->recording = 0;
@@ -1203,7 +1214,7 @@ static void set_param(void *instance, const char *key, const char *val) {
             if ((int)tr->active_clip == dstRow) pfx_sync_from_clip(tr);
             silence_track_notes_v2(inst, tr);
             clip_init(src);
-            memset(&tr->clip_cc_auto[srcRow], 0, sizeof(cc_auto_t));
+            cc_auto_reset(&tr->clip_cc_auto[srcRow]);
             if ((int)tr->active_clip == srcRow) pfx_sync_from_clip(tr);
             tr->rec_pending_count = 0;
             tr->recording = 0;
@@ -2093,7 +2104,7 @@ static void set_param(void *instance, const char *key, const char *val) {
                 undo_begin_single(inst, tidx, cidx);
                 silence_track_notes_v2(inst, tr);
                 clip_init(cl);
-                memset(&tr->clip_cc_auto[cidx], 0, sizeof(cc_auto_t));
+                cc_auto_reset(&tr->clip_cc_auto[cidx]);
                 if ((int)tr->active_clip == cidx)
                     pfx_sync_from_clip(tr);
                 tr->rec_pending_count = 0;
@@ -2385,6 +2396,19 @@ static void set_param(void *instance, const char *key, const char *val) {
             inst->state_dirty = 1;
             return;
         }
+        if (!strcmp(sub, "cc_type")) {
+            /* Format: "K T" — knob index 0-7, type 0=CC, 1=Channel Pressure. */
+            const char *_p = val;
+            int _k = 0, _tp = 0;
+            while (*_p == ' ') _p++;
+            while (*_p >= '0' && *_p <= '9') { _k = _k * 10 + (*_p - '0'); _p++; }
+            while (*_p == ' ') _p++;
+            while (*_p >= '0' && *_p <= '9') { _tp = _tp * 10 + (*_p - '0'); _p++; }
+            if (_k < 0 || _k > 7) return;
+            tr->cc_type[_k] = (uint8_t)clamp_i(_tp, 0, 1);
+            inst->state_dirty = 1;
+            return;
+        }
         if (!strcmp(sub, "cc_send")) {
             /* Format: "K V" — knob index 0-7, CC value 0-127. Transmits immediately. */
             const char *_p = val;
@@ -2395,9 +2419,7 @@ static void set_param(void *instance, const char *key, const char *val) {
             while (*_p >= '0' && *_p <= '9') { _v = _v * 10 + (*_p - '0'); _p++; }
             if (_k < 0 || _k > 7) return;
             _v = clamp_i(_v, 0, 127);
-            pfx_send(&tr->pfx,
-                     (uint8_t)(0xB0 | (tr->channel & 0x0F)),
-                     tr->cc_assign[_k], (uint8_t)_v);
+            cc_emit(tr, _k, (uint8_t)_v);
             tr->cc_live_val[_k] = (uint8_t)_v;
             /* Record automation point when actively recording a melodic clip */
             if (tr->recording && tr->pad_mode == PAD_MODE_MELODIC_SCALE) {
@@ -2428,6 +2450,34 @@ static void set_param(void *instance, const char *key, const char *val) {
             } else {
                 tr->cc_touch_held &= (uint8_t)~(1u << _k);
             }
+            return;
+        }
+        if (!strcmp(sub, "cc_rest")) {
+            /* Format: "C K V" — set clip C's resting value for knob K.
+             * V 0..127 = set (and transmit live); V=255 = unset ("—", send
+             * nothing). Used when stopped or playing on an un-automated lane.
+             * Clip is explicit (JS focused clip may differ from active_clip). */
+            const char *_p = val;
+            int _c = 0, _k = 0, _v = 0;
+            while (*_p == ' ') _p++;
+            while (*_p >= '0' && *_p <= '9') { _c = _c * 10 + (*_p - '0'); _p++; }
+            while (*_p == ' ') _p++;
+            while (*_p >= '0' && *_p <= '9') { _k = _k * 10 + (*_p - '0'); _p++; }
+            while (*_p == ' ') _p++;
+            while (*_p >= '0' && *_p <= '9') { _v = _v * 10 + (*_p - '0'); _p++; }
+            if (_c < 0 || _c >= NUM_CLIPS || _k < 0 || _k > 7) return;
+            cc_auto_t *_ca = &tr->clip_cc_auto[_c];
+            if (_v >= 128) {
+                _ca->rest_val[_k] = 0xFF;     /* "—" */
+            } else {
+                _v = clamp_i(_v, 0, 127);
+                _ca->rest_val[_k]  = (uint8_t)_v;
+                tr->cc_live_val[_k] = (uint8_t)_v;
+                cc_emit(tr, _k, (uint8_t)_v); /* audible while turning */
+            }
+            if (_c == (int)tr->active_clip)
+                tr->cc_auto_last_sent[_k] = 0xFF; /* re-assert on next play */
+            inst->state_dirty = 1;
             return;
         }
         if (!strcmp(sub, "cc_auto_set")) {
@@ -2465,11 +2515,17 @@ static void set_param(void *instance, const char *key, const char *val) {
             while (*_p >= '0' && *_p <= '9') { _vv = _vv * 10 + (*_p - '0'); _p++; }
             if (_c < 0 || _c >= NUM_CLIPS || _k < 0 || _k > 7) return;
             _vv = clamp_i(_vv, 0, 127);
-            cc_auto_set_point(&tr->clip_cc_auto[_c], _k,
-                              (uint16_t)clamp_i(_t1, 0, 65535), (uint8_t)_vv);
+            _t1 = clamp_i(_t1, 0, 65535);
+            _t2 = clamp_i(_t2, 0, 65535);
+            /* Flat hold: drop any interior points in [t1,t2] first so a step
+             * edit is a clean flat value with no stray recorded points. */
+            cc_auto_clear_range(&tr->clip_cc_auto[_c], _k,
+                                (uint16_t)_t1, (uint16_t)_t2);
+            cc_auto_set_point(&tr->clip_cc_auto[_c], _k, (uint16_t)_t1, (uint8_t)_vv);
             if (_t2 != _t1)
-                cc_auto_set_point(&tr->clip_cc_auto[_c], _k,
-                                  (uint16_t)clamp_i(_t2, 0, 65535), (uint8_t)_vv);
+                cc_auto_set_point(&tr->clip_cc_auto[_c], _k, (uint16_t)_t2, (uint8_t)_vv);
+            if (_c == (int)tr->active_clip)
+                tr->cc_auto_last_sent[_k] = 0xFF;
             inst->state_dirty = 1;
             return;
         }
@@ -2486,19 +2542,63 @@ static void set_param(void *instance, const char *key, const char *val) {
             memset(tr->clip_cc_auto[_c].ticks[_k], 0,
                    CC_AUTO_MAX_POINTS * sizeof(uint16_t));
             memset(tr->clip_cc_auto[_c].vals[_k], 0, CC_AUTO_MAX_POINTS);
+            tr->clip_cc_auto[_c].rest_val[_k] = 0xFF;   /* reset → "—" */
             if (_c == (int)tr->active_clip)
                 tr->cc_auto_last_sent[_k] = 0xFF;
             inst->state_dirty = 1;
             return;
         }
+        if (!strcmp(sub, "cc_auto_clear_range")) {
+            /* Format: "C K T1 T2" — drop knob K's points in [T1,T2] for clip C
+             * (single-step clear / turn-to-"—"). Keeps the resting value. */
+            const char *_p = val;
+            int _c = 0, _k = 0, _t1 = 0, _t2 = 0;
+            while (*_p == ' ') _p++;
+            while (*_p >= '0' && *_p <= '9') { _c = _c * 10 + (*_p - '0'); _p++; }
+            while (*_p == ' ') _p++;
+            while (*_p >= '0' && *_p <= '9') { _k = _k * 10 + (*_p - '0'); _p++; }
+            while (*_p == ' ') _p++;
+            while (*_p >= '0' && *_p <= '9') { _t1 = _t1 * 10 + (*_p - '0'); _p++; }
+            while (*_p == ' ') _p++;
+            while (*_p >= '0' && *_p <= '9') { _t2 = _t2 * 10 + (*_p - '0'); _p++; }
+            if (_c < 0 || _c >= NUM_CLIPS || _k < 0 || _k > 7) return;
+            cc_auto_clear_range(&tr->clip_cc_auto[_c], _k,
+                                (uint16_t)clamp_i(_t1, 0, 65535),
+                                (uint16_t)clamp_i(_t2, 0, 65535));
+            if (_c == (int)tr->active_clip)
+                tr->cc_auto_last_sent[_k] = 0xFF;
+            inst->state_dirty = 1;
+            return;
+        }
+        if (!strcmp(sub, "cc_auto_clear_step")) {
+            /* Format: "C T1 T2" — drop ALL knobs' points in [T1,T2] for clip C
+             * (whole-step wipe). Atomic so the 8 lanes don't coalesce. */
+            const char *_p = val;
+            int _c = 0, _t1 = 0, _t2 = 0, _k;
+            while (*_p == ' ') _p++;
+            while (*_p >= '0' && *_p <= '9') { _c = _c * 10 + (*_p - '0'); _p++; }
+            while (*_p == ' ') _p++;
+            while (*_p >= '0' && *_p <= '9') { _t1 = _t1 * 10 + (*_p - '0'); _p++; }
+            while (*_p == ' ') _p++;
+            while (*_p >= '0' && *_p <= '9') { _t2 = _t2 * 10 + (*_p - '0'); _p++; }
+            if (_c < 0 || _c >= NUM_CLIPS) return;
+            for (_k = 0; _k < 8; _k++)
+                cc_auto_clear_range(&tr->clip_cc_auto[_c], _k,
+                                    (uint16_t)clamp_i(_t1, 0, 65535),
+                                    (uint16_t)clamp_i(_t2, 0, 65535));
+            if (_c == (int)tr->active_clip)
+                memset(tr->cc_auto_last_sent, 0xFF, 8);
+            inst->state_dirty = 1;
+            return;
+        }
         if (!strcmp(sub, "cc_auto_clear")) {
-            /* Format: "C" — clear all CC automation for clip C. */
+            /* Format: "C" — clear all CC automation + resting values for clip C. */
             const char *_p = val;
             int _c = 0;
             while (*_p == ' ') _p++;
             while (*_p >= '0' && *_p <= '9') { _c = _c * 10 + (*_p - '0'); _p++; }
             if (_c < 0 || _c >= NUM_CLIPS) return;
-            memset(&tr->clip_cc_auto[_c], 0, sizeof(cc_auto_t));
+            cc_auto_reset(&tr->clip_cc_auto[_c]);       /* points + rest → "—" */
             if (_c == (int)tr->active_clip)
                 memset(tr->cc_auto_last_sent, 0xFF, 8);
             inst->state_dirty = 1;

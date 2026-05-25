@@ -112,6 +112,12 @@ export function col4(s) {
     return s.length >= 4 ? s.slice(0, 4) : s + ' '.repeat(4 - s.length);
 }
 
+export function col5(s) {
+    if (s === null || s === undefined) s = '-';
+    s = String(s);
+    return s.length >= 5 ? s.slice(0, 5) : s + ' '.repeat(5 - s.length);
+}
+
 export function parseActionRaw(raw, def) {
     if (!raw || raw === '1x') return 0;
     const pow2 = [1, 2, 4, 8, 16, 32, 64, 128];
@@ -324,9 +330,15 @@ export const BANKS = [
 
 export const ACTION_POPUP_TICKS = 49; /* ~520ms at 94Hz */
 export const POLL_INTERVAL = 4;
-export const CC_SCRATCH_PALETTE_BASE = 51;
+export const CC_SCRATCH_PALETTE_BASE = 51;  /* 51-58: per-knob value brightness (knob LEDs) */
 export const OOB_SCRATCH_PALETTE     = 50;  /* scratch index for 50%-white OOB step LEDs */
 export const BEAT_MARKER_PALETTE     = 49;  /* scratch index for 10%-white beat marker LEDs */
+export const CC_GRADIENT_BASE        = 59;  /* 59-61: active-lane step-LED gradient (3 levels) */
+export const CC_GRADIENT_LEVELS      = 3;
+/* Brightness scalars per gradient level (value 0 = dim floor, 127 = full).
+ * The LEDs can't resolve many white brightness steps, so we use just 3
+ * widely-separated levels: dim / mid / full. */
+export const CC_GRADIENT_SCALARS     = [0.30, 0.60, 1.0];
 export const TAP_TEMPO_FLASH_TICKS = 9;    /* ~96ms at 94Hz */
 export const TAP_TEMPO_RESET_MS    = 2000; /* inactivity reset threshold */
 export const PARAM_LED_BANKS = [1, 2, 3, 4, 5];

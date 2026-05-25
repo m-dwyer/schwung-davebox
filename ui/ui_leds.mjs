@@ -3,11 +3,12 @@ import {
     NUM_STEPS, NUM_TRACKS, LED_OFF,
     TRACK_COLORS, TRACK_DIM_COLORS, TRACK_PAD_BASE, SCENE_BTN_FLASH_TICKS,
     PAD_MODE_DRUM, BANKS,
-    POLL_INTERVAL, CC_SCRATCH_PALETTE_BASE, TAP_TEMPO_FLASH_TICKS, PARAM_LED_BANKS
+    POLL_INTERVAL, TAP_TEMPO_FLASH_TICKS, PARAM_LED_BANKS,
+    CC_GRADIENT_BASE, CC_GRADIENT_LEVELS
 } from '/data/UserData/schwung/modules/tools/davebox/ui_constants.mjs';
 import { trackClipHasContent } from '/data/UserData/schwung/modules/tools/davebox/ui_scene.mjs';
 import {
-    White, Blue, DarkBlue, LightGrey, DarkGrey, Cyan, PurpleBlue, VividYellow
+    White, Red, Green, Blue, DarkBlue, LightGrey, DarkGrey, Cyan, PurpleBlue, VividYellow
 } from '/data/UserData/schwung/shared/constants.mjs';
 import { setLED, setButtonLED } from '/data/UserData/schwung/shared/input_filter.mjs';
 
@@ -192,6 +193,53 @@ export function updateStepLEDs() {
         if (S.copyHeld && S.copySrc && S.copySrc.kind === 'step' && Math.floor(S.copySrc.absStep / 16) === page) {
             const btnIdx = S.copySrc.absStep % 16;
             setLED(16 + btnIdx, (Math.floor(S.tickCount / 24) % 2) ? White : LED_OFF);
+        }
+        return;
+    }
+
+    /* CC bank: step LEDs show the active lane's automation as a white brightness
+     * gradient (6 levels). "—"=off, value 0=dim floor, 127=full; the playhead
+     * step shows the track color; out-of-window=DarkGrey. */
+    if (S.activeBank === 6) {
+        const t    = S.activeTrack;
+        const c    = ac;
+        const lane = S.ccActiveLane[t] | 0;
+        const pg   = S.trackCurrentPage[t];
+        const csCC = S.trackCurrentStep[t];
+        const lenCC    = S.clipLength[t][c];
+        const lsBaseCC = S.clipLoopStart[t][c] | 0;
+        const winEndCC = lsBaseCC + lenCC;
+        const key = t + '_' + c + '_' + lane + '_' + pg;
+        if (key !== S.ccGradKey || (S.tickCount % POLL_INTERVAL) === 0) {
+            const raw = (typeof host_module_get_param === 'function')
+                ? host_module_get_param('t' + t + '_c' + c + '_ccsv_' + lane + '_' + pg) : null;
+            if (raw) {
+                const parts = raw.split(' ');
+                for (let s = 0; s < 16; s++) {
+                    const v = s < parts.length ? parseInt(parts[s], 10) : 255;
+                    S.ccGradVals[s] = (v >= 0 && v <= 127) ? v : 255;
+                }
+            }
+            S.ccGradKey = key;
+        }
+        const baseCC = pg * 16;
+        for (let i = 0; i < 16; i++) {
+            const absStep = baseCC + i;
+            let color;
+            if (absStep < lsBaseCC || absStep >= winEndCC) {
+                color = DarkGrey;
+            } else if (S.playing && absStep === csCC) {
+                color = TRACK_COLORS[t];   /* playhead = track color */
+            } else {
+                const v = S.ccGradVals[i];
+                if (v >= 0 && v <= 127) {
+                    const level = Math.min(CC_GRADIENT_LEVELS - 1, Math.floor(v * CC_GRADIENT_LEVELS / 128));
+                    color = CC_GRADIENT_BASE + level;   /* white brightness level */
+                } else {
+                    color = LED_OFF;   /* "—" */
+                }
+            }
+            setLED(16 + i, color);
         }
         return;
     }
@@ -647,17 +695,18 @@ export function updateTrackLEDs() {
                             (S.drumRepeatNudge[S.activeTrack][lane][k] !== 0);
             ledVal = isDirty ? White : LED_OFF;
         } else if (S.activeBank === 6) {
-            const _t6 = S.activeTrack, _c6 = S.trackActiveClip[_t6];
+            /* Solid colors: red = recording, green = automation playing back,
+             * yellow = automation exists, white = resting value set, off = empty. */
+            const _t6 = S.activeTrack, _c6 = effectiveClip(_t6);
             const _autoHas = (S.trackCCAutoBits[_t6][_c6] >> k) & 1;
-            const _liveV = S.trackCCLiveVal[_t6][k];
             if (S.recordArmed) {
-                ledVal = CC_SCRATCH_PALETTE_BASE + k;
-            } else if (S.playing && _liveV >= 0) {
-                ledVal = CC_SCRATCH_PALETTE_BASE + k;
+                ledVal = Red;
+            } else if (S.playing && _autoHas) {
+                ledVal = Green;
             } else if (_autoHas) {
                 ledVal = VividYellow;
             } else {
-                ledVal = S.trackCCVal[_t6][k] !== 0 ? White : LED_OFF;
+                ledVal = S.clipCCVal[_t6][_c6][k] >= 0 ? White : LED_OFF;
             }
         } else if (PARAM_LED_BANKS.indexOf(S.activeBank) >= 0) {
             const pm = BANKS[S.activeBank].knobs[k];

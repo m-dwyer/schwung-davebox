@@ -290,9 +290,11 @@ export function doClearSession() {
         S.trackOctave[_t] = 0;
         S.drumVelZoneArmed[_t] = false;
         S.trackCCAssign[_t] = CC_ASSIGN_DEFAULTS.slice();
-        S.trackCCVal[_t]    = new Array(8).fill(0);
+        S.trackCCType[_t]   = new Array(8).fill(0);
+        S.clipCCVal[_t]     = Array.from({length: NUM_CLIPS}, () => new Array(8).fill(-1));
         S.trackCCAutoBits[_t] = new Array(NUM_CLIPS).fill(0);
         S.trackCCLiveVal[_t] = new Array(8).fill(-1);
+        S.ccActiveLane[_t]  = 0;
         for (let _b = 3; _b <= 4; _b++) {
             for (let _k = 0; _k < 8; _k++) {
                 const _pm = BANKS[_b].knobs[_k];
@@ -314,7 +316,6 @@ export function doClearSession() {
             }
         }
     }
-    S.ccPaletteCache.fill(-1);
     S.pendingSetLoad  = true;
     S.globalMenuOpen  = false;
     S.confirmClearSession = false;

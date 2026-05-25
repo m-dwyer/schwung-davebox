@@ -672,25 +672,42 @@ Quick toggle: **Shift + Step 11** flips ARP IN on/off using the last-used style.
 
 ## 5.7 CC AUTOMATION bank (melodic tracks only)
 
-Each of the 8 knobs is independently assignable to a MIDI CC number. **CC assignments are per-track**; automation data is **per-clip** at 1/32 resolution with interpolation on playback. CC output follows the track's Route and MIDI channel.
+Each of the 8 knobs is an independent **continuous-modulation lane**. Each lane holds, **per clip**: recorded automation (up to 1024 points, 1/32 resolution, interpolated on playback) plus an optional **resting value** ("clip CC") the lane falls back to. Output follows the track's Route and MIDI channel.
 
-To assign: **hold Shift + turn a knob** in the CC AUTOMATION bank. Jog to pick a CC number.
+Knob→target **assignment is per-track**; the resting value and automation are **per-clip** — switching the focused clip shows that clip's CC values.
+
+**The "—" floor.** Every knob's value range starts with **"—"** (unset = send nothing). Turn **down past 0 → "—"**; turn **up from "—" → 0, 1 … 127**. "—" everywhere means "no value defined here."
+
+**Assigning a target (Shift + turn).** Hold Shift and turn a knob to step through the target ladder: **AT** (channel-pressure aftertouch) ↔ **CC0 … CC127**. The label shows `AT` or the CC number. Aftertouch ignores the CC number.
+
+**Setting the resting value (normal turn, no step held).**
+- **Stopped** (or playing on a lane with no automation): turning sets the active clip's resting value and sends it live so you hear it. Turn to "—" to clear it.
+- **Record-armed + transport running:** turning records automation (see Touch-record below).
+- **Playing on an automated lane (not armed):** turning is a transient live audition only — it does **not** change the resting value.
+
+**Loop reset.** With a resting value set, the lane eases back to it at each loop boundary (a smooth closed curve that resets every cycle). Left at "—", the value simply carries over the loop (holds).
+
+**Displayed value.** Stopped → the resting value (or "—"); playing → the value defined at the playhead (or "—"); holding a step → the value recorded at that step (or "—"), plus the **computed value that plays there** shown in parentheses for ramp/gap steps.
+
+**Active lane + step-LED gradient.** The **last knob you touched** is the active lane: its overview cell stays highlighted, and its automation is drawn across the **step buttons (16)** as a 3-level white brightness gradient (dim / mid / full; "—" = off); the **playhead step shows the track color**. Out-of-window steps are dim grey. The gradient holds steady as the playhead moves. Touch another knob to follow it. The bank's OLED stays up the whole time you're on it.
+
+**Knob acceleration.** Turning a knob to edit a value ramps with the turn: the first few clicks of a continuous turn move finely, and a sustained spin speeds up so you can sweep the range quickly. Change direction or pause and it resets to fine control. (The Shift assignment turn stays fixed for precision.)
 
 **Knob LED states (this bank only):**
 
-| State | LED |
+| State | Knob LED |
 |---|---|
-| Unassigned | Off |
-| Assigned, no automation | White |
+| No automation, no resting value | Off |
+| Resting value set (stopped) | White |
 | Has automation for this clip | Vivid yellow |
-| Recording armed (transport running + Record on) | Red — brightness scales with current CC value |
-| Playback with automation | Green — brightness scales with automation value at playhead |
+| Recording armed | Red — brightness scales with the resting value |
+| Playback with a defined value | Green — brightness scales with the value at the playhead |
 
-**Touch-record.** While recording is armed and transport is running, *holding* a knob arms touch-record for it: every 1/32 boundary, the knob's current value writes to the automation lane. Releasing the touch ends touch-record. Touch-record overrides playback for that knob until cleared.
+**Touch-record.** While recording is armed and transport is running, *holding* a knob arms touch-record: every 1/32 boundary the knob's current value writes to the lane. Releasing ends touch-record. Touch-record overrides playback for that knob until released.
 
-**Step-edit.** Hold a step while in this bank: the OLED shows "CC S1–S16" with a 4×2 knob grid. Each knob writes a staircase hold over the step.
+**Step-edit.** Hold a step in this bank: the OLED shows "CC S1–S16" with a 4×2 knob grid. Turning a knob writes a clean flat hold across that step (no stray ramp). From an unset step, turning up sets a value; turning **down past 0 clears** that knob's point back to "—".
 
-**Clearing.** Delete + jog click clears all CC automation for the active clip. Delete + knob touch (or knob turn) clears that knob's automation only.
+**Clearing.** Delete + jog click clears all CC automation **and resting values** for the active clip. Delete + knob touch (or turn) clears that one knob (automation + resting value). Delete + a step button clears **all** knobs' points at that step.
 
 ---
 
@@ -1282,9 +1299,9 @@ When a track's Route is **External**, all of that track's MIDI goes out via USB-
 
 Transport Stop sends note-offs for sounding notes and clears ARP IN latches across every track. Delete + Play (stopped) sends a full panic on all channels and clears Rpt1, Rpt2, and ARP IN latches across all tracks; Delete + Play (running) deactivates all clips and clears the same latches.
 
-## 12.6 CC automation output
+## 12.6 Continuous-modulation output (CC / aftertouch)
 
-CC automation runs at 1/32 resolution with interpolation on playback. On External-routed tracks, CCs are sent via USB-A. Per-track CC assignments and per-clip automation data are stored — see [§5.7](#57-cc-automation-bank-melodic-tracks-only).
+The CC AUTOMATION bank lanes run at 1/32 resolution with interpolation on playback, plus an opt-in per-clip resting value the lane resets to at each loop boundary. Each lane sends either a **CC** (its assigned number) or **channel-pressure aftertouch** (`AT`), per the knob's type. On External-routed tracks the output goes via USB-A. Knob→target assignment and per-knob type are per-track; resting values and automation are per-clip — see [§5.7](#57-cc-automation-bank-melodic-tracks-only).
 
 ---
 

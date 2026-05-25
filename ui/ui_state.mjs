@@ -203,9 +203,25 @@ export const S = {
     lastBlinkOn: null,
     bankParams: null,  /* set in ui.js after BANKS is defined */
     trackCCAssign: Array.from({length: 8}, () => CC_ASSIGN_DEFAULTS.slice()),
-    trackCCVal: Array.from({length: 8}, () => new Array(8).fill(0)),
+    /* Per-knob continuous-modulation type: 0 = CC, 1 = Channel Pressure (aftertouch). Per-track. */
+    trackCCType: Array.from({length: 8}, () => new Array(8).fill(0)),
+    /* Per-clip resting value ("clip CC") per knob; -1 = "—" (unset, send nothing). */
+    clipCCVal: Array.from({length: 8}, () => Array.from({length: 16}, () => new Array(8).fill(-1))),
     trackCCAutoBits: Array.from({length: 8}, () => new Array(16).fill(0)),
     trackCCLiveVal: Array.from({length: 8}, () => new Array(8).fill(-1)),
+    /* Active CC lane (last-touched knob) per track — persistent, drives the
+     * step-LED gradient and the always-highlighted overview cell. */
+    ccActiveLane: new Array(8).fill(0),
+    /* CC-knob acceleration (fractional accumulator + run-based gain): per knob,
+     * last turn time, direction, consecutive-detent run, and the sub-unit
+     * accumulator. */
+    knobAccelLast: new Array(8).fill(0),
+    knobAccelDir:  new Array(8).fill(0),
+    knobAccelRun:  new Array(8).fill(0),
+    knobAccelAcc:  new Array(8).fill(0),
+    /* Clip index needing a CC auto-bits/rest re-read on next tick (-1 = none).
+     * Set from MIDI handlers where get_param returns null (e.g. Delete+step). */
+    pendingCCBitsRefresh: -1,
     heldStepBtn: -1,
     heldStep: -1,
     heldStepNotes: [],
@@ -215,10 +231,17 @@ export const S = {
     stepEditGate: 12,
     stepEditNudge: 0,
     ccStepEditVal: new Array(8).fill(0),
+    /* Per-knob: does the held step have a recorded point? (drives "—" vs value) */
+    ccStepEditSet: new Array(8).fill(false),
+    /* Per-knob: computed output value at the held step (-1 = "—"); what plays there. */
+    ccStepEditComputed: new Array(8).fill(-1),
     ccStepEditActive: false,
-    ccPaletteCache: new Array(8).fill(-1),
-    ccPaletteCacheArmed: false,
-    ccPaletteCacheTrack: -1,
+    /* CC-bank step-LED gradient: cached active-lane output values for the page
+     * (255 = "—"), the cache key (track/clip/lane/page), and which track's 6
+     * gradient palette entries are currently loaded. */
+    ccGradVals: new Array(16).fill(255),
+    ccGradKey: '',
+    ccGradPaletteTrack: -1,
     stepBtnPressedTick: new Array(16).fill(-1),
     lastPlayedNote: -1,
     lastPadVelocity: 100,
