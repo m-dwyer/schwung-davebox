@@ -3285,10 +3285,20 @@ function drawUI() {
      * verified harmless in real use (nothing the user does during co-run
      * depends on live LED feedback). */
     if (S.moveCoRunTrack >= 0) {
-        /* Move firmware owns the 4 track buttons in Move-native co-run —
-         * track buttons are ceded by default keep_mask, so the framework
-         * lets Move's CC LED writes (40-43) reach hardware and the user
-         * sees Move's native track colors. dAVEBOx stays out of the way. */
+        /* Track buttons are ceded to Move by keep_mask (Move owns input —
+         * the press still switches Move's selected track). In principle the
+         * framework's keep_mask-driven LED strip would let Move's CC LED
+         * writes reach hardware so its native colors show; in practice Move
+         * doesn't continuously repaint those LEDs, so they go dark between
+         * selection events. We paint solid white every ~8 ticks (~85ms) as
+         * a consistent "press to switch Move tracks" affordance — the
+         * framework's strip only filters peer→hardware, not tool→hardware,
+         * so our writes reach the buttons even though we don't keep the
+         * group. force=true bypasses the LED cache so any sporadic Move
+         * paint doesn't make us think the white is already there. */
+        if ((S.tickCount % 8) === 0) {
+            for (let _i = 0; _i < 4; _i++) setButtonLED(40 + _i, White, true);
+        }
         return;
     }
     /* Alt-param mode is transient: any bank change, track change, or entering
