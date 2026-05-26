@@ -89,7 +89,6 @@ export function fmtRes(v)    { return ['1/32','1/16','1/8','1/4','1/2','1bar'][v
 export function fmtPct(v)    { return v + '%'; }
 export function fmtNote(v)   { return NOTE_KEYS[((v | 0) % 12 + 12) % 12]; }
 export function fmtPages(v)  { return v + 'pg'; }
-export function fmtUnis(v)   { return ['OFF','x2','x3'][v] || 'OFF'; }
 export function fmtDly(v)      { return DELAY_LABELS[v] || '---'; }
 export function fmtBool(v)     { return v ? 'ON' : 'OFF'; }
 export function fmtPitchRnd(v) { return v === 0 ? 'OFF' : String(v); }
@@ -273,10 +272,10 @@ export const BANKS = [
     ]},
     /* 2 — HARMZ (pad 94) */
     { name: 'HARMONY', knobs: [
-        p('Unis', 'Unison',     'harm_unison',    'track', 0,   2,  0, fmtUnis, 4),
         p('Oct',  'Octaver',    'harm_octaver',   'track', -4,  4,  0, fmtSign, 16),
         p('Hrm1', 'Harmony 1',  'harm_interval1', 'track', -24, 24, 0, fmtSign, 8),
         p('Hrm2', 'Harmony 2',  'harm_interval2', 'track', -24, 24, 0, fmtSign, 8),
+        p('Hrm3', 'Harmony 3',  'harm_interval3', 'track', -24, 24, 0, fmtSign, 8),
         _X, _X, _X, _X,
     ]},
     /* 3 — MIDI DLY (pad 95). K7 = Retrg (delay_retrig); Clock Feedback folded

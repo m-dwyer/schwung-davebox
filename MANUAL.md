@@ -206,7 +206,7 @@ Every note in dAVEBOx — whether sequenced, played live on the pads, or arrivin
 
 - **ARP IN** intercepts live input only. Sequenced notes skip it.
 - **NOTE FX** transforms each note: octave, semitone offset, pitch randomness, gate, velocity, quantize.
-- **HARMONY** adds extra voices on top: unison, octave, two harmony intervals.
+- **HARMONY** adds extra voices on top: octave, three harmony intervals.
 - **DELAY** generates rhythmic echoes with pitch and velocity feedback.
 - **SEQUENCE ARP** is a step-arpeggiator after delay, with a per-step pitch/velocity mask. (The mask only applies while a Style is active — Style = Off bypasses the engine entirely.)
 
@@ -598,10 +598,10 @@ Adds harmonic voices on top of every note. Hidden on drum tracks.
 
 | Knob | Parameter | Notes |
 |---|---|---|
-| K1 | Unison | Adds a unison voice |
-| K2 | Octaver | Adds an octave voice |
-| K3 | Hrm1 | Harmony voice 1 — semitones or scale degrees (Scale Aware) |
-| K4 | Hrm2 | Harmony voice 2 — semitones or scale degrees (Scale Aware) |
+| K1 | Octaver | Adds an octave voice |
+| K2 | Hrm1 | Harmony voice 1 — semitones or scale degrees (Scale Aware) |
+| K3 | Hrm2 | Harmony voice 2 — semitones or scale degrees (Scale Aware) |
+| K4 | Hrm3 | Harmony voice 3 — semitones or scale degrees (Scale Aware) |
 
 K5–K8 are unassigned.
 

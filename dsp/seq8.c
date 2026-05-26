@@ -92,7 +92,6 @@ static const uint16_t TPS_VALUES[6] = {12, 24, 48, 96, 192, 384};
 #define MAX_PFX_EVENTS      256
 #define MAX_GEN_NOTES       6
 #define MAX_REPEATS         16
-#define UNISON_STAGGER      220          /* ~5 ms at 44100 Hz */
 #define NUM_CLOCK_VALUES       17
 #define DEFAULT_DELAY_TIME_IDX      10   /* 1/8D = 360 clocks at 480 PPQN */
 #define DEFAULT_DRUM_DELAY_TIME_IDX  5   /* 1/16 */
@@ -139,7 +138,6 @@ typedef struct {
     uint8_t  orig_velocity;
     uint8_t  gen_notes[MAX_GEN_NOTES];
     int      gen_count;
-    int      stored_unison;
     double   spc;
     int      stored_repeat_count;
     struct {
@@ -261,10 +259,10 @@ typedef struct {
     /* Input quantize: 100=fully quantized (tick_offset ignored), 0=raw */
     int quantize;           /* 0..100 */
     /* Harmonize (stage 2 from NoteTwist) */
-    int unison;             /* 0=off, 1=x2, 2=x3 */
     int octaver;            /* -4..+4, 0=off */
     int harmonize_1;        /* -24..+24, 0=off */
     int harmonize_2;        /* -24..+24, 0=off */
+    int harmonize_3;        /* -24..+24, 0=off */
     /* MIDI Delay (stage 5 from NoteTwist) */
     int delay_time_idx;     /* 0..16, index into CLOCK_VALUES */
     int delay_level;        /* 0..127 */
@@ -329,10 +327,10 @@ typedef struct {
     int gate_time;          /* 0..400 percent; default 100 */
     int velocity_offset;    /* -127..+127 */
     int quantize;           /* 0..100 */
-    int unison;             /* 0=off, 1=x2, 2=x3 */
     int octaver;            /* -4..+4 */
     int harmonize_1;        /* -24..+24 */
     int harmonize_2;        /* -24..+24 */
+    int harmonize_3;        /* -24..+24 */
     int delay_time_idx;     /* 0..16, index into CLOCK_VALUES */
     int delay_level;        /* 0..127 */
     int repeat_times;       /* 0..16 */
@@ -1113,7 +1111,7 @@ static void ensure_parent_dir(const char *path) {
 
 static void seq8_do_serialize(seq8_instance_t *inst, FILE *fp) {
     int t, c;
-    fprintf(fp, "{\"v\":32,\"playing\":%d", inst->playing);
+    fprintf(fp, "{\"v\":33,\"playing\":%d", inst->playing);
     for (t = 0; t < NUM_TRACKS; t++)
         fprintf(fp, ",\"t%d_ac\":%d", t, inst->tracks[t].active_clip);
     for (t = 0; t < NUM_TRACKS; t++)
@@ -1173,10 +1171,10 @@ static void seq8_do_serialize(seq8_instance_t *inst, FILE *fp) {
                 if (p2->gate_time       != 100) fprintf(fp, ",\"t%dc%d_nfg\":%d",  t, c, p2->gate_time);
                 if (p2->velocity_offset != 0)   fprintf(fp, ",\"t%dc%d_nfv\":%d",  t, c, p2->velocity_offset);
                 if (p2->quantize        != 0)   fprintf(fp, ",\"t%dc%d_qnt\":%d",  t, c, p2->quantize);
-                if (p2->unison          != 0)   fprintf(fp, ",\"t%dc%d_hu\":%d",   t, c, p2->unison);
                 if (p2->octaver         != 0)   fprintf(fp, ",\"t%dc%d_ho\":%d",   t, c, p2->octaver);
                 if (p2->harmonize_1     != 0)   fprintf(fp, ",\"t%dc%d_h1\":%d",   t, c, p2->harmonize_1);
                 if (p2->harmonize_2     != 0)   fprintf(fp, ",\"t%dc%d_h2\":%d",   t, c, p2->harmonize_2);
+                if (p2->harmonize_3     != 0)   fprintf(fp, ",\"t%dc%d_h3\":%d",   t, c, p2->harmonize_3);
                 if (p2->delay_time_idx  != DEFAULT_DELAY_TIME_IDX) fprintf(fp, ",\"t%dc%d_dt\":%d", t, c, p2->delay_time_idx);
                 if (p2->delay_level     != 0)   fprintf(fp, ",\"t%dc%d_dl\":%d",   t, c, p2->delay_level);
                 if (p2->repeat_times    != 0)   fprintf(fp, ",\"t%dc%d_dr\":%d",   t, c, p2->repeat_times);
@@ -1427,10 +1425,10 @@ static void seq8_load_state(seq8_instance_t *inst) {
     if (!n) { free(buf); remove(inst->state_path); return; }
     buf[n] = '\0';
 
-    /* Version gate: only v=32 accepted (dev build; wipe on version mismatch). */
+    /* Version gate: only v=33 accepted (dev build; wipe on version mismatch). */
     {
         int sv = json_get_int(buf, "v", -1);
-        if (sv != 32) {
+        if (sv != 33) {
             free(buf);
             remove(inst->state_path);
             seq8_ilog(inst, "SEQ8 state: wrong version, deleted");
@@ -1734,14 +1732,14 @@ static void seq8_load_state(seq8_instance_t *inst) {
             p2->velocity_offset = clamp_i(json_get_int(buf, key,   0),  -127, 127);
             snprintf(key, sizeof(key), "t%dc%d_qnt",  t, c);
             p2->quantize        = clamp_i(json_get_int(buf, key,   0),     0, 100);
-            snprintf(key, sizeof(key), "t%dc%d_hu",   t, c);
-            p2->unison          = clamp_i(json_get_int(buf, key,   0),     0,   2);
             snprintf(key, sizeof(key), "t%dc%d_ho",   t, c);
             p2->octaver         = clamp_i(json_get_int(buf, key,   0),    -4,   4);
             snprintf(key, sizeof(key), "t%dc%d_h1",   t, c);
             p2->harmonize_1     = clamp_i(json_get_int(buf, key,   0),   -24,  24);
             snprintf(key, sizeof(key), "t%dc%d_h2",   t, c);
             p2->harmonize_2     = clamp_i(json_get_int(buf, key,   0),   -24,  24);
+            snprintf(key, sizeof(key), "t%dc%d_h3",   t, c);
+            p2->harmonize_3     = clamp_i(json_get_int(buf, key,   0),   -24,  24);
             snprintf(key, sizeof(key), "t%dc%d_dt",   t, c);
             p2->delay_time_idx  = clamp_i(json_get_int(buf, key, DEFAULT_DELAY_TIME_IDX), 0, NUM_CLOCK_VALUES - 1);
             snprintf(key, sizeof(key), "t%dc%d_dl",   t, c);
@@ -2788,8 +2786,8 @@ static void pfx_q_insert(play_fx_t *fx, uint64_t fire_at,
 }
 
 /* Schedule-time swing: returns the swing offset (samples) to add to fire_at if
- * its target step is offbeat. Used at MIDI DLY echo, unison stagger, and
- * deferred note-off schedule sites so each event individually evaluates its
+ * its target step is offbeat. Used at MIDI DLY echo and deferred note-off
+ * schedule sites so each event individually evaluates its
  * own swing based on where its fire_at lands — instead of being auto-shifted
  * at fire time (which could reorder on/off pairs and produce hanging notes). */
 static uint64_t swing_offset_for_fire_at(seq8_instance_t *inst,
@@ -2943,6 +2941,11 @@ static int pfx_build_harmz_copies(seq8_instance_t *inst, int scale_aware,
                             : primary + fx->harmonize_2;
         if (h >= 0 && h <= 127 && cnt < MAX_GEN_NOTES) out[cnt++] = (uint8_t)h;
     }
+    if (fx->harmonize_3 != 0) {
+        int h = scale_aware ? scale_transpose(inst, primary, fx->harmonize_3)
+                            : primary + fx->harmonize_3;
+        if (h >= 0 && h <= 127 && cnt < MAX_GEN_NOTES) out[cnt++] = (uint8_t)h;
+    }
     return cnt;
 }
 
@@ -3050,7 +3053,7 @@ static void pfx_sched_delay_ons(seq8_instance_t *inst, int scale_aware,
 }
 
 /* Schedule note-offs for all delay repeats. Called when original note-off
- * arrives. base_time is the note-on time plus unison extension. */
+ * arrives. base_time is the note-on time. */
 static void pfx_sched_delay_offs(play_fx_t *fx, pfx_active_t *an,
                                  uint64_t base_time, uint64_t gate_smp) {
     uint8_t off_s = (uint8_t)(0x80 | an->channel);
@@ -3129,10 +3132,10 @@ static void pfx_reset(play_fx_t *fx) {
     fx->note_offset     = 0;
     fx->gate_time       = 100;
     fx->velocity_offset = 0;
-    fx->unison          = 0;
     fx->octaver         = 0;
     fx->harmonize_1     = 0;
     fx->harmonize_2     = 0;
+    fx->harmonize_3     = 0;
     fx->delay_time_idx  = DEFAULT_DELAY_TIME_IDX;
     fx->delay_level     = 0;
     fx->repeat_times    = 0;
@@ -3148,7 +3151,7 @@ static void pfx_reset(play_fx_t *fx) {
 }
 
 /* Process a note-on through the chain. Sends immediate output via
- * pfx_send; queues unison stagger copies and delay repeats.
+ * pfx_send; queues delay repeats.
  *
  * SEQ ARP intercepts at pfx_send (last stage). All callers (sequencer,
  * live pad, external MIDI) flow through this function the same way; if
@@ -3203,7 +3206,6 @@ static void pfx_note_on(seq8_instance_t *inst, seq8_track_t *tr,
     an->orig_velocity = (uint8_t)v;
     an->gen_count     = gc;
     memcpy(an->gen_notes, gen, (size_t)gc);
-    an->stored_unison = fx->unison;
 
     double sp    = pfx_spc(inst, tr);
     uint8_t on_s = (uint8_t)(0x90 | ch);
@@ -3212,15 +3214,6 @@ static void pfx_note_on(seq8_instance_t *inst, seq8_track_t *tr,
     int i;
     for (i = 0; i < gc; i++)
         pfx_send(fx, on_s, gen[i], (uint8_t)v);
-
-    /* Unison stagger copies (queued). */
-    int c;
-    for (c = 0; c < fx->unison; c++) {
-        uint64_t stagger = now + (uint64_t)(UNISON_STAGGER * (c + 1));
-        stagger += swing_offset_for_fire_at(g_inst, fx->sample_counter, stagger);
-        for (i = 0; i < gc; i++)
-            pfx_q_insert(fx, stagger, on_s, gen[i], (uint8_t)v, 0);
-    }
 
     /* Delay repeats (note-ons only; note-offs scheduled at note-off time). */
     pfx_sched_delay_ons(inst, is_scale_aware, fx, an, now, sp);
@@ -3245,8 +3238,7 @@ static void pfx_note_off(seq8_instance_t *inst, seq8_track_t *tr,
 
     uint64_t now      = fx->sample_counter;
     uint64_t gate_smp = pfx_gate_smp(inst, tr);
-    uint64_t uni_ext  = (uint64_t)(UNISON_STAGGER * an->stored_unison);
-    uint64_t off_time = an->on_time + gate_smp + uni_ext;
+    uint64_t off_time = an->on_time + gate_smp;
     uint8_t  off_s    = (uint8_t)(0x80 | an->channel);
 
     int i;
@@ -3259,7 +3251,7 @@ static void pfx_note_off(seq8_instance_t *inst, seq8_track_t *tr,
         }
     }
 
-    pfx_sched_delay_offs(fx, an, an->on_time + uni_ext, gate_smp);
+    pfx_sched_delay_offs(fx, an, an->on_time, gate_smp);
     an->active = 0;
 }
 
@@ -3273,14 +3265,13 @@ static void pfx_note_off_imm(seq8_instance_t *inst, seq8_track_t *tr,
     if (!an->active) return;
 
     uint64_t now     = fx->sample_counter;
-    uint64_t uni_ext = (uint64_t)(UNISON_STAGGER * an->stored_unison);
     uint8_t  off_s   = (uint8_t)(0x80 | an->channel);
 
     int i;
     for (i = 0; i < an->gen_count; i++)
         pfx_send(fx, off_s, an->gen_notes[i], 0);
 
-    pfx_sched_delay_offs(fx, an, an->on_time + uni_ext, pfx_gate_smp(inst, tr));
+    pfx_sched_delay_offs(fx, an, an->on_time, pfx_gate_smp(inst, tr));
     an->active = 0;
     (void)now;
 }
@@ -3569,7 +3560,6 @@ static void drum_pfx_note_on(seq8_instance_t *inst, seq8_track_t *tr,
     an->orig_velocity = (uint8_t)v;
     an->gen_count     = 1;
     an->gen_notes[0]  = pitch;
-    an->stored_unison = 0;
 
     double sp = drum_pfx_spc(inst, px);
     drum_pfx_send(px, (uint8_t)(0x90 | ch), pitch, (uint8_t)v);
@@ -4802,10 +4792,10 @@ static void clip_pfx_params_init(clip_pfx_params_t *p) {
     p->gate_time       = 100;
     p->velocity_offset = 0;
     p->quantize        = 0;
-    p->unison          = 0;
     p->octaver         = 0;
     p->harmonize_1     = 0;
     p->harmonize_2     = 0;
+    p->harmonize_3     = 0;
     p->delay_time_idx  = DEFAULT_DELAY_TIME_IDX;
     p->delay_level     = 127;
     p->repeat_times    = 0;
@@ -4931,10 +4921,10 @@ static void pfx_apply_params(play_fx_t *fx, const clip_pfx_params_t *p) {
     fx->gate_time       = p->gate_time;
     fx->velocity_offset = p->velocity_offset;
     fx->quantize        = p->quantize;
-    fx->unison          = p->unison;
     fx->octaver         = p->octaver;
     fx->harmonize_1     = p->harmonize_1;
     fx->harmonize_2     = p->harmonize_2;
+    fx->harmonize_3     = p->harmonize_3;
     fx->delay_time_idx  = p->delay_time_idx;
     fx->delay_level     = p->delay_level;
     fx->repeat_times    = p->repeat_times;
@@ -7270,7 +7260,7 @@ static int pfx_get(seq8_track_t *tr, const char *key, char *out, int out_len) {
             "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d "
             "%d %d %d %d %d %d %d %d %d %d %d",
             fx->octave_shift, fx->note_offset, fx->gate_time, fx->velocity_offset, fx->quantize,
-            fx->unison, fx->octaver, fx->harmonize_1, fx->harmonize_2,
+            fx->octaver, fx->harmonize_1, fx->harmonize_2, fx->harmonize_3,
             fx->delay_time_idx, fx->delay_level, fx->repeat_times,
             fx->fb_velocity, fx->fb_note, fx->fb_gate_time, fx->fb_clock, fx->fb_note_random,
             (int)fx->arp.style, (int)fx->arp.rate_idx,
@@ -7289,13 +7279,10 @@ static int pfx_get(seq8_track_t *tr, const char *key, char *out, int out_len) {
     if (!strcmp(key, "noteFX_velocity"))  return snprintf(out, out_len, "%d", fx->velocity_offset);
     if (!strcmp(key, "quantize"))         return snprintf(out, out_len, "%d", fx->quantize);
 
-    if (!strcmp(key, "harm_unison")) {
-        static const char *ul[3] = { "OFF", "x2", "x3" };
-        return snprintf(out, out_len, "%s", ul[fx->unison]);
-    }
     if (!strcmp(key, "harm_octaver"))     return snprintf(out, out_len, "%d", fx->octaver);
     if (!strcmp(key, "harm_interval1"))   return snprintf(out, out_len, "%d", fx->harmonize_1);
     if (!strcmp(key, "harm_interval2"))   return snprintf(out, out_len, "%d", fx->harmonize_2);
+    if (!strcmp(key, "harm_interval3"))   return snprintf(out, out_len, "%d", fx->harmonize_3);
 
     if (!strcmp(key, "delay_time"))         return snprintf(out, out_len, "%d", fx->delay_time_idx);
     if (!strcmp(key, "delay_level"))        return snprintf(out, out_len, "%d", fx->delay_level);
@@ -7988,7 +7975,7 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
                     "%d",
                     cp->octave_shift, cp->note_offset, cp->gate_time,
                     cp->velocity_offset, cp->quantize,
-                    cp->unison, cp->octaver, cp->harmonize_1, cp->harmonize_2,
+                    cp->octaver, cp->harmonize_1, cp->harmonize_2, cp->harmonize_3,
                     cp->delay_time_idx, cp->delay_level, cp->repeat_times,
                     cp->fb_velocity, cp->fb_note, cp->fb_gate_time,
                     cp->delay_retrig, cp->fb_note_random,

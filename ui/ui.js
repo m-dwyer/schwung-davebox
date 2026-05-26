@@ -69,7 +69,7 @@ import {
     FLAG_JUMP_TO_OVERTAKE, FLAG_JUMP_TO_TOOLS, SEQ8_NAV_FLAGS, NUM_STEPS,
     TRACK_COLORS, TRACK_DIM_COLORS, SCENE_LETTERS, TRACK_PAD_BASE, TOP_PAD_BASE,
     TPS_VALUES, NOTE_KEYS, SCALE_NAMES, SCALE_DISPLAY, DELAY_LABELS,
-    fmtSign, fmtStretch, fmtLen, fmtRes, fmtPct, fmtNote, fmtPages, fmtUnis,
+    fmtSign, fmtStretch, fmtLen, fmtRes, fmtPct, fmtNote, fmtPages,
     fmtDly, fmtBool, fmtRoute, fmtPlain, fmtNA, fmtGateMod,
     fmtArpStyle, fmtArpRate, fmtArpSteps, fmtArpOct, fmtVelOverride,
     col4, col5, parseActionRaw, MCUFONT, pixelPrint, pixelPrintC,
@@ -1990,7 +1990,7 @@ function refreshPerClipBankParams(t) {
     S.bankParams[t][1][3] = parseInt(v[2], 10) | 0;  /* gate */
     S.bankParams[t][1][4] = parseInt(v[3], 10) | 0;  /* vel */
     S.bankParams[t][1][5] = parseInt(v[4], 10) | 0;  /* qnt */
-    /* HARMZ bank (2): K0=unis K1=oct K2=hrm1 K3=hrm2 */
+    /* HARMZ bank (2): K0=oct K1=hrm1 K2=hrm2 K3=hrm3 (Unis retired in state v=33) */
     for (let k = 0; k < 4; k++) S.bankParams[t][2][k] = parseInt(v[5 + k], 10) | 0;
     /* MIDI DLY bank (3): K0=dly K1=lvl K2=rep K3=vfb K4=pfb K5=gfb K6=retrg K7=rnd
      * (delay_clock_fb moved to Shift+K1 alt — read separately via tN_delay_clock_fb). */
@@ -2604,9 +2604,7 @@ function readBankParams(t, bankIdx) {
             S.bankParams[t][bankIdx][k] = pm.def;
             continue;
         }
-        if (pm.dspKey === 'harm_unison') {
-            S.bankParams[t][bankIdx][k] = raw === 'x2' ? 1 : raw === 'x3' ? 2 : 0;
-        } else if (pm.dspKey === 'route') {
+        if (pm.dspKey === 'route') {
             S.bankParams[t][bankIdx][k] = raw === 'external' ? 2 : raw === 'move' ? 1 : 0;
         } else {
             S.bankParams[t][bankIdx][k] = parseInt(raw, 10) || 0;
@@ -2809,8 +2807,7 @@ function applyBankParam(t, bankIdx, knobIdx, val) {
         if (pm.dspKey === 'key') { S.padKey = val; computePadNoteMap(); }
     } else if (pm.scope === 'track') {
         let strVal;
-        if      (pm.dspKey === 'harm_unison')       strVal = ['OFF','x2','x3'][val] || 'OFF';
-        else if (pm.dspKey === 'route')              strVal = val === 2 ? 'external' : val === 1 ? 'move' : 'schwung';
+        if      (pm.dspKey === 'route')              strVal = val === 2 ? 'external' : val === 1 ? 'move' : 'schwung';
         else                                         strVal = String(val);
         if ([1, 2, 3].indexOf(bankIdx) >= 0 && S.trackPadMode[t] === PAD_MODE_DRUM) {
             const lane = S.activeDrumLane[t];

@@ -24,21 +24,14 @@ static void pfx_set(seq8_instance_t *inst, seq8_track_t *tr,
     if (!strcmp(key, "noteFX_random_mode"))
         { PFX_SET_BOTH(note_random_mode, note_random_mode, 0, 2); return; }
 
-    if (!strcmp(key, "harm_unison")) {
-        int _v;
-        if      (!strcmp(val, "OFF") || !strcmp(val, "0")) _v = 0;
-        else if (!strcmp(val, "x2")  || !strcmp(val, "1")) _v = 1;
-        else if (!strcmp(val, "x3")  || !strcmp(val, "2")) _v = 2;
-        else _v = clamp_i(my_atoi(val), 0, 2);
-        fx->unison = _v; cp->unison = _v;
-        return;
-    }
     if (!strcmp(key, "harm_octaver"))
         { PFX_SET_BOTH(octaver, octaver, -4, 4); return; }
     if (!strcmp(key, "harm_interval1"))
         { PFX_SET_BOTH(harmonize_1, harmonize_1, -24, 24); return; }
     if (!strcmp(key, "harm_interval2"))
         { PFX_SET_BOTH(harmonize_2, harmonize_2, -24, 24); return; }
+    if (!strcmp(key, "harm_interval3"))
+        { PFX_SET_BOTH(harmonize_3, harmonize_3, -24, 24); return; }
 
     if (!strcmp(key, "delay_time"))
         { PFX_SET_BOTH(delay_time_idx, delay_time_idx, 0, NUM_CLOCK_VALUES - 1); return; }
@@ -169,10 +162,10 @@ static void pfx_set(seq8_instance_t *inst, seq8_track_t *tr,
         return;
     }
     if (!strcmp(key, "pfx_harm_reset")) {
-        fx->unison      = 0; cp->unison      = 0;
         fx->octaver     = 0; cp->octaver     = 0;
         fx->harmonize_1 = 0; cp->harmonize_1 = 0;
         fx->harmonize_2 = 0; cp->harmonize_2 = 0;
+        fx->harmonize_3 = 0; cp->harmonize_3 = 0;
         return;
     }
     if (!strcmp(key, "pfx_delay_reset")) {
