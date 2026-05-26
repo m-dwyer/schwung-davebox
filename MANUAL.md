@@ -545,7 +545,7 @@ Bank parameters fall into two categories:
 - **Non-destructive** (play FX) — applied at render time. The underlying notes aren't modified. Returning the knob to default leaves the clip unchanged. **NOTE FX, HARMONY, DELAY, SEQUENCE ARP, ARP IN** are all non-destructive.
 - **Destructive** — modifies the underlying note data immediately. Returning the knob to default does *not* revert; use **Undo** instead. The destructive controls are the **CLIP** bank's Stretch, Clock Shift, Shift+K2 Nudge, Resolution, and Length; the equivalent per-lane controls in **DRUM LANE**; and **ALL LANES K1–K2** (Stretch / Clock Shift, including Shift+K2 Nudge).
 
-**CC AUTOMATION** records automation data — recording adds points to the clip; reverting needs an explicit clear (Delete + jog click clears all; Delete + knob touch clears one).
+**CC AUTOMATION** records automation data — recording overwrites the lane along the playhead (latch); reverting needs an explicit clear (Delete + jog click clears all; Delete + knob touch clears one).
 
 ### Resetting effects
 
@@ -684,7 +684,7 @@ Knob→target **assignment is per-track**; the resting value and automation are 
 
 **Setting the resting value (normal turn, no step held).**
 - **Stopped** (or playing on a lane with no automation): turning sets the active clip's resting value and sends it live so you hear it. Turn to "—" to clear it.
-- **Record-armed + transport running:** turning records automation (see Touch-record below).
+- **Record-armed + transport running:** turning records automation by latch overwrite (see Recording below).
 - **Playing on an automated lane (not armed):** turning is a transient live audition only — it does **not** change the resting value.
 
 **Loop reset.** With a resting value set, the lane eases back to it at each loop boundary (a smooth closed curve that resets every cycle). Left at "—", the value simply carries over the loop (holds).
@@ -705,7 +705,7 @@ Knob→target **assignment is per-track**; the resting value and automation are 
 | Recording armed | Red — brightness scales with the resting value |
 | Playback with a defined value | Green — brightness scales with the value at the playhead |
 
-**Touch-record.** While recording is armed and transport is running, *holding* a knob arms touch-record: every 1/32 boundary the knob's current value writes to the lane. Releasing ends touch-record. Touch-record overrides playback for that knob until released.
+**Recording (latch overwrite).** While recording is armed and transport is running, **turning** a knob latches it into overwrite recording: from that moment the lane is continuously rewritten along the playhead with the knob's current value, **replacing** whatever automation was there — and it keeps writing the last value even after you stop turning, loop after loop, until you stop recording. Turn it and leave it → the lane flattens to that value; keep nudging → you draw the curve live. The first turn picks up from the value already playing there (no jump). **Touching** a knob without turning does nothing. Untouched knobs keep playing their existing automation. After each loop (and when you stop recording) the lane is tidied — redundant points on a flat hold or straight ramp collapse to their endpoints, with no change to what you hear. Switching clips while recording finalizes the latch on the old clip (it won't bleed into the new one).
 
 **Step-edit.** Hold a step in this bank: the OLED shows "CC S1–S16" with a 4×2 knob grid. Turning a knob writes a clean flat hold across that step (no stray ramp). From an unset step, turning up sets a value; turning **down past 0 clears** that knob's point back to "—".
 

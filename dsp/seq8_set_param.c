@@ -2448,14 +2448,15 @@ static void set_param(void *instance, const char *key, const char *val) {
             _v = clamp_i(_v, 0, 127);
             cc_emit(tr, _k, (uint8_t)_v);
             tr->cc_live_val[_k] = (uint8_t)_v;
-            /* Record automation point when actively recording a melodic clip */
+            /* Latch this knob into overwrite recording on the first turn while
+             * record-armed on a melodic clip. The render path then writes the
+             * lane along the playhead from cc_live_val (no point written here).
+             * Reset the latch snap on the 0->1 edge so the first 1/32 cell writes. */
             if (tr->recording && tr->pad_mode == PAD_MODE_MELODIC_SCALE) {
-                uint32_t _ct = tr->current_clip_tick;
-                uint16_t _snap = (uint16_t)((_ct / 12) * 12);
-                cc_auto_set_point(&tr->clip_cc_auto[tr->active_clip],
-                                  _k, _snap, (uint8_t)_v);
-                /* Stamp touch frame so render path suppresses playback on this knob briefly */
-                tr->cc_auto_touch_frame[_k] = inst->block_count | 1u;
+                if (!((tr->cc_latched >> _k) & 1)) {
+                    tr->cc_latched |= (uint8_t)(1u << _k);
+                    tr->cc_latch_last_snap[_k] = 0xFFFFFFFFu;
+                }
             }
             return;
         }
