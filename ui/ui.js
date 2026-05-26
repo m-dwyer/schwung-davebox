@@ -139,6 +139,32 @@ function drawStepEditHeader() {
     fill_rect(0, 9, 128, 1, 1);
 }
 
+/* Per-step trig-condition formatters (v=34).
+ *   formatStepIter(raw):  0 -> "—"; else "{idx}/{len}" with raw=(len<<4)|idx
+ *   formatStepRand(raw):  0 -> "—" (100%); else "{n}%"
+ *   formatStepRatch(raw): 0|1 -> "—"; else "x{n}" */
+function formatStepIter(raw) {
+    if (!raw) return '--';
+    return (raw & 0xF) + '/' + ((raw >> 4) & 0xF);
+}
+function formatStepRand(raw) {
+    if (!raw) return '--';
+    return raw + '%';
+}
+function formatStepRatch(raw) {
+    if (raw < 2) return '--';
+    return 'x' + raw;
+}
+/* Iter knob list: 36 entries, raw byte at each position. Index 0 = default (1/1).
+ * Sorted by cycle_len then cycle_idx: 1/1, 1/2, 2/2, 1/3, 2/3, 3/3, ..., 8/8. */
+const STEP_ITER_LIST = (function() {
+    const L = [0];
+    for (let cl = 2; cl <= 8; cl++)
+        for (let ci = 1; ci <= cl; ci++)
+            L.push((cl << 4) | ci);
+    return L;
+})();
+
 
 function drawMetroIndicator() {
     const METRO_LABELS = [null, 'Count', 'Rec', 'Rec/Ply'];
@@ -3497,23 +3523,31 @@ function drawUI() {
             return;
         }
         if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-            /* Drum step edit: 3-column Dur/Vel/Ndg */
+            /* Drum step edit: 2-row 3-col grid. Row 1: K1 Dur, K2 Vel, K3 Ndg.
+             * Row 2: K4 Iter, K5 Rand, K6 Ratch. */
             const t    = S.activeTrack;
             const lane = S.activeDrumLane[t];
             if (S.heldStepNotes.length > 0) {
                 const tps   = S.drumLaneTPS[t] || 24;
-                const LABELS = ['Dur', 'Vel', 'Ndg'];
+                const LABELS = ['Leng', 'Vel', 'Nudg', 'Iter', 'Rand', 'Ratch'];
                 const VALS   = [
                     (S.stepEditGate / tps).toFixed(1),
                     String(S.stepEditVel),
-                    (S.stepEditNudge >= 0 ? '+' : '') + String(S.stepEditNudge)
+                    (S.stepEditNudge >= 0 ? '+' : '') + String(S.stepEditNudge),
+                    formatStepIter(S.stepEditIter),
+                    formatStepRand(S.stepEditRand),
+                    formatStepRatch(S.stepEditRatch)
                 ];
-                const COL_X = [13, 51, 89];
-                for (let i = 0; i < 3; i++) {
+                const COL_X = [2, 45, 88];
+                const ROW_Y = [13, 35];   /* label baseline */
+                const CELL_W = 38, CELL_H = 22;
+                for (let i = 0; i < 6; i++) {
+                    const col = i % 3, row = (i / 3) | 0;
+                    const x = COL_X[col], y = ROW_Y[row];
                     const hi = (S.knobTouched === i);
-                    if (hi) fill_rect(COL_X[i], 21, 25, 30, 1);
-                    print(COL_X[i], 27, LABELS[i], hi ? 0 : 1);
-                    print(COL_X[i], 40, VALS[i], hi ? 0 : 1);
+                    if (hi) fill_rect(x, y - 3, CELL_W, CELL_H, 1);
+                    print(x + 1, y, LABELS[i], hi ? 0 : 1);
+                    print(x + 1, y + 10, VALS[i], hi ? 0 : 1);
                 }
             } else {
                 print(4, 30, '(empty)', 1);
@@ -3522,29 +3556,47 @@ function drawUI() {
         }
         const ac        = effectiveClip(S.activeTrack);
         if (S.heldStepNotes.length > 0) {
-            /* Oct+Pit share a merged block; one note value centered under both labels */
+            /* Melodic step edit: 2-row 4-col grid. Row 1: K1 Oct, K2 Pit, K3 Dur, K4 Vel.
+             * Row 2: K5 Ndg, K6 Iter, K7 Rand, K8 Ratch. */
             const root = S.heldStepNotes[0];
-            const hiP  = (S.knobTouched === 0 || S.knobTouched === 1);
-            if (hiP) fill_rect(2, 20, 46, 24, 1);
-            print(2,  23, 'Oct', hiP ? 0 : 1);
-            print(27, 23, 'Pit', hiP ? 0 : 1);
             const noteLabel = S.heldStepNotes.length > 1
-                ? midiNoteName(root) + ' +' + (S.heldStepNotes.length - 1)
+                ? midiNoteName(root) + '+' + (S.heldStepNotes.length - 1)
                 : midiNoteName(root);
-            pixelPrintC(25, 36, noteLabel, hiP ? 0 : 1);
-            /* Dur / Vel / Ndg */
-            const RHS_LABELS = ['Dur', 'Vel', 'Ndg'];
-            const RHS_VALS   = [
-                (S.stepEditGate / (S.clipTPS[S.activeTrack][ac] || 24)).toFixed(1),
+            const tps = S.clipTPS[S.activeTrack][ac] || 24;
+            const LABELS = ['Oct', 'Note', 'Leng', 'Vel', 'Nudg', 'Iter', 'Rand', 'Ratch'];
+            const VALS   = [
+                noteLabel,
+                noteLabel,
+                (S.stepEditGate / tps).toFixed(1),
                 String(S.stepEditVel),
-                (S.stepEditNudge >= 0 ? '+' : '') + String(S.stepEditNudge)
+                (S.stepEditNudge >= 0 ? '+' : '') + String(S.stepEditNudge),
+                formatStepIter(S.stepEditIter),
+                formatStepRand(S.stepEditRand),
+                formatStepRatch(S.stepEditRatch)
             ];
-            const RHS_X = [52, 77, 102];
-            for (let i = 0; i < 3; i++) {
-                const hi = (S.knobTouched === i + 2);
-                if (hi) fill_rect(RHS_X[i], 20, 23, 24, 1);
-                print(RHS_X[i], 23, RHS_LABELS[i], hi ? 0 : 1);
-                pixelPrintC(RHS_X[i] + 11, 36, RHS_VALS[i], hi ? 0 : 1);
+            const COL_X = [0, 32, 64, 96];
+            const ROW_Y = [13, 35];
+            const CELL_W = 31, CELL_H = 22;
+            /* Oct + Pit are merged: both knobs edit the same root note, so
+             * one centered note value sits under both labels with a divider line. */
+            {
+                const hiOP = (S.knobTouched === 0 || S.knobTouched === 1);
+                const opX  = COL_X[0];
+                const opW  = COL_X[1] + CELL_W - COL_X[0];
+                if (hiOP) fill_rect(opX, ROW_Y[0] - 3, opW, CELL_H, 1);
+                print(COL_X[0] + 1, ROW_Y[0], 'Oct',  hiOP ? 0 : 1);
+                print(COL_X[1] + 1, ROW_Y[0], 'Note', hiOP ? 0 : 1);
+                fill_rect(opX, ROW_Y[0] + 7, opW, 1, hiOP ? 0 : 1);
+                const _nlx = opX + ((opW - noteLabel.length * 6) >> 1);
+                print(_nlx, ROW_Y[0] + 10, noteLabel, hiOP ? 0 : 1);
+            }
+            for (let i = 2; i < 8; i++) {
+                const col = i % 4, row = (i / 4) | 0;
+                const x = COL_X[col], y = ROW_Y[row];
+                const hi = (S.knobTouched === i);
+                if (hi) fill_rect(x, y - 3, CELL_W, CELL_H, 1);
+                print(x + 1, y, LABELS[i], hi ? 0 : 1);
+                print(x + 1, y + 10, VALS[i], hi ? 0 : 1);
             }
             return;
         } else if (S.stepWasEmpty) {
@@ -5451,9 +5503,15 @@ function _tickImpl() {
                         const rv = host_module_get_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_vel');
                         const rg = host_module_get_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_gate');
                         const rn = host_module_get_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_nudge');
+                        const ri = host_module_get_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_iter');
+                        const rr = host_module_get_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_rand');
+                        const rx = host_module_get_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_ratch');
                         S.stepEditVel   = rv !== null ? parseInt(rv, 10) : S.stepEditVel;
                         S.stepEditGate  = rg !== null ? parseInt(rg, 10) : (S.drumLaneTPS[t] || 24);
                         S.stepEditNudge = rn !== null ? parseInt(rn, 10) : 0;
+                        S.stepEditIter  = ri !== null ? parseInt(ri, 10) : 0;
+                        S.stepEditRand  = rr !== null ? parseInt(rr, 10) : 0;
+                        S.stepEditRatch = rx !== null ? parseInt(rx, 10) : 0;
                     }
                 }
                 S.screenDirty = true;
@@ -5472,9 +5530,18 @@ function _tickImpl() {
                     ? host_module_get_param('t' + S.activeTrack + '_c' + ac_h2 + '_step_' + S.heldStep + '_gate') : null;
                 const rn2 = typeof host_module_get_param === 'function'
                     ? host_module_get_param('t' + S.activeTrack + '_c' + ac_h2 + '_step_' + S.heldStep + '_nudge') : null;
+                const ri2 = typeof host_module_get_param === 'function'
+                    ? host_module_get_param('t' + S.activeTrack + '_c' + ac_h2 + '_step_' + S.heldStep + '_iter') : null;
+                const rr2 = typeof host_module_get_param === 'function'
+                    ? host_module_get_param('t' + S.activeTrack + '_c' + ac_h2 + '_step_' + S.heldStep + '_rand') : null;
+                const rx2 = typeof host_module_get_param === 'function'
+                    ? host_module_get_param('t' + S.activeTrack + '_c' + ac_h2 + '_step_' + S.heldStep + '_ratch') : null;
                 S.stepEditVel   = rv2 !== null ? parseInt(rv2, 10) : 100;
                 S.stepEditGate  = rg2 !== null ? parseInt(rg2, 10) : 12;
                 S.stepEditNudge = rn2 !== null ? parseInt(rn2, 10) : 0;
+                S.stepEditIter  = ri2 !== null ? parseInt(ri2, 10) : 0;
+                S.stepEditRand  = rr2 !== null ? parseInt(rr2, 10) : 0;
+                S.stepEditRatch = rx2 !== null ? parseInt(rx2, 10) : 0;
                 S.screenDirty = true;
             } else if (S.stepWasEmpty && S.heldStepNotes.length === 0) {
                 /* Empty melodic step held past threshold: auto-activate with
@@ -7492,8 +7559,8 @@ function _onCC_stepedit(d1, d2) {
         return;
     }
 
-    /* Drum step edit: K1 (Dur) + K2 (Vel) + K3 (Ndg); K4/K5 swallowed */
-    if (S.heldStep >= 0 && S.heldStepNotes.length > 0 && d1 >= 71 && d1 <= 75 &&
+    /* Drum step edit: K1 Dur, K2 Vel, K3 Ndg, K4 Iter, K5 Rand, K6 Ratch; K7/K8 swallowed */
+    if (S.heldStep >= 0 && S.heldStepNotes.length > 0 && d1 >= 71 && d1 <= 78 &&
             S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
         const knobIdx = d1 - 71;
         const dir     = (d2 >= 1 && d2 <= 63) ? 1 : -1;
@@ -7502,6 +7569,7 @@ function _onCC_stepedit(d1, d2) {
         S.knobTouched          = knobIdx;
         S.knobTurnedTick[knobIdx] = S.tickCount;
         S.screenDirty = true;
+        if (knobIdx >= 6) return;   /* K7/K8 swallowed in drum step-edit */
         if (knobIdx === 0) {
             const _tpsD = S.drumLaneTPS[t] || 24;
             const _gmaxD = Math.min(65535, 256 * _tpsD);
@@ -7519,18 +7587,49 @@ function _onCC_stepedit(d1, d2) {
         } else if (knobIdx === 2) {
             S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
             S.knobLastDir[knobIdx] = dir;
-            if (S.knobAccum[knobIdx] >= 16) {
+            if (S.knobAccum[knobIdx] >= 8) {
                 S.knobAccum[knobIdx] = 0;
                 const _tpsN1 = (S.drumLaneTPS[t] || 24) - 1;
                 S.stepEditNudge = Math.max(-_tpsN1, Math.min(_tpsN1, S.stepEditNudge + dir));
                 if (typeof host_module_set_param === 'function')
                     host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_nudge', String(S.stepEditNudge));
             }
+        } else if (knobIdx === 3) {
+            /* K4 Iter: one entry per detent (no accel — 36-entry list, ~1 turn end-to-end) */
+            S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
+            S.knobLastDir[knobIdx] = dir;
+            if (S.knobAccum[knobIdx] >= 3) {
+                S.knobAccum[knobIdx] = 0;
+                let idx = STEP_ITER_LIST.indexOf(S.stepEditIter);
+                if (idx < 0) idx = 0;
+                idx = Math.max(0, Math.min(STEP_ITER_LIST.length - 1, idx + dir));
+                S.stepEditIter = STEP_ITER_LIST[idx];
+                if (typeof host_module_set_param === 'function')
+                    host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_iter', String(S.stepEditIter));
+            }
+        } else if (knobIdx === 4) {
+            /* K5 Rand: 0..100 with accel */
+            const acc = ccKnobDelta(d2, knobIdx);
+            if (acc !== 0) {
+                S.stepEditRand = Math.max(0, Math.min(100, S.stepEditRand + acc));
+                if (typeof host_module_set_param === 'function')
+                    host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_rand', String(S.stepEditRand));
+            }
+        } else if (knobIdx === 5) {
+            /* K6 Ratch: 0..4, sens=8 (10 detents per step at low gain) */
+            S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
+            S.knobLastDir[knobIdx] = dir;
+            if (S.knobAccum[knobIdx] >= 8) {
+                S.knobAccum[knobIdx] = 0;
+                S.stepEditRatch = Math.max(0, Math.min(4, S.stepEditRatch + dir));
+                if (typeof host_module_set_param === 'function')
+                    host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_ratch', String(S.stepEditRatch));
+            }
         }
         return;
     }
-    /* Step edit overlay: K1-K5 intercept per-step params while a step is held and active */
-    if (S.heldStep >= 0 && S.heldStepNotes.length > 0 && d1 >= 71 && d1 <= 75) {
+    /* Melodic step edit: K1 Oct, K2 Pit, K3 Dur, K4 Vel, K5 Ndg, K6 Iter, K7 Rand, K8 Ratch */
+    if (S.heldStep >= 0 && S.heldStepNotes.length > 0 && d1 >= 71 && d1 <= 78) {
         const knobIdx = d1 - 71;
         const dir     = (d2 >= 1 && d2 <= 63) ? 1 : -1;
         const t       = S.activeTrack;
@@ -7580,17 +7679,48 @@ function _onCC_stepedit(d1, d2) {
             S.stepEditVel = Math.max(0, Math.min(127, S.stepEditVel + dir));
             if (typeof host_module_set_param === 'function')
                 host_module_set_param(pfx + '_vel', String(S.stepEditVel));
-        } else {
-            /* K5 Nudge: tick offset ±(TPS-1), sens=16 */
+        } else if (knobIdx === 4) {
+            /* K5 Nudge: tick offset ±(TPS-1), sens=8 */
             S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
             S.knobLastDir[knobIdx] = dir;
-            if (S.knobAccum[knobIdx] >= 16) {
+            if (S.knobAccum[knobIdx] >= 8) {
                 S.knobAccum[knobIdx] = 0;
                 const _acN = effectiveClip(S.activeTrack);
                 const _tpsN1 = (S.clipTPS[S.activeTrack][_acN] || 24) - 1;
                 S.stepEditNudge = Math.max(-_tpsN1, Math.min(_tpsN1, S.stepEditNudge + dir));
                 if (typeof host_module_set_param === 'function')
                     host_module_set_param(pfx + '_nudge', String(S.stepEditNudge));
+            }
+        } else if (knobIdx === 5) {
+            /* K6 Iter: discrete step, sens=3 (no accel) */
+            S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
+            S.knobLastDir[knobIdx] = dir;
+            if (S.knobAccum[knobIdx] >= 3) {
+                S.knobAccum[knobIdx] = 0;
+                let idx = STEP_ITER_LIST.indexOf(S.stepEditIter);
+                if (idx < 0) idx = 0;
+                idx = Math.max(0, Math.min(STEP_ITER_LIST.length - 1, idx + dir));
+                S.stepEditIter = STEP_ITER_LIST[idx];
+                if (typeof host_module_set_param === 'function')
+                    host_module_set_param(pfx + '_iter', String(S.stepEditIter));
+            }
+        } else if (knobIdx === 6) {
+            /* K7 Rand: 0..100 with accel */
+            const acc = ccKnobDelta(d2, knobIdx);
+            if (acc !== 0) {
+                S.stepEditRand = Math.max(0, Math.min(100, S.stepEditRand + acc));
+                if (typeof host_module_set_param === 'function')
+                    host_module_set_param(pfx + '_rand', String(S.stepEditRand));
+            }
+        } else if (knobIdx === 7) {
+            /* K8 Ratch: 0..4, sens=8 */
+            S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
+            S.knobLastDir[knobIdx] = dir;
+            if (S.knobAccum[knobIdx] >= 8) {
+                S.knobAccum[knobIdx] = 0;
+                S.stepEditRatch = Math.max(0, Math.min(4, S.stepEditRatch + dir));
+                if (typeof host_module_set_param === 'function')
+                    host_module_set_param(pfx + '_ratch', String(S.stepEditRatch));
             }
         }
         return;
@@ -9487,12 +9617,24 @@ function _onStepButtons(d1, d2) {
                 S.stepEditVel   = rv !== null ? parseInt(rv, 10) : 100;
                 S.stepEditGate  = rg !== null ? parseInt(rg, 10) : (S.drumLaneTPS[t] || 24);
                 S.stepEditNudge = rn !== null ? parseInt(rn, 10) : 0;
+                const ri = typeof host_module_get_param === 'function'
+                    ? host_module_get_param('t' + t + '_l' + lane + '_step_' + absStep + '_iter') : null;
+                const rr = typeof host_module_get_param === 'function'
+                    ? host_module_get_param('t' + t + '_l' + lane + '_step_' + absStep + '_rand') : null;
+                const rx = typeof host_module_get_param === 'function'
+                    ? host_module_get_param('t' + t + '_l' + lane + '_step_' + absStep + '_ratch') : null;
+                S.stepEditIter  = ri !== null ? parseInt(ri, 10) : 0;
+                S.stepEditRand  = rr !== null ? parseInt(rr, 10) : 0;
+                S.stepEditRatch = rx !== null ? parseInt(rx, 10) : 0;
             } else {
                 S.stepWasEmpty  = true;
                 S.heldStepNotes = [];
                 S.stepEditVel   = stepEntryVelocity(t, -1, true);
                 S.stepEditGate  = S.drumLaneTPS[t] || 24;
                 S.stepEditNudge = 0;
+                S.stepEditIter  = 0;
+                S.stepEditRand  = 0;
+                S.stepEditRatch = 0;
             }
             forceRedraw();
         } else if (S.stepBtnPressedTick[S.heldStepBtn] >= 0) {
@@ -9555,6 +9697,9 @@ function _onStepButtons(d1, d2) {
                     S.stepEditVel   = 100;
                     S.stepEditGate  = 12;
                     S.stepEditNudge = 0;
+                    S.stepEditIter  = 0;
+                    S.stepEditRand  = 0;
+                    S.stepEditRatch = 0;
                 }
             } else {
                 S.stepWasEmpty  = false;
@@ -9565,6 +9710,9 @@ function _onStepButtons(d1, d2) {
                     S.stepEditVel   = 100;
                     S.stepEditGate  = 12;
                     S.stepEditNudge = 0;
+                    S.stepEditIter  = 0;
+                    S.stepEditRand  = 0;
+                    S.stepEditRatch = 0;
                 }
             }
             /* Chord-first: pads were held before this step was pressed.

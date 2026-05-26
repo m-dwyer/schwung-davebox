@@ -241,6 +241,13 @@ export const S = {
     stepEditVel: 100,
     stepEditGate: 12,
     stepEditNudge: 0,
+    /* Per-step trig conditions (v=34). All zero = defaults (always play, 100%, no ratchet).
+     * stepEditIter:  raw byte 0 or (cycle_len<<4) | cycle_idx
+     * stepEditRand:  0 = 100%, 1..100 = probability percent
+     * stepEditRatch: 0|1 = no ratchet, 2..4 = sub-hit count */
+    stepEditIter: 0,
+    stepEditRand: 0,
+    stepEditRatch: 0,
     ccStepEditVal: new Array(8).fill(0),
     /* Per-knob: does the held step have a recorded point? (drives "—" vs value) */
     ccStepEditSet: new Array(8).fill(false),
