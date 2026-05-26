@@ -19,6 +19,7 @@
 
 ### Features
 
+- **Record external CCs into automation.** Currently incoming CC/AT/PB from external MIDI (`_onMidiExternalImpl`, `ui/ui.js`) is live-passthrough only (`liveSendNote`) — not captured into the per-clip `cc_auto` lanes; only the 8 Move knobs record (via `cc_send` → latch). Add: map an incoming CC number → a knob lane (or a free lane) and engage the same latch/`cc_send` recording path from the external handler. Note ROUTE_MOVE tracks don't forward external CC at all (Move handles cable-2 natively) — decide whether they're in scope. Not yet scoped.
 - **Schwung: module favorites in picker.** Shift + jog in the picker favorites a module, which moves it to the top of the module list. (Schwung-side feature.)
 - **Reclaim Back button** from Schwung suspend — currently Back triggers suspend; offer a different gesture for suspend so dAVEBOx can use Back.
 - ~~**Drum lane repeats respond to pad pressure** — pad pressure continuously sets velocity of incoming repeats.~~ **FIXED 2026-05-25 (branch `pad-pressure`, device-verified).** Feature was coded but dead — incoming pad aftertouch was dropped as "noise" on line 1 of the MIDI handler; now handled before that filter.
