@@ -420,6 +420,19 @@ typedef struct {
     uint8_t  step_vel[SEQ_STEPS];         /* default SEQ_VEL */
     uint16_t step_gate[SEQ_STEPS];        /* gate ticks 1..clip_len*TICKS_PER_STEP; raw, scaled at render */
     int16_t  note_tick_offset[SEQ_STEPS][8]; /* per-note ±23 within-step offset; 0=quantized */
+    /* Per-step trig conditions (v=34): 0 = default in all three.
+     *  step_iter:    0 = always play; else (cycle_len<<4) | cycle_idx with
+     *                cycle_len in 1..8 and cycle_idx in 1..cycle_len.
+     *  step_random:  0 = 100% (always); else 1..100 = probability percent.
+     *                RNG roll is per-emitted-note (chord notes roll independently).
+     *  step_ratchet: 0 or 1 = no ratchet; 2..4 = sub-hit count within step gate. */
+    uint8_t  step_iter[SEQ_STEPS];
+    uint8_t  step_random[SEQ_STEPS];
+    uint8_t  step_ratchet[SEQ_STEPS];
+    /* Loop-cycle counter for Iter trig. Increments on each loop wrap during
+     * playback. Reset to 0 on transport-start edge (not on un-pause). Not
+     * persisted — always starts at 0 after load. */
+    uint16_t loop_cycle;
     uint16_t length;                      /* 1..256, default 16 — size of the loop window in steps */
     /* Loop window anchor in steps. Playback wraps inside [loop_start, loop_start+length).
      * Default 0 (anchored at step 0). Pattern data outside the window is preserved but silent.
@@ -476,6 +489,9 @@ typedef struct {
     uint8_t  step_vel[SEQ_STEPS];
     uint16_t step_gate[SEQ_STEPS];
     int16_t  note_tick_offset[SEQ_STEPS][8];
+    uint8_t  step_iter[SEQ_STEPS];
+    uint8_t  step_random[SEQ_STEPS];
+    uint8_t  step_ratchet[SEQ_STEPS];
     uint16_t length;
     uint16_t loop_start;
     uint8_t  active;
@@ -1117,9 +1133,59 @@ static void ensure_parent_dir(const char *path) {
     }
 }
 
+/* v=34 per-step trig-condition serialization (iter/random/ratchet).
+ * Hex blob, 2 chars per step, exactly cl->length steps. Sparse at the
+ * array level — emitted only when any element is non-zero. */
+static void write_step_hex_arr(FILE *fp, const char *key,
+                               const uint8_t *arr, uint16_t len) {
+    int i, any = 0;
+    for (i = 0; i < (int)len; i++) if (arr[i]) { any = 1; break; }
+    if (!any) return;
+    fprintf(fp, ",\"%s\":\"", key);
+    for (i = 0; i < (int)len; i++) fprintf(fp, "%02x", (unsigned)arr[i]);
+    fputc('"', fp);
+}
+
+static void parse_step_hex_arr(const char *buf, const char *key,
+                               uint8_t *arr, uint16_t len, int max_val) {
+    char search[48];
+    snprintf(search, sizeof(search), "\"%s\":\"", key);
+    const char *p = strstr(buf, search);
+    if (!p) return;
+    p += strlen(search);
+    int i;
+    for (i = 0; i < (int)len && *p && *p != '"'; i++) {
+        int hi = -1, lo = -1;
+        if (*p >= '0' && *p <= '9') hi = *p - '0';
+        else if (*p >= 'a' && *p <= 'f') hi = *p - 'a' + 10;
+        else if (*p >= 'A' && *p <= 'F') hi = *p - 'A' + 10;
+        if (hi < 0) break;
+        p++;
+        if (*p >= '0' && *p <= '9') lo = *p - '0';
+        else if (*p >= 'a' && *p <= 'f') lo = *p - 'a' + 10;
+        else if (*p >= 'A' && *p <= 'F') lo = *p - 'A' + 10;
+        if (lo < 0) break;
+        p++;
+        int v = (hi << 4) | lo;
+        if (v > max_val) v = max_val;
+        arr[i] = (uint8_t)v;
+    }
+}
+
+/* Validate iter encoding post-load: 0 OR ((1..8)<<4 | (1..cycle_len)). */
+static void sanitize_step_iter_arr(uint8_t *arr, uint16_t len) {
+    int i;
+    for (i = 0; i < (int)len; i++) {
+        uint8_t v = arr[i];
+        if (!v) continue;
+        int cl = (v >> 4) & 0xF, ci = v & 0xF;
+        if (cl < 1 || cl > 8 || ci < 1 || ci > cl) arr[i] = 0;
+    }
+}
+
 static void seq8_do_serialize(seq8_instance_t *inst, FILE *fp) {
     int t, c;
-    fprintf(fp, "{\"v\":33,\"playing\":%d", inst->playing);
+    fprintf(fp, "{\"v\":34,\"playing\":%d", inst->playing);
     for (t = 0; t < NUM_TRACKS; t++)
         fprintf(fp, ",\"t%d_ac\":%d", t, inst->tracks[t].active_clip);
     for (t = 0; t < NUM_TRACKS; t++)
@@ -1233,6 +1299,16 @@ static void seq8_do_serialize(seq8_instance_t *inst, FILE *fp) {
                             (int)n->vel, (int)n->gate);
                 }
                 if (wrote) fputc('"', fp);
+                /* v=34 per-step trig conditions (sparse at array level) */
+                {
+                    char k[24];
+                    snprintf(k, sizeof(k), "t%dc%d_si", t, c);
+                    write_step_hex_arr(fp, k, cl->step_iter,    cl->length);
+                    snprintf(k, sizeof(k), "t%dc%d_sr", t, c);
+                    write_step_hex_arr(fp, k, cl->step_random,  cl->length);
+                    snprintf(k, sizeof(k), "t%dc%d_sx", t, c);
+                    write_step_hex_arr(fp, k, cl->step_ratchet, cl->length);
+                }
             }
         }
     }
@@ -1267,6 +1343,16 @@ static void seq8_do_serialize(seq8_instance_t *inst, FILE *fp) {
                             (int)n->vel, (int)n->gate);
                 }
                 if (wrote) fputc('"', fp);
+                /* v=34 per-step trig conditions (sparse at array level) */
+                {
+                    char k[28];
+                    snprintf(k, sizeof(k), "t%dc%dl%d_si", t, c, l);
+                    write_step_hex_arr(fp, k, dlc->step_iter,    dlc->length);
+                    snprintf(k, sizeof(k), "t%dc%dl%d_sr", t, c, l);
+                    write_step_hex_arr(fp, k, dlc->step_random,  dlc->length);
+                    snprintf(k, sizeof(k), "t%dc%dl%d_sx", t, c, l);
+                    write_step_hex_arr(fp, k, dlc->step_ratchet, dlc->length);
+                }
                 /* Per-lane drum pfx params (sparse — only non-default) */
                 {
                     const drum_pfx_params_t *dp = &dl->pfx_params;
@@ -1433,10 +1519,10 @@ static void seq8_load_state(seq8_instance_t *inst) {
     if (!n) { free(buf); remove(inst->state_path); return; }
     buf[n] = '\0';
 
-    /* Version gate: only v=33 accepted (dev build; wipe on version mismatch). */
+    /* Version gate: only v=34 accepted (dev build; wipe on version mismatch). */
     {
         int sv = json_get_int(buf, "v", -1);
-        if (sv != 33) {
+        if (sv != 34) {
             free(buf);
             remove(inst->state_path);
             seq8_ilog(inst, "SEQ8 state: wrong version, deleted");
@@ -1798,6 +1884,18 @@ static void seq8_load_state(seq8_instance_t *inst) {
             }
             snprintf(key, sizeof(key), "t%dc%d_arsll", t, c);
             p2->seq_arp_step_loop_len = (uint8_t)clamp_i(json_get_int(buf, key, 8), 1, 8);
+            /* v=34 per-step trig conditions (iter/random/ratchet hex blobs) */
+            {
+                clip_t *_cl = &inst->tracks[t].clips[c];
+                char k[24];
+                snprintf(k, sizeof(k), "t%dc%d_si", t, c);
+                parse_step_hex_arr(buf, k, _cl->step_iter,    _cl->length, 255);
+                sanitize_step_iter_arr(_cl->step_iter, _cl->length);
+                snprintf(k, sizeof(k), "t%dc%d_sr", t, c);
+                parse_step_hex_arr(buf, k, _cl->step_random,  _cl->length, 100);
+                snprintf(k, sizeof(k), "t%dc%d_sx", t, c);
+                parse_step_hex_arr(buf, k, _cl->step_ratchet, _cl->length, 4);
+            }
         }
     }
     /* Drum lane data (v=14 only; v=13 files have no drum keys, loops are no-ops) */
@@ -1885,6 +1983,17 @@ static void seq8_load_state(seq8_instance_t *inst) {
                     snprintf(key, sizeof(key), "t%dc%dl%d_dpdrt", t, c, l);
                     dp->delay_retrig    = clamp_i(json_get_int(buf, key, 1), 0, 1);
                     drum_pfx_apply_params(&inst->tracks[t].drum_lane_pfx[l], dp);
+                }
+                /* v=34 per-step trig conditions (drum lane) */
+                {
+                    char k[28];
+                    snprintf(k, sizeof(k), "t%dc%dl%d_si", t, c, l);
+                    parse_step_hex_arr(buf, k, dlc->step_iter,    dlc->length, 255);
+                    sanitize_step_iter_arr(dlc->step_iter, dlc->length);
+                    snprintf(k, sizeof(k), "t%dc%dl%d_sr", t, c, l);
+                    parse_step_hex_arr(buf, k, dlc->step_random,  dlc->length, 100);
+                    snprintf(k, sizeof(k), "t%dc%dl%d_sx", t, c, l);
+                    parse_step_hex_arr(buf, k, dlc->step_ratchet, dlc->length, 4);
                 }
             }
         }
@@ -5030,7 +5139,11 @@ static void clip_init(clip_t *cl) {
         cl->step_vel[s]        = SEQ_VEL;
         cl->step_gate[s]       = GATE_TICKS;
         memset(cl->note_tick_offset[s], 0, 8 * sizeof(int16_t));
+        cl->step_iter[s]       = 0;
+        cl->step_random[s]     = 0;
+        cl->step_ratchet[s]    = 0;
     }
+    cl->loop_cycle = 0;
     cl->note_count = 0;
     memset(cl->notes, 0, sizeof(cl->notes));
     memset(cl->occ_cache, 0, sizeof(cl->occ_cache));
@@ -5839,6 +5952,9 @@ static void drum_row_snap(seq8_instance_t *inst, int row,
             memcpy(d->step_vel,         src->step_vel,         SEQ_STEPS);
             memcpy(d->step_gate,        src->step_gate,        SEQ_STEPS * sizeof(uint16_t));
             memcpy(d->note_tick_offset, src->note_tick_offset, SEQ_STEPS * 8 * sizeof(int16_t));
+            memcpy(d->step_iter,    src->step_iter,    SEQ_STEPS);
+            memcpy(d->step_random,  src->step_random,  SEQ_STEPS);
+            memcpy(d->step_ratchet, src->step_ratchet, SEQ_STEPS);
             d->length     = src->length;
             d->loop_start = src->loop_start;
             d->active     = src->active;
@@ -5862,6 +5978,9 @@ static void drum_row_restore(seq8_instance_t *inst, int row,
             memcpy(dst->step_vel,         s->step_vel,         SEQ_STEPS);
             memcpy(dst->step_gate,        s->step_gate,        SEQ_STEPS * sizeof(uint16_t));
             memcpy(dst->note_tick_offset, s->note_tick_offset, SEQ_STEPS * 8 * sizeof(int16_t));
+            memcpy(dst->step_iter,    s->step_iter,    SEQ_STEPS);
+            memcpy(dst->step_random,  s->step_random,  SEQ_STEPS);
+            memcpy(dst->step_ratchet, s->step_ratchet, SEQ_STEPS);
             dst->length       = s->length;
             dst->loop_start   = s->loop_start;
             dst->active       = s->active;
@@ -5961,6 +6080,9 @@ static void undo_begin_drum_clip(seq8_instance_t *inst, int t, int c) {
         memcpy(dst->step_vel,         src->step_vel,         SEQ_STEPS);
         memcpy(dst->step_gate,        src->step_gate,        SEQ_STEPS * sizeof(uint16_t));
         memcpy(dst->note_tick_offset, src->note_tick_offset, SEQ_STEPS * 8 * sizeof(int16_t));
+        memcpy(dst->step_iter,    src->step_iter,    SEQ_STEPS);
+        memcpy(dst->step_random,  src->step_random,  SEQ_STEPS);
+        memcpy(dst->step_ratchet, src->step_ratchet, SEQ_STEPS);
         dst->length     = src->length;
         dst->loop_start = src->loop_start;
         dst->active     = src->active;
@@ -7666,6 +7788,12 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
                 if (!strcmp(q, "_nudge"))
                     return snprintf(out, out_len, "%d",
                         dlc->step_note_count[sidx] > 0 ? (int)dlc->note_tick_offset[sidx][0] : 0);
+                if (!strcmp(q, "_iter"))
+                    return snprintf(out, out_len, "%d", (int)dlc->step_iter[sidx]);
+                if (!strcmp(q, "_rand"))
+                    return snprintf(out, out_len, "%d", (int)dlc->step_random[sidx]);
+                if (!strcmp(q, "_ratch"))
+                    return snprintf(out, out_len, "%d", (int)dlc->step_ratchet[sidx]);
                 return -1;
             }
             if (!strcmp(p2, "_pfx_snapshot")) {
@@ -7770,6 +7898,12 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
                 if (!strcmp(q, "_nudge"))
                     return snprintf(out, out_len, "%d",
                         cl->step_note_count[sidx] > 0 ? (int)cl->note_tick_offset[sidx][0] : 0);
+                if (!strcmp(q, "_iter"))
+                    return snprintf(out, out_len, "%d", (int)cl->step_iter[sidx]);
+                if (!strcmp(q, "_rand"))
+                    return snprintf(out, out_len, "%d", (int)cl->step_random[sidx]);
+                if (!strcmp(q, "_ratch"))
+                    return snprintf(out, out_len, "%d", (int)cl->step_ratchet[sidx]);
                 return -1;
             }
             if (!strncmp(p, "_steps", 6) && p[6] == '\0') {
