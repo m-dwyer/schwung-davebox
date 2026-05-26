@@ -505,9 +505,9 @@ const DRUM_FLASH_TICKS = 8; /* ~130ms pad flash duration after a drum hit */
  * S.knobLastDir[k] tracks last direction for reversal detection.
  * S.knobLocked[k] blocks further firing until touch release (used by lock=true params). */
 
-/* S.bankSelectTick: S.tickCount at last bank select, used for 2-second State 3 timeout.
+/* S.bankSelectTick: S.tickCount at last bank select, used for the State 3 timeout.
  * -1 = timeout not active. */
-const BANK_DISPLAY_TICKS = 392;  /* ~2000ms at 196Hz tick rate */
+const BANK_DISPLAY_TICKS = 94;  /* ~1000ms at 94Hz device tick rate (was 392 = ~4.2s; constant was miscalibrated for 196Hz) */
 const STRETCH_BLOCKED_TICKS = 294;  /* ~1500ms at 196Hz */
 const NO_NOTE_FLASH_TICKS = 118;     /* ~600ms at 196Hz */
 const KNOB_TURN_HIGHLIGHT_TICKS = 120;            /* ~600ms at 196Hz — highlight after turn without touch */

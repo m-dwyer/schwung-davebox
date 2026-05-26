@@ -19,6 +19,7 @@
 
 ### Features
 
+- **Jog-click to toggle alt params on track banks** (instead of holding Shift) — e.g. drum CLIP bank K3 Res→Zoom, K2 Shft→Nudge, and the other `S.shiftHeld` knob alternates in `_onCC_knobs`. Wanted: a persistent "alt param" mode toggled without Shift. **Conflict to resolve:** jog-click is already used on the exact banks — on drum tracks it cycles the Velocity/Repeat performance pad mode (`_onCC_jog` ~6090), and on SEQ ARP / ARP IN (banks 4/5) it toggles the Arp Steps overlay (~6080). So it can't be a blanket Shift→jog-click swap; needs a distinct gesture (double-click? context-gated single click?) or a different modifier. Needs design.
 - **Record external CCs into automation.** Currently incoming CC/AT/PB from external MIDI (`_onMidiExternalImpl`, `ui/ui.js`) is live-passthrough only (`liveSendNote`) — not captured into the per-clip `cc_auto` lanes; only the 8 Move knobs record (via `cc_send` → latch). Add: map an incoming CC number → a knob lane (or a free lane) and engage the same latch/`cc_send` recording path from the external handler. Note ROUTE_MOVE tracks don't forward external CC at all (Move handles cable-2 natively) — decide whether they're in scope. Not yet scoped.
 - **Schwung: module favorites in picker.** Shift + jog in the picker favorites a module, which moves it to the top of the module list. (Schwung-side feature.)
 - **Reclaim Back button** from Schwung suspend — currently Back triggers suspend; offer a different gesture for suspend so dAVEBOx can use Back.
