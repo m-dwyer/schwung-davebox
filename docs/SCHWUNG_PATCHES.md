@@ -113,6 +113,15 @@ PRs #71 / #72 (earlier defer/hold variants) were closed unmerged in favor of PR 
 
 Lets the user navigate Schwung's chain editor for a slot (add/remove modules, change presets, edit params via hierarchy editor) **without leaving dAVEBOx**. While co-run is active, OLED + jog + jog-click + track buttons + Shift drive the chain editor; pads, step buttons, knobs, transport, and Back stay with dAVEBOx. Entry: track menu → `Edit Slot...`. Exit: Menu button.
 
+> **Note (2026-05-26):** the chain-edit + Move-native co-run paths have been
+> rebuilt as a generalized framework in upstream Schwung — see
+> `schwung/docs/CORUN.md`. The dAVEBOx side now uses a single API
+> (`shadow_corun_begin(target, id, keep_mask)` / `shadow_corun_end()` /
+> `shadow_corun_state()`) with a `CORUN_TARGET_*` enum, and the exit gesture is
+> **Back** (framework-reserved), not Menu. The sections below describe the
+> earlier per-target setter design and remain accurate as historical context;
+> the live code on `corun-api-rename` uses the new API.
+
 ### What changed in Schwung
 
 **`src/host/shadow_constants.h`** — `shadow_control_t` gains `int8_t corun_chain_edit_slot` (−1 = off, 0–3 = slot whose chain editor is co-running). Steals 1 byte from `reserved[6]` → `reserved[5]`. Layout-stable.

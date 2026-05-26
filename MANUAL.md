@@ -1340,7 +1340,7 @@ Hands the **OLED, jog wheel, side clip buttons, and knob row** to Schwung's nati
 - **First use** prompts a slot picker (1–4); your choice is remembered per track.
 - **Side clip buttons** inside the editor switch which slot you're editing.
 - **Knobs (K1–K8)** drive the focused chain component's parameters — turn to adjust, touch to peek the current value.
-- **Back** navigates up within the editor; **Menu** exits.
+- **Menu** exits and returns to dAVEBOx. **Back** also exits as a fallback (framework gesture). Inside the chain editor, Back pops one level within the editor's sub-views (component/patches/hierarchy); at the top level Back is silent so Menu is the explicit exit.
 - **Shift + Edit Slot...** (selecting the menu item with Shift held) reopens the slot picker to reassign this track to a different slot.
 
 ### Edit Synth... — Move device editor
@@ -1348,8 +1348,8 @@ Hands the **OLED, jog wheel, side clip buttons, and knob row** to Schwung's nati
 Hands the **OLED, jog wheel, side clip buttons, Shift, Back, the 8 device-edit knobs, and the master knob** to Move's native preset browser and device-edit pages. dAVEBOx keeps the pads, step buttons, transport, and Menu.
 
 - **On entry,** dAVEBOx lands Move on the track matching this track's **Channel** (channel 1 → Move Track 1, … channel 4 → Move Track 4), opening straight to that device's page with its knob-ring LEDs lit. On channels outside 1–4, pick a Move track manually.
-- **Side clip-button LEDs** blink dim/dark-grey during co-run as a "press to switch Move tracks" affordance. On exit, dAVEBOx reclaims the knob-ring LEDs immediately.
-- **Menu** exits and returns to dAVEBOx.
+- **Side clip-button LEDs** show Move's native track colors during co-run — press any of them to switch which Move track Edit Synth… is focused on. On exit, dAVEBOx reclaims the knob-ring LEDs immediately.
+- **Menu** exits and returns to dAVEBOx. Back is routed to Move's preset/device editor for in-Move navigation, so Menu is the explicit exit.
 - **Drum-mode tracks:** tapping a left-4-column pad silently selects the matching cell in Move's drum-instrument editor. dAVEBOx still fires the drum from its sequencer, so there's no double-trigger.
 
 While either co-run is active, pad colors switch to a grayscale scheme to signal split-UI mode; normal colors restore on exit.
