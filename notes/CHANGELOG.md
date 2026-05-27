@@ -8,6 +8,7 @@ the section into a versioned heading at release time.
 
 ## [Unreleased]
 ### Fixes
+- **SEQ ARP and ARP IN Steps Mode (K5) now shows only Mute and Step** — "Off" removed; "Skip" renamed "Step". Default is Mute on all new sessions.
 - **Co-run drum pad hold now works for Move's per-drum volume editor.** Holding a drum lane pad in Edit Synth… now keeps the Shift+note live until physical release, so Move firmware detects the hold and opens its parameter editor. Previously a note-off was injected immediately on press, making every pad tap look like an instant gesture with no hold duration.
 
 ### Features

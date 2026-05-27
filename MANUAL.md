@@ -655,7 +655,7 @@ A step arpeggiator that runs after Delay. Per-clip. Applies to both sequenced ou
 | K2 | Rate | 1/32, 1/16, 1/16t, 1/8, 1/8t, 1/4, 1/4t, 1/2, 1/2t, 1-bar |
 | K3 | Oct | Bipolar. Positive = adds octaves above; negative = below. |
 | K4 | Gate | 1–200%. 100% = note ends as next begins. Below = staccato; above = legato overlap. |
-| K5 | Steps | Off · Mute · Skip. Gates per-step playback once the Arp Steps editor (below) has assigned step levels. Style = Off short-circuits the whole engine, including the step gate. |
+| K5 | Steps | **Mute** · **Step**. Gates per-step playback once the Arp Steps editor (below) has assigned step levels. Mute: level-0 steps are silenced, the cycle continues. Step: level-0 steps are removed from the cycle entirely. |
 | K6 | Rtrg | On (default): pattern resets to step 1 on each new note and at clip loop boundary. Off: arp runs free. |
 | K7 | Sync | On (default): the first arp step waits for the next global rate boundary, locking phase with transport. Off: fires from anchor. |
 
@@ -675,7 +675,7 @@ A *live* arpeggiator for pad input and external MIDI. **Per-track**, not per-cli
 | K2 | Rate | 1/32, 1/16, 1/16t, 1/8, 1/8t, 1/4, 1/4t, 1/2, 1/2t, 1-bar |
 | K3 | Oct | −4 to +4 (0 displays as Off). Negative = arpeggiate down; positive = up. |
 | K4 | Gate | 1–200% |
-| K5 | Steps | Off · Mute · Skip. Mute: muted steps are rests, the cycle continues underneath. Skip: muted steps removed from the cycle entirely. |
+| K5 | Steps | **Mute** · **Step**. Mute: level-0 steps are rests, the cycle continues underneath. Step: level-0 steps removed from the cycle entirely. |
 | K6 | Rtrg | On: pattern resets on each new note. **Off (default).** |
 | K7 | Sync | On (default): waits for the next rate boundary before firing. Off: fires immediately on pad press. |
 | K8 | Latch | Off (default) · On. On: arp keeps running after release. First touch of a new gesture replaces the latched set; additional presses add notes. |
