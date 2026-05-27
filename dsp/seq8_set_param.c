@@ -184,7 +184,7 @@ static void pfx_set(seq8_instance_t *inst, seq8_track_t *tr,
         cp->seq_arp_style     = 0;
         cp->seq_arp_rate      = ARP_RATE_DEFAULT;
         cp->seq_arp_octaves   = 1;
-        cp->seq_arp_gate      = 50;
+        cp->seq_arp_gate      = 100;
         cp->seq_arp_steps_mode = 0;
         cp->seq_arp_retrigger = 1;
         cp->seq_arp_sync      = 1;
