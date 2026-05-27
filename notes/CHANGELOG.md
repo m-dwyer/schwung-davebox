@@ -8,6 +8,7 @@ the section into a versioned heading at release time.
 
 ## [Unreleased]
 ### Fixes
+- **SEQUENCE ARP and ARP IN with Retrig=On no longer stutter on rapid chord changes.** Previously, adding any new pitch to the held chord (under Retrig=On) zeroed the arp's rate-grid countdown and re-armed a "wait for the next rate boundary" — up to one rate-interval of silence per added pitch, audible as gaps when playing fast chord changes. Retrig=On now resets only the cycle position (which note plays next, Up direction, vel-decay counter, random-pick mask) and leaves the timing grid intact, so the next fire lands on the same beat it was already scheduled for — just with the cycle restarted from position 0 (lowest note on Up). Sync handling unchanged. Active-clip wrap also benefits from the same change.
 - **SEQ ARP and ARP IN Steps Mode (K5) now shows only Mute and Step** — "Off" removed; "Skip" renamed "Step". Default is Mute on all new sessions.
 - **Co-run drum pad hold now works for Move's per-drum volume editor.** Holding a drum lane pad in Edit Synth… now keeps the Shift+note live until physical release, so Move firmware detects the hold and opens its parameter editor. Previously a note-off was injected immediately on press, making every pad tap look like an instant gesture with no hold duration.
 

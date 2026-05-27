@@ -3254,19 +3254,24 @@ static void arp_clear_runtime(arp_engine_t *a) {
     a->master_anchor       = 0;
 }
 
-/* Reset cycle/step pattern position to start. Called when retrigger=1 sees a
- * new note enter the buffer or the active clip wraps. Leaves held buffer +
- * sounding note alone — only resets pattern progression. master_tick lets
- * step_pos snap to column 0 on the next tick. */
+/* Reset cycle position only — NOT timing. Called when retrigger=1 sees a new
+ * note enter the buffer or the active clip wraps. Resets which note plays next
+ * (cyc_pos / ud_dir / cycle_step_count / random_used) but leaves the rate-grid
+ * countdown (ticks_until_next / pending_first_note / master_anchor) intact, so
+ * the next fire lands on the same beat it was already scheduled for. Without
+ * this, every new pitch under retrigger=on zeroed the countdown and re-armed
+ * a first-note wait — up to one rate-interval of silence per added pitch,
+ * audible as stutters/pauses during rapid live chord changes. sync handles
+ * absolute-grid alignment on the existing fire boundaries either way.
+ *
+ * master_tick arg retained for API stability (callers unchanged); intentionally
+ * unused now. */
 static void arp_retrigger(arp_engine_t *a, uint32_t master_tick) {
+    (void)master_tick;
     a->cyc_pos          = 0;
     a->ud_dir           = 1;
     a->cycle_step_count = 0;
     a->random_used      = 0;
-    a->step_pos         = 0;
-    a->ticks_until_next = 0;
-    a->pending_first_note = 1;
-    a->master_anchor    = master_tick;
 }
 
 static void arp_init_defaults(arp_engine_t *a) {
