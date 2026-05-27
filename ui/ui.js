@@ -3318,19 +3318,18 @@ function drawUI() {
      * verified harmless in real use (nothing the user does during co-run
      * depends on live LED feedback). */
     if (S.moveCoRunTrack >= 0) {
-        /* Track buttons are ceded to Move by keep_mask (Move owns input —
-         * the press still switches Move's selected track). In principle the
-         * framework's keep_mask-driven LED strip would let Move's CC LED
-         * writes reach hardware so its native colors show; in practice Move
-         * doesn't continuously repaint those LEDs, so they go dark between
-         * selection events. We paint solid white every ~8 ticks (~85ms) as
-         * a consistent "press to switch Move tracks" affordance — the
-         * framework's strip only filters peer→hardware, not tool→hardware,
-         * so our writes reach the buttons even though we don't keep the
-         * group. force=true bypasses the LED cache so any sporadic Move
-         * paint doesn't make us think the white is already there. */
-        if ((S.tickCount % 8) === 0) {
-            for (let _i = 0; _i < 4; _i++) setButtonLED(40 + _i, White, true);
+        /* Track buttons: blink the paired Move track (white/off at /24 rate,
+         * matching the NoteSession exit-hint); solid white on the other three
+         * as a "press to switch Move tracks" affordance. Force-refresh every
+         * 8 ticks so any sporadic Move firmware overwrites self-correct. */
+        const _coRunCh  = (S.trackChannel[S.moveCoRunTrack] | 0);
+        const _coRunCC  = (_coRunCh >= 1 && _coRunCh <= 4) ? (44 - _coRunCh) : -1;
+        const _crForce  = (S.tickCount % 8) === 0;
+        const _crBlink  = (Math.floor(S.tickCount / 24) % 2) ? White : LED_OFF;
+        for (let _i = 0; _i < 4; _i++) {
+            const _cc = 40 + _i;
+            if (_cc === _coRunCC) setButtonLED(_cc, _crBlink, _crForce);
+            else if (_crForce)   setButtonLED(_cc, White, true);
         }
         return;
     }

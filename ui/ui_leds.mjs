@@ -380,10 +380,10 @@ export function updateTrackLEDs() {
         }
     }
 
-    /* Move-native co-run: Move firmware owns CCs 40-43 while active, leaving
-     * its own colors on the LEDs when the user exits. dAVEBOx must reclaim
-     * those LEDs once, otherwise the prior Move-native colors persist into
-     * dAVEBOx track view. Parallel latch to the Schwung path above. */
+    /* Move-native co-run: drawUI() returns early in co-run and handles the
+     * track-button blink directly there (setButtonLED in the early-return block).
+     * This path only fires on co-run EXIT to reclaim the four CCs from Move
+     * firmware so its colors don't persist into dAVEBOx track view. */
     {
         const inMoveCoRun = (S.moveCoRunTrack | 0) >= 0;
         if (inMoveCoRun) {
