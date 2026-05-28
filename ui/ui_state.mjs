@@ -88,6 +88,11 @@ export const S = {
     /* Per-track-per-lane playback direction for drum (active clip's lane).
      * Mirrors DSP drum lane clip.playback_dir; refreshed on lane / clip switch. */
     drumLanePlaybackDir: Array.from({length: 8}, () => new Array(32).fill(0)),
+    /* Per-clip playback style: 0=Step, 1=Audio (note-on at note's end in
+     * reverse motion). Mirrors DSP clip.playback_audio_reverse. */
+    clipPlaybackAudioReverse: Array.from({length: 8}, () => new Array(16).fill(0)),
+    /* Per-track-per-lane playback style for drum. */
+    drumLanePlaybackAudioReverse: Array.from({length: 8}, () => new Array(32).fill(0)),
     clipSeqFollow: Array.from({length: 8}, () => new Array(16).fill(true)),
     trackCurrentStep: new Array(8).fill(-1),
     trackCurrentPage: new Array(8).fill(0),
