@@ -2972,13 +2972,11 @@ static void send_panic(seq8_instance_t *inst) {
             pfx_send(fx, (uint8_t)(0xB0 | ch), 123, 0); /* All Notes Off */
         }
     }
-    if (route_pfx[ROUTE_MOVE]) {
-        /* silence_active_notes_move() already handled tracked notes per track;
-         * CC 123 sweep covers anything Move is still sustaining off-book. */
-        play_fx_t *fx = route_pfx[ROUTE_MOVE];
-        for (ch = 0; ch < 16; ch++)
-            pfx_send(fx, (uint8_t)(0xB0 | ch), 123, 0); /* All Notes Off */
-    }
+    /* ROUTE_MOVE: skip CC 123 sweep. Move's voice allocator corrupts when
+     * CC 123 (all-notes-off) is followed by explicit note-offs for pitches
+     * already killed by the CC. silence_track_notes_v2 already sent
+     * per-note note-offs for every sounding voice, so the sweep is
+     * redundant here. */
 }
 
 /* ------------------------------------------------------------------ */

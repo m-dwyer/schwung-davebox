@@ -11,6 +11,8 @@ the section into a versioned heading at release time.
 - **Drum step edit overlay now uses 4-column layout** matching melodic step edit. Row 1: Leng / Vel / Nudg (K1-K3), Row 2: Iter / Prob / Ratch (K5-K7). K4 and K8 are unused.
 
 ### Fixes
+- **No more stuck notes when changing playback direction during playback.** Switching Dir (Fwd/Bwd/PPf/PPb) now sends note-offs for all currently sounding notes on the track, with proper ROUTE_MOVE deferred-drain handling.
+- **Fixed Move synth voice corruption after stopping legato clip playback.** Transport stop was sending CC 123 (all-notes-off) followed by explicit per-note note-offs via `midi_inject_to_move`; the Move voice allocator corrupts on that sequence. Fix: skip the CC 123 sweep for ROUTE_MOVE since `silence_track_notes_v2` already sends per-note note-offs.
 - **Bank param resets now also reset Dir→Fwd, RvSt→Step, SqFl→On.** Both Delete+Jog (single bank reset) and Shift+Delete+Jog (full clip/lane params reset) now clear playback direction, audio-reverse style, and seq-follow back to defaults on drum and melodic tracks.
 - **Drum Shift+Delete+Jog popup now reads "LANE PARAMS RESET"** instead of the misleading "CLIP PARAMS RESET".
 - **Alt-mode label "RvSt" renamed to "Rvrs"** on drum lane, all lanes, and clip bank OLED displays.

@@ -2,6 +2,24 @@
 /* set_param helpers                                                    */
 /* ------------------------------------------------------------------ */
 
+/* Silence all sounding notes on a track, with ROUTE_MOVE workaround.
+ * pfx_send from set_param context doesn't release Move synth voices, so
+ * for ROUTE_MOVE we reschedule queued note-offs to fire from render_block
+ * and wipe active_notes (same pattern as transport stop). */
+static void silence_track_from_set_param(seq8_instance_t *inst, seq8_track_t *tr) {
+    play_fx_t *fx = &tr->pfx;
+    silence_track_notes_v2(inst, tr);
+    if (fx->route == ROUTE_MOVE) {
+        int ei;
+        for (ei = 0; ei < fx->event_count; ei++)
+            fx->events[ei].fire_at = fx->sample_counter;
+        memset(fx->active_notes, 0, sizeof(fx->active_notes));
+    } else {
+        fx->event_count = 0;
+        memset(fx->active_notes, 0, sizeof(fx->active_notes));
+    }
+}
+
 /* Apply a play-effects key/value to a track's live pfx and to a caller-supplied
  * pfx_params (melodic: active clip; drum: specific lane). */
 static void pfx_set(seq8_instance_t *inst, seq8_track_t *tr,
@@ -2911,6 +2929,7 @@ static void set_param(void *instance, const char *key, const char *val) {
             if (!strcmp(p2, "_playback_dir")) {
                 dlc->playback_dir = (uint8_t)clamp_i(my_atoi(val), 0, 3);
                 dlc->pp_dir_state = initial_pp_dir(dlc->playback_dir);
+                silence_track_from_set_param(inst, tr);
                 inst->state_dirty = 1;
                 return;
             }
@@ -4172,6 +4191,7 @@ static void set_param(void *instance, const char *key, const char *val) {
                 dc_ad->lanes[l_ad].clip.playback_dir = (uint8_t)v;
                 dc_ad->lanes[l_ad].clip.pp_dir_state = initial_pp_dir((uint8_t)v);
             }
+            silence_track_from_set_param(inst, tr);
             inst->state_dirty = 1;
             return;
         }
@@ -5153,6 +5173,7 @@ static void set_param(void *instance, const char *key, const char *val) {
             clip_t *cl = &tr->clips[tr->active_clip];
             cl->playback_dir = (uint8_t)clamp_i(my_atoi(val), 0, 3);
             cl->pp_dir_state = initial_pp_dir(cl->playback_dir);
+            silence_track_from_set_param(inst, tr);
             inst->state_dirty = 1;
             return;
         }
