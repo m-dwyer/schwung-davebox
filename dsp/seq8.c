@@ -135,6 +135,7 @@ typedef struct {
     uint8_t  active;
     uint8_t  channel;
     uint64_t on_time;
+    uint64_t gate_override_smp; /* sequenced note: Len-aware gate in samples; 0 = use pfx_gate_smp() */
     uint8_t  orig_velocity;
     uint8_t  gen_notes[MAX_GEN_NOTES];
     int      gen_count;
@@ -2999,6 +3000,18 @@ static uint64_t pfx_gate_smp(seq8_instance_t *inst, seq8_track_t *tr) {
     return (uint64_t)(g + 0.5);
 }
 
+/* Convert a Len/gate-aware sequencer-tick duration (96 PPQN) to samples for the
+ * pfx event queue. Used by sequenced playback so the emitted note-off honors the
+ * full per-note gate (NOTE FX Len + gate_time) rather than pfx_gate_smp's fixed
+ * GATE_TICKS floor — which otherwise clamped short Len values (e.g. .25) up. */
+static inline uint64_t pfx_ticks_to_smp(seq8_instance_t *inst, seq8_track_t *tr,
+                                        uint32_t ticks) {
+    double sp = pfx_spc(inst, tr);
+    double s  = (double)ticks * (double)TICKS_TO_480PPQN * sp;
+    if (s < 1.0 && ticks > 0) s = 1.0;
+    return (uint64_t)(s + 0.5);
+}
+
 /* ------------------------------------------------------------------ */
 /* Event queue (direct port from NoteTwist)                            */
 /* ------------------------------------------------------------------ */
@@ -3768,7 +3781,8 @@ static void pfx_note_off(seq8_instance_t *inst, seq8_track_t *tr,
     if (!an->active) return;
 
     uint64_t now      = fx->sample_counter;
-    uint64_t gate_smp = pfx_gate_smp(inst, tr);
+    uint64_t gate_smp = an->gate_override_smp ? an->gate_override_smp
+                                              : pfx_gate_smp(inst, tr);
     uint64_t off_time = an->on_time + gate_smp;
     uint8_t  off_s    = (uint8_t)(0x80 | an->channel);
 
@@ -9422,8 +9436,11 @@ static void render_block(void *instance, int16_t *out_lr, int frames) {
                         /* Fire note-on (melodic/drum split by lane_idx) */
                         if (_rp_lane != 0xFF)
                             drum_pfx_note_on(inst, tr, &tr->drum_lane_pfx[_rp_lane], _rp_pitch, _rp_vel);
-                        else
+                        else {
                             pfx_note_on(inst, tr, _rp_pitch, _rp_vel);
+                            tr->pfx.active_notes[_rp_pitch].gate_override_smp =
+                                pfx_ticks_to_smp(inst, tr, (uint32_t)_rp_gate);
+                        }
                         /* Push to play_pending for the sub-hit's own gate countdown */
                         if (tr->play_pending_count < 32) {
                             int _pi = (int)tr->play_pending_count;
@@ -9658,6 +9675,8 @@ static void render_block(void *instance, int16_t *out_lr, int frames) {
                             tr->note_active = 1;
                         }
                         pfx_note_on(inst, tr, n->pitch, n->vel);
+                        tr->pfx.active_notes[n->pitch].gate_override_smp =
+                            pfx_ticks_to_smp(inst, tr, (uint32_t)_sub_gate);
                         if (_ratch > 1) {
                             int _k;
                             for (_k = 1; _k < _ratch; _k++) {
