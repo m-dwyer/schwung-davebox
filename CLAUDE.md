@@ -4,7 +4,7 @@
 
 ## Session workflow
 
-- **Start of session**: run `~/schwung-docs/update.sh` and report the result. Then read `graphify-out/GRAPH_REPORT.md` to orient on god nodes and community structure. If unsure about a platform API, grep `~/schwung-docs/` rather than assuming.
+- **Start of session**: run `~/schwung-docs/update.sh` and report the result. Then read `graphify-out/GRAPH_REPORT.md` to orient on god nodes and community structure. If unsure about a platform API, grep `~/schwung-docs/` rather than assuming. Check for pad-drop diagnostic: `ssh ableton@move.local "cat /data/UserData/schwung/seq8-pad-drop.log 2>/dev/null"` — if non-empty, report to user immediately (see **Pad drop diagnostic** below).
 - **Validate before acting** — read or grep actual code first. Never act on assumptions.
 - **Branching** — create a new branch for each refactor / major feature addition / major revision (`git checkout -b <descriptive-name>` off `main` before any code changes). Small, isolated fixes can land directly on main. When in doubt, branch. One commit per logical change. Merge to main with fast-forward when the work is verified and approved.
 - **Deploy and verify on device before reporting done** — always build+install and confirm on Move.
@@ -60,6 +60,12 @@ Set-duplicate inheritance: when init detects a Copy-suffixed name + missing stat
 - **pfx_send from set_param context does NOT release Move synth voices.**
 - **`get_clock_status` is NULL**; `get_bpm` doesn't track BPM changes while stopped.
 - **Do not load dAVEBOx from within dAVEBOx** — LED corruption. Shift+Back first.
+
+## Pad drop diagnostic
+
+Intermittent bug: drum pad live notes stop reaching the output while sequenced playback continues. Suspected cause: `pad_note_map` in DSP stuck at all-0xFF after a coalesced `tN_padmap` push (e.g. session view exit + modifier edge in the same buffer). Self-heal in `tick()` reads back `pad_note_map_0` every 5 ticks and re-pushes on mismatch. DSP `on_midi` logs unexpected drops to `/data/UserData/schwung/seq8-pad-drop.log` (separate from seq8.log). JS `init()` checks for this file and shows a `PAD DROP Nx` popup on next launch.
+
+**Session start check**: `ssh ableton@move.local "cat /data/UserData/schwung/seq8-pad-drop.log 2>/dev/null"`. If non-empty, report contents to user and note timestamp context. The file is cleared by JS on init after reading. Key fields: `pad` (0-31 index), `t` (track), `enabled` (should be 1). If the file never appears, the cause is upstream of `on_midi` (Schwung not delivering pad MIDI).
 
 ## QuickJS compatibility
 

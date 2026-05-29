@@ -1243,6 +1243,7 @@ function _switchActiveTrack(newT) {
     S.trackActiveBank[S.activeTrack] = S.activeBank;
     S.activeTrack = newT | 0;
     S.activeBank = S.trackActiveBank[S.activeTrack] | 0;
+    if (S.activeBank === 7) S.allLanesConfirmed = false;
     /* Focused-clip-by-default: ONLY while transport is running — entering a track
      * launches its focused clip so it's live. While stopped we do NOT arm (passive
      * track-scrolling must not queue clips for the next transport start); the
@@ -1641,9 +1642,8 @@ function clipHasContent(t, c) {
  * - ARP step-edit pad mode      — K5 held in SEQ ARP (bank 4) or TRACK ARP
  *                                  (bank 5) with steps mode != Off; pads edit
  *                                  step velocity, not play notes
- * globalMenuOpen and rndDialogMode are NOT in this list — pads should still
- * play notes in track view while those dialogs are open (user confirmed
- * 2026-05-17). Remove when patches upstreamed. */
+ * globalMenuOpen is NOT in this list — pads should still play notes in
+ * track view while the menu is open (user confirmed 2026-05-17). */
 function _padDispatchMutedNow() {
     if (S.sessionView) return true;
     if (S.shiftHeld || S.deleteHeld || S.muteHeld || S.copyHeld
@@ -2886,11 +2886,11 @@ function applyExtMidiRemap() {
  * sync with the shiftHeld→altMode migration sites. */
 function bankHasAltParams(t, bank) {
     if (S.trackPadMode[t] === PAD_MODE_DRUM) return bank === 0 || bank === 5 || bank === 7;
-    /* Melodic CLIP(0), DELAY(3), SEQ ARP(4), ARP IN(5), AUTO/CC(6). Banks 4/5 use
-     * stepIntervalMode (Arp Steps overlay) rather than altMode — the arrow still
-     * shows their toggle-availability, and altIndicatorActive() reflects which
-     * underlying flag is on. */
-    return bank === 0 || bank === 3 || bank === 4 || bank === 5 || bank === 6;
+    /* Melodic CLIP(0), NOTE FX(1), DELAY(3), SEQ ARP(4), ARP IN(5), AUTO/CC(6).
+     * Banks 4/5 use stepIntervalMode (Arp Steps overlay) rather than altMode —
+     * the arrow still shows their toggle-availability, and altIndicatorActive()
+     * reflects which underlying flag is on. */
+    return bank === 0 || bank === 1 || bank === 3 || bank === 4 || bank === 5 || bank === 6;
 }
 
 /* Returns true when the current bank's alt indicator should flash. For melodic
@@ -3613,9 +3613,10 @@ function drawUI() {
             const lane = S.activeDrumLane[t];
             if (S.heldStepNotes.length > 0) {
                 const tps   = S.drumLaneTPS[t] || 24;
+                const _gateSteps = S.stepEditGate / tps;
                 const LABELS = ['Leng', 'Vel', 'Nudg', '--', 'Iter', 'Prob', 'Ratch', '--'];
                 const VALS   = [
-                    (S.stepEditGate / tps).toFixed(1),
+                    _gateSteps % 1 === 0 ? _gateSteps.toFixed(0) : _gateSteps.toFixed(2),
                     String(S.stepEditVel),
                     (S.stepEditNudge >= 0 ? '+' : '') + String(S.stepEditNudge),
                     '',
@@ -3650,11 +3651,12 @@ function drawUI() {
                 ? midiNoteName(root) + '+' + (S.heldStepNotes.length - 1)
                 : midiNoteName(root);
             const tps = S.clipTPS[S.activeTrack][ac] || 24;
+            const _gateSteps = S.stepEditGate / tps;
             const LABELS = ['Oct', 'Note', 'Leng', 'Vel', 'Nudg', 'Iter', 'Prob', 'Ratch'];
             const VALS   = [
                 noteLabel,
                 noteLabel,
-                (S.stepEditGate / tps).toFixed(1),
+                _gateSteps % 1 === 0 ? _gateSteps.toFixed(0) : _gateSteps.toFixed(2),
                 String(S.stepEditVel),
                 (S.stepEditNudge >= 0 ? '+' : '') + String(S.stepEditNudge),
                 formatStepIter(S.stepEditIter),
@@ -3792,6 +3794,15 @@ function drawUI() {
                 print(colX, rowY,      col4(drumLaneLabels[k]), hi ? 0 : 1);
                 print(colX, rowY + 12, col4(drumLaneVals[k]),   hi ? 0 : 1);
             }
+        } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 7 && !S.allLanesConfirmed) {
+            /* ALL LANES confirmation screen */
+            fill_rect(0, 0, 128, 9, 1);
+            print(4, 1, 'ALL LANES', 0);
+            print(106, 1, 'Tr' + (S.activeTrack + 1), 0);
+            print(10, 18, 'Edits will affect', 1);
+            print(10, 28, 'all lanes.', 1);
+            fill_rect(40, 44, 48, 16, 1);
+            print(52, 48, 'OK', 0);
         } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 7) {
             /* ALL LANES bank overview */
             const t = S.activeTrack;
@@ -3820,9 +3831,6 @@ function drawUI() {
                 const rowY = k < 4 ? 12 : 36;
                 const hi   = (S.knobTouched === k);
                 if (hi) fill_rect(colX, rowY, 24, 24, 1);
-                /* Labels longer than 4 chars (e.g. SyncRpt) render full-width
-                 * and spill into the adjacent (unused) column. Short labels
-                 * still get col4 padding for column alignment. */
                 const _lbl = allLabels[k];
                 print(colX, rowY,      _lbl.length > 4 ? _lbl : col4(_lbl), hi ? 0 : 1);
                 print(colX, rowY + 12, col4(allVals[k]),   hi ? 0 : 1);
@@ -3911,25 +3919,6 @@ function drawUI() {
                 : vs + '%';
             print(colX, rowY + 12, col4(disp), hi ? 0 : 1);
         }
-        } else if (S.shiftHeld && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM &&
-                ((bank === 1 && S.knobTouched === 7) || (bank === 3 && S.knobTouched === 7))) {
-        /* Rnd algorithm selector: shown while Rnd knob is touched/recently turned */
-        const t      = S.activeTrack;
-        const isMidi = bank === 3;
-        const committed = isMidi ? (S.midiDlyRandomMode[t] || 0) : (S.noteFXRandomMode[t] || 0);
-        const mode   = S.rndDialogMode >= 0 ? S.rndDialogMode : committed;
-        const ALG_NAMES = ['UNIFORM', 'GAUSSIAN', 'WALK'];
-        const header = isMidi ? '[ DLY PITCH ]' : '[ NOTE FX   ]';
-        const hw = header.length * 6;
-        print(Math.floor((128 - hw) / 2), 4, header, 1);
-        fill_rect(Math.floor((128 - hw) / 2), 13, hw, 1, 1);
-        for (let i = 0; i < 3; i++) {
-            const y  = 19 + i * 15;
-            const hi = (mode === i);
-            if (hi) fill_rect(2, y - 1, 124, 13, 1);
-            const lw = ALG_NAMES[i].length * 6;
-            print(Math.floor((128 - lw) / 2), y, ALG_NAMES[i], hi ? 0 : 1);
-        }
         } else if (bank === 6) {
         /* CC PARAM bank overview: label = CC# or "AT" (aftertouch); value =
          * stopped → clip resting value or "—"; playing → defined value at the
@@ -3982,21 +3971,24 @@ function drawUI() {
         const t     = S.activeTrack;
         const knobs = BANKS[1].knobs;
         const vals  = S.bankParams[t][1];
+        const RND_ALG_NAMES_NFX = ['Pure', 'Gaus', 'Walk'];
         drawBankHeading(BANKS[1].name);
+        drawAltArrow(98, true, altIndicatorActive(S.activeTrack, S.activeBank));
         for (let k = 0; k < 8; k++) {
             if (k === 6) continue;  /* K7 blocked, no render */
             const colX = 4 + (k % 4) * 30;
             const rowY = k < 4 ? 12 : 36;
             const hi   = (S.knobTouched === k);
-            /* K6 (>Gate) is 5 chars (30px) — widen its highlight cell and render
-             * the label raw, since col4 would truncate the leading '>'. */
             const widen = (k === 5);
             const cellW = widen ? 30 : 24;
             if (hi) fill_rect(colX, rowY, cellW, 24, 1);
+            const _nfxAlt = S.altMode && k === 7;
             if (widen) {
-                /* K6 >Gate raw label (5 chars), value via fmt */
                 print(colX, rowY,      '>Gate',                       hi ? 0 : 1);
                 print(colX, rowY + 12, col4(knobs[k].fmt(vals[k])),   hi ? 0 : 1);
+            } else if (_nfxAlt) {
+                print(colX, rowY,      col4('Algo'),                   hi ? 0 : 1);
+                print(colX, rowY + 12, col4(RND_ALG_NAMES_NFX[S.noteFXRandomMode[t] || 0]), hi ? 0 : 1);
             } else {
                 print(colX, rowY,      col4(knobs[k].abbrev),         hi ? 0 : 1);
                 print(colX, rowY + 12, col4(knobs[k].fmt(vals[k])),   hi ? 0 : 1);
@@ -4041,17 +4033,21 @@ function drawUI() {
              * remap; no flip needed. */
             const _delayShiftClkF = S.altMode && !_isDrum && bank === 3 && k === 0;
             const _clipDirAlt    = S.altMode && !_isDrum && knobs[k].dspKey === 'clip_playback_dir';
+            const _rndAltAlgo    = S.altMode && !_isDrum && (bank === 1 || bank === 3) && k === 7;
+            const RND_ALG_NAMES  = ['Pure', 'Gaus', 'Walk'];
             if (S.altMode) {
                 if      (knobs[k].dspKey === 'clock_shift')    _lbl = 'Nudg';
                 else if (knobs[k].dspKey === 'clip_resolution') _lbl = 'Zoom';
                 else if (knobs[k].dspKey === 'clip_playback_dir') _lbl = 'Rvrs';
                 else if (_delayShiftClkF)                       _lbl = 'ClkF';
+                else if (_rndAltAlgo)                           _lbl = 'Algo';
             }
             print(colX, rowY,      _lbl, hi ? 0 : 1);
             /* Arp Rate (Rate knob in SEQ ARP / ARP IN) uses 5-char labels for
              * triplets ('1/16t','1/32t'). Skip the 4-char padding so the 't'
              * isn't truncated — the cell has ~24px and the raw string fits. */
-            const _rawVal = _delayShiftClkF ? fmtSign(S.delayClockFb[S.activeTrack])
+            const _rawVal = _rndAltAlgo   ? RND_ALG_NAMES[bank === 3 ? (S.midiDlyRandomMode[S.activeTrack] || 0) : (S.noteFXRandomMode[S.activeTrack] || 0)]
+                          : _delayShiftClkF ? fmtSign(S.delayClockFb[S.activeTrack])
                           : _clipDirAlt     ? fmtRevStyle(S.clipPlaybackAudioReverse[S.activeTrack][effectiveClip(S.activeTrack)] | 0)
                           : (knobs[k].abbrev ? knobs[k].fmt(vals[k]) : null);
             const _txt    = (knobs[k].fmt === fmtArpRate && !_delayShiftClkF) ? (_rawVal || '-') : col4(_rawVal);
@@ -4663,6 +4659,7 @@ function restoreUiSidecar(applyDefaultsNow) {
              * post-restore validity checks (e.g. hide bank 7 on melodic) still
              * apply because activeBank is a regular live variable from here on. */
             S.activeBank = S.trackActiveBank[S.activeTrack] | 0;
+            if (S.activeBank === 7) S.allLanesConfirmed = false;
         }
         if (us.v >= 9 && Array.isArray(us.am)) {
             for (let _t = 0; _t < NUM_TRACKS; _t++) {
@@ -5062,6 +5059,15 @@ function _tickImpl() {
                 const _dspMi = parseInt(_dspM, 10);
                 const _jsM = _muted ? 1 : 0;
                 if (_dspMi !== _jsM) computePadNoteMap();
+            }
+            const _dspMap0 = host_module_get_param('pad_note_map_0');
+            if (_dspMap0 !== null && _dspMap0 !== undefined) {
+                const _dspMap0i = parseInt(_dspMap0, 10);
+                const _jsMap0 = _muted && S.sessionView ? 0xFF
+                    : Math.max(0, Math.min(127, (S.padNoteMap[0] | 0) +
+                        (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM ? 0 : (S.trackOctave[S.activeTrack] | 0) * 12)));
+                const _expect = S.padNoteMap[0] === 0xFF ? 255 : _jsMap0;
+                if (_dspMap0i !== _expect) computePadNoteMap();
             }
         }
     }
@@ -5554,7 +5560,6 @@ function _tickImpl() {
         }
         if (S.knobTouched >= 0 && S.knobTurnedTick[S.knobTouched] >= 0 &&
                 (S.tickCount - S.knobTurnedTick[S.knobTouched]) >= KNOB_TURN_HIGHLIGHT_TICKS) {
-            S.rndDialogMode = -1;
             S.knobTouched = -1;
             S.screenDirty = true;
         }
@@ -6504,6 +6509,12 @@ function _onCC_jog(d1, d2) {
      * (REPEAT GROOVE) correctly falls through here to toggle VEL/NUDGE. */
     if (d1 === 3 && d2 === 127 && !S.shiftHeld && !S.deleteHeld && !S.copyHeld && !S.muteHeld &&
             !S.sessionView && bankHasAltParams(S.activeTrack, S.activeBank)) {
+        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.activeBank === 7 && !S.allLanesConfirmed) {
+            S.allLanesConfirmed = true;
+            S.screenDirty = true;
+            forceRedraw();
+            return;
+        }
         S.altMode = !S.altMode;
         S.screenDirty = true;
         forceRedraw();
@@ -6747,6 +6758,7 @@ function _onCC_jog(d1, d2) {
                     if (next !== cur) {
                         S.activeBank = next;
                         S.trackActiveBank[S.activeTrack] = next;
+                        if (next === 7) S.allLanesConfirmed = false;
                         readBankParams(S.activeTrack, next);
                         S.bankSelectTick = S.tickCount;
                         writeSidecar();
@@ -6769,7 +6781,6 @@ function _onCC_buttons(d1, d2) {
          * the real map again on release. See computePadNoteMap mute logic. */
         computePadNoteMap();
         if (!S.shiftHeld && S.jogTouched) S.jogTouched = false;
-        if (!S.shiftHeld && S.rndDialogMode >= 0) { S.rndDialogMode = -1; S.screenDirty = true; }
         /* Deferred Shift+Step3 dispatch: fire on Shift release so the Shift
          * held state doesn't leak into Move firmware / Schwung chain editor. */
         if (!S.shiftHeld && S.pendingEditEntryTrack >= 0) {
@@ -7882,11 +7893,15 @@ function _onCC_stepedit(d1, d2) {
         if (knobIdx === 0) {
             const _tpsD = S.drumLaneTPS[t] || 24;
             const _gmaxD = Math.min(65535, 256 * _tpsD);
-            const _stepD = S.stepEditGate <= _tpsD / 2   ? 1
-                         : S.stepEditGate <= _tpsD * 2   ? Math.round(_tpsD / 4)
-                         : S.stepEditGate <= _tpsD * 8   ? Math.round(_tpsD / 2)
-                         :                                  _tpsD;
-            S.stepEditGate = Math.max(1, Math.min(_gmaxD, S.stepEditGate + dir * _stepD));
+            const _acc = ccKnobDelta(d2, knobIdx);
+            if (_acc === 0) return;
+            const _steps = S.stepEditGate / _tpsD;
+            const _inc = _steps <= 16 ? Math.round(_tpsD / 4)
+                       : _steps <= 64 ? _tpsD
+                       :                 _tpsD * 8;
+            let _nv = S.stepEditGate + _acc * _inc;
+            if (_inc > 1) _nv = Math.round(_nv / _inc) * _inc;
+            S.stepEditGate = Math.max(1, Math.min(_gmaxD, _nv));
             if (typeof host_module_set_param === 'function')
                 host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_gate', String(S.stepEditGate));
         } else if (knobIdx === 1) {
@@ -7972,15 +7987,19 @@ function _onCC_stepedit(d1, d2) {
                     host_module_set_param(pfx + '_set_notes', S.heldStepNotes.join(' '));
             }
         } else if (knobIdx === 2) {
-            /* K3 Dur: variable step — fine at short gates, coarse at long gates */
+            /* K3 Dur: accelerated with breakpoints at 16/64 steps */
             { const _acD = effectiveClip(S.activeTrack);
               const _tpsD = S.clipTPS[S.activeTrack][_acD] || 24;
               const _gmaxD = Math.min(65535, 256 * _tpsD);
-              const _stepD = S.stepEditGate <= _tpsD / 2   ? 1
-                           : S.stepEditGate <= _tpsD * 2   ? Math.round(_tpsD / 4)
-                           : S.stepEditGate <= _tpsD * 8   ? Math.round(_tpsD / 2)
-                           :                                  _tpsD;
-              S.stepEditGate = Math.max(1, Math.min(_gmaxD, S.stepEditGate + dir * _stepD)); }
+              const _acc = ccKnobDelta(d2, knobIdx);
+              if (_acc === 0) return;
+              const _steps = S.stepEditGate / _tpsD;
+              const _inc = _steps <= 16 ? Math.round(_tpsD / 4)
+                         : _steps <= 64 ? _tpsD
+                         :                 _tpsD * 8;
+              let _nv = S.stepEditGate + _acc * _inc;
+              if (_inc > 1) _nv = Math.round(_nv / _inc) * _inc;
+              S.stepEditGate = Math.max(1, Math.min(_gmaxD, _nv)); }
             if (typeof host_module_set_param === 'function')
                 host_module_set_param(pfx + '_gate', String(S.stepEditGate));
         } else if (knobIdx === 3) {
@@ -8258,6 +8277,10 @@ function _onCC_knobs(d1, d2) {
             }
         }
         /* ALL LANES bank (drum, bank 7): K1=Res K2=Stch K3=Shft K4=Qnt K5=VelIn K6=InQ K7=Dir K8=SyncRpt */
+        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 7 && !S.allLanesConfirmed) {
+            S.screenDirty = true;
+            return;
+        }
         if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 7) {
             const t   = S.activeTrack;
             const dir = (d2 >= 1 && d2 <= 63) ? 1 : -1;
@@ -8600,8 +8623,8 @@ function _onCC_knobs(d1, d2) {
             S.screenDirty = true;
             return;
         }
-        /* Rnd knob in NOTE FX (K8) or MIDI DLY (K8) on melodic + Shift: scroll algorithm dialog */
-        if (S.shiftHeld && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM &&
+        /* Alt+K8 on NOTE FX (bank 1) or DELAY (bank 3), melodic: cycle random algorithm (Pure/Gaus/Walk) */
+        if (S.altMode && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM &&
                 ((bank === 1 && knobIdx === 7) || (bank === 3 && knobIdx === 7))) {
             const dir = (d2 >= 1 && d2 <= 63) ? 1 : -1;
             if (dir !== S.knobLastDir[knobIdx]) { S.knobAccum[knobIdx] = 0; S.knobLastDir[knobIdx] = dir; }
@@ -8609,9 +8632,13 @@ function _onCC_knobs(d1, d2) {
             if (S.knobAccum[knobIdx] >= 16) {
                 S.knobAccum[knobIdx] = 0;
                 const t = S.activeTrack;
-                const cur = S.rndDialogMode >= 0 ? S.rndDialogMode
-                    : (bank === 3 ? (S.midiDlyRandomMode[t] || 0) : (S.noteFXRandomMode[t] || 0));
-                S.rndDialogMode = ((cur + dir) % 3 + 3) % 3;
+                const isMidi = bank === 3;
+                const cur = isMidi ? (S.midiDlyRandomMode[t] || 0) : (S.noteFXRandomMode[t] || 0);
+                const nv = ((cur + dir) % 3 + 3) % 3;
+                if (isMidi) { S.midiDlyRandomMode[t] = nv; }
+                else        { S.noteFXRandomMode[t]  = nv; }
+                if (typeof host_module_set_param === 'function')
+                    host_module_set_param(isMidi ? 'delay_pitch_random_mode' : 'noteFX_random_mode', String(nv));
                 S.screenDirty = true;
             }
             return;
@@ -9314,6 +9341,7 @@ function _onPadPressTrackView(status, d1, d2) {
                 } else {
                     S.activeBank = bankIdx;
                     S.trackActiveBank[S.activeTrack] = bankIdx;
+                    if (bankIdx === 7) S.allLanesConfirmed = false;
                     readBankParams(S.activeTrack, bankIdx);
                     S.bankSelectTick = S.tickCount;
                     writeSidecar();
@@ -10692,15 +10720,6 @@ function _onMidiInternalImpl(data) {
                         host_module_set_param('t' + S.activeTrack + '_cc_touch', d1 + ' 0 0');
                     /* SEQ ARP K5 / TRACK ARP K5 release: refresh pads (vel-slider editor → normal pads). */
                     if ((S.activeBank === 4 && d1 === 4) || (S.activeBank === 5 && d1 === 4)) forceRedraw();
-                    /* Rnd dialog: commit selected algorithm on physical release */
-                    if (S.rndDialogMode >= 0) {
-                        const _rt = S.activeTrack, _rb = S.activeBank;
-                        if (_rb === 3) { S.midiDlyRandomMode[_rt] = S.rndDialogMode;
-                            if (typeof host_module_set_param === 'function') host_module_set_param('delay_pitch_random_mode', String(S.rndDialogMode)); }
-                        else           { S.noteFXRandomMode[_rt]  = S.rndDialogMode;
-                            if (typeof host_module_set_param === 'function') host_module_set_param('noteFX_random_mode',        String(S.rndDialogMode)); }
-                        S.rndDialogMode = -1;
-                    }
                     S.knobTouched = -1;
                     S.knobLocked[d1] = false;
                     S.knobAccum[d1]  = 0;
@@ -10737,15 +10756,6 @@ function _onMidiInternalImpl(data) {
                     }
                 }
                 if ((S.activeBank === 4 && d1 === 4) || (S.activeBank === 5 && d1 === 4)) forceRedraw();
-                /* Rnd dialog: commit selected algorithm on physical release (0x80 path) */
-                if (S.rndDialogMode >= 0) {
-                    const _rt = S.activeTrack, _rb = S.activeBank;
-                    if (_rb === 3) { S.midiDlyRandomMode[_rt] = S.rndDialogMode;
-                        if (typeof host_module_set_param === 'function') host_module_set_param('delay_pitch_random_mode', String(S.rndDialogMode)); }
-                    else           { S.noteFXRandomMode[_rt]  = S.rndDialogMode;
-                        if (typeof host_module_set_param === 'function') host_module_set_param('noteFX_random_mode',        String(S.rndDialogMode)); }
-                    S.rndDialogMode = -1;
-                }
                 S.knobTouched = -1;
                 S.knobLocked[d1] = false;
                 S.knobAccum[d1]  = 0;

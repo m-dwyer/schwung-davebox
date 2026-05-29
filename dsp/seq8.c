@@ -34,6 +34,7 @@
 /* ------------------------------------------------------------------ */
 
 #define SEQ8_LOG_PATH           "/data/UserData/schwung/seq8.log"
+#define SEQ8_PAD_DROP_LOG_PATH  "/data/UserData/schwung/seq8-pad-drop.log"
 #define SEQ8_STATE_PATH_FALLBACK "/data/UserData/schwung/seq8-state.json"
 
 #define NUM_TRACKS          8
@@ -6316,7 +6317,18 @@ static void on_midi(void *instance, const uint8_t *msg, int len, int source) {
         }
     }
 
-    if (pitch == 0xFF) return;          /* map not yet populated for this track */
+    if (pitch == 0xFF) {
+        if (is_on && !inst->pad_dispatch_muted) {
+            FILE *_df = fopen(SEQ8_PAD_DROP_LOG_PATH, "a");
+            if (_df) {
+                fprintf(_df, "DROP pad=%d t=%d map=0xFF enabled=%d\n",
+                        padIdx, (int)t, (int)inst->dsp_inbound_enabled);
+                fflush(_df);
+                fclose(_df);
+            }
+        }
+        return;
+    }
 
     /* PHASE-1: snapshot the actual press/release moment so the record-path
      * handlers use this tick (audio-thread, single-buffer precision) instead
@@ -8207,6 +8219,8 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
         return snprintf(out, out_len, "%d", (int)inst->state_dirty);
     if (!strcmp(key, "pad_dispatch_muted"))
         return snprintf(out, out_len, "%d", inst ? (int)inst->pad_dispatch_muted : 0);
+    if (!strcmp(key, "pad_note_map_0"))
+        return snprintf(out, out_len, "%d", inst ? (int)inst->pad_note_map[inst->active_track][0] : 255);
     if (!strcmp(key, "last_restore"))
         return snprintf(out, out_len, "%s", inst->last_restore_info);
 
