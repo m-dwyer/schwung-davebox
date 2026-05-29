@@ -8,7 +8,13 @@ the section into a versioned heading at release time.
 
 ## [Unreleased]
 ### Performance / UX
+- **Random mode selector moved to jog-click alt param.** K8 on NOTE FX and DELAY banks now shows Algo (Pure/Gaus/Walk) in alt mode instead of the old Shift+turn full-screen dialog.
+- **All Lanes bank now requires confirmation.** Entering ALL LANES shows "Edits will affect all lanes." with OK; knobs are blocked until jog-click confirms. Bank navigation remains unblocked.
+- **Step edit length knob refined.** Breakpoints at 16/64 steps (0.25/1/8-step increments), ccKnobDelta acceleration, grid-snap alignment. Display uses two decimals for fractional steps, whole numbers for integer steps.
 - **Drum step edit overlay now uses 4-column layout** matching melodic step edit. Row 1: Leng / Vel / Nudg (K1-K3), Row 2: Iter / Prob / Ratch (K5-K7). K4 and K8 are unused.
+
+### Fixes
+- **Pad drop self-heal.** Periodic readback of DSP pad_note_map detects and corrects stale 0xFF entries within ~50ms. Unexpected drops logged to seq8-pad-drop.log for diagnosis.
 
 ### Fixes
 - **No more stuck notes when changing playback direction during playback.** Switching Dir (Fwd/Bwd/PPf/PPb) now sends note-offs for all currently sounding notes on the track, with proper ROUTE_MOVE deferred-drain handling.
