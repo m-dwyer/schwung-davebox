@@ -47,6 +47,8 @@ dAVEBOx was built by AI goblins and meticulously designed by a human who is not 
 - Arpeggiators (Sequence Arp and Arp In) with per-step velocity and note editing
 - 16 mute/solo snapshot slots for saving and recalling track states
 - Copy/paste for notes, steps, clips, and scenes
+- Seamless suspend and resume between dAVEBOx and Schwung/Move native
+- Auto-save, Move set association, and save state snapshots that can be loaded on demand
 - 8 assignable CC lanes per track with per-clip automation at 1/32 resolution (interpolated)
 - Per-track MIDI channel and routing options (Move · Schwung · External)
 
