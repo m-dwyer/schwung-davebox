@@ -34,7 +34,7 @@ ssh ableton@move.local "tail -f /data/UserData/schwung/seq8.log"
 
 ## State format
 
-Version v=36 (only v=36 accepted). v≠36 → deleted + clean start.
+Version v=36 (only v=36 accepted). v≠36 → user confirm dialog ("Incompatible State") before erase; "No" exits module with file preserved. **Backward compatibility is a concern** — avoid bumping the state version unless the format genuinely changes. When a bump is unavoidable, prefer migrating old fields in `seq8_load_state` over wiping. Clear Session sentinel (`{"v":0}`) is silently wiped (no dialog).
 
 Note format: `tick:pitch:vel:gate;`
 
