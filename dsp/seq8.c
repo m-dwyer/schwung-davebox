@@ -6703,6 +6703,7 @@ static void undo_begin_drum_clip(seq8_instance_t *inst, int t, int c) {
     if (inst->undo_locked) return;
     int l;
     drum_clip_t *dc = inst->tracks[t].drum_clips[c];
+    if (!dc) return;
     for (l = 0; l < DRUM_LANES; l++) {
         const drum_lane_t *lane = &dc->lanes[l];
         const clip_t *src = &lane->clip;
