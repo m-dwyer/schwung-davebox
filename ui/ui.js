@@ -2840,10 +2840,11 @@ function convertTrackType(t, toDrum) {
     /* Resync inline (this runs in tick(), so get_param works): the first get
      * in syncClipsFromDsp flushes the queued convert, then reads post-convert
      * state — it also runs the drum-side syncs when the result is a drum track.
-     * Skip the (heavy, all-track) resync entirely when the track has no notes:
-     * nothing to read back, so the flip stays instant. The convert set_param
-     * still drains on its own audio buffer; JS mirror state is already correct. */
+     * Empty tracks skip the heavy all-track resync but still need a get_param
+     * barrier so the convert set_param drains before computePadNoteMap pushes
+     * tN_padmap (without the barrier, same-buffer coalescing drops the convert). */
     if (trackHasAnyData(t)) syncClipsFromDsp();
+    else host_module_get_param('t' + t + '_pad_mode');
     if (toDrum) {
         if (t === S.activeTrack && (S.activeBank === 2 || S.activeBank === 4)) S.activeBank = 0;
     } else {

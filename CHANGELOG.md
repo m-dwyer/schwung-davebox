@@ -12,6 +12,7 @@ the section into a versioned heading at release time.
 - **Lazy drum clip allocation.** Drum clips are now allocated per-track on drum mode entry instead of inline in every track. Default (1 drum track): ~7.5MB vs 60MB previously. No cap, no behavioral change.
 
 ### Fixes
+- **Empty drum→melodic track conversion now reliably flips pad mode.** Previously, converting an empty drum track to melodic left DSP in drum mode (pads showed melodic layout but right half acted as velocity zones). Fixed by adding a get_param flush barrier for the empty-track path.
 - **Incompatible state files prompt before erasing.** When loading a set saved by an older dAVEBOx version, a confirm dialog asks before wiping. "No" exits the module with the file preserved.
 
 ## [1.0b] — 2026-05-29
