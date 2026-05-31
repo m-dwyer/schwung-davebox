@@ -3056,13 +3056,18 @@ function liveSendNote(t, type, pitch, vel, rawVel) {
         if (tvo > 0) vel = tvo;
     }
     if (route === 2) {
-        /* PHASE-1+2: when DSP owns inbound pad dispatch, on_midi → live_note_on
-         * → pfx_emit → g_host->midi_send_external is the sole path to USB-A.
-         * Firing the JS send too produces a duplicate (audible double-trigger).
-         * Mirrors the route=0/1 gates below. CC/AT/PB pass through for the
-         * external-MIDI-in forwarding path. Remove when patches upstreamed. */
-        if (S.dspInboundEnabled && (type === 0x90 || type === 0x80)) {
-            /* dead on patched Schwung */
+        /* ROUTE_EXTERNAL. Note events queue through tN_live_notes so the pfx
+         * chain applies (consistent with sequencer playback, which already
+         * routes ROUTE_EXTERNAL through pfx_emit). DSP-side gate suppresses
+         * when on_midi already handled it. CC/AT/PB pass through raw for the
+         * external-MIDI-in forwarding path. */
+        if (type === 0x90 || type === 0x80) {
+            const isOff = (type === 0x80) || (type === 0x90 && vel === 0);
+            if (isOff) {
+                queueLiveNoteOff(t, pitch);
+            } else {
+                queueLiveNoteOn(t, pitch, vel);
+            }
         } else {
             const cin = (status >> 4) & 0x0F;
             if (typeof move_midi_external_send === 'function')
