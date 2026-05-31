@@ -858,6 +858,11 @@ function hardResetClip(t, ac) {
     S.clipNonEmpty[t][ac] = false;
     S.clipTPS[t][ac] = 24;
     S.clipLengthManuallySet[t][ac] = false;
+    for (var _k = 0; _k < 8; _k++) {
+        S.ccLaneLoopStart[t][ac][_k] = 0;
+        S.ccLaneLength[t][ac][_k]    = 0;
+        S.ccLaneTps[t][ac][_k]       = 0;
+    }
     if (ac === S.trackActiveClip[t]) {
         S.trackCurrentPage[t] = 0;
         S.seqActiveNotes.clear(); S.seqLastStep = -1; S.seqNoteOnClipTick = -1;
@@ -876,6 +881,11 @@ function copyClip(srcT, srcC, dstT, dstC) {
     S.clipLoopStart[dstT][dstC] = S.clipLoopStart[srcT][srcC];
     S.clipNonEmpty[dstT][dstC] = S.clipNonEmpty[srcT][srcC];
     S.clipTPS[dstT][dstC] = S.clipTPS[srcT][srcC];
+    for (var _k = 0; _k < 8; _k++) {
+        S.ccLaneLoopStart[dstT][dstC][_k] = S.ccLaneLoopStart[srcT][srcC][_k];
+        S.ccLaneLength[dstT][dstC][_k]    = S.ccLaneLength[srcT][srcC][_k];
+        S.ccLaneTps[dstT][dstC][_k]       = S.ccLaneTps[srcT][srcC][_k];
+    }
     if (dstC === S.trackActiveClip[dstT]) {
         S.seqActiveNotes.clear(); S.seqLastStep = -1;
         refreshPerClipBankParams(dstT);
@@ -893,6 +903,11 @@ function cutClip(srcT, srcC, dstT, dstC) {
     S.clipLoopStart[dstT][dstC] = S.clipLoopStart[srcT][srcC];
     S.clipNonEmpty[dstT][dstC] = S.clipNonEmpty[srcT][srcC];
     S.clipTPS[dstT][dstC] = S.clipTPS[srcT][srcC];
+    for (var _k = 0; _k < 8; _k++) {
+        S.ccLaneLoopStart[dstT][dstC][_k] = S.ccLaneLoopStart[srcT][srcC][_k];
+        S.ccLaneLength[dstT][dstC][_k]    = S.ccLaneLength[srcT][srcC][_k];
+        S.ccLaneTps[dstT][dstC][_k]       = S.ccLaneTps[srcT][srcC][_k];
+    }
     if (dstC === S.trackActiveClip[dstT]) {
         S.seqActiveNotes.clear(); S.seqLastStep = -1;
         refreshPerClipBankParams(dstT);
@@ -902,6 +917,11 @@ function cutClip(srcT, srcC, dstT, dstC) {
     S.clipLoopStart[srcT][srcC] = 0;
     S.clipNonEmpty[srcT][srcC] = false;
     S.clipTPS[srcT][srcC] = 24;
+    for (var _k2 = 0; _k2 < 8; _k2++) {
+        S.ccLaneLoopStart[srcT][srcC][_k2] = 0;
+        S.ccLaneLength[srcT][srcC][_k2]    = 0;
+        S.ccLaneTps[srcT][srcC][_k2]       = 0;
+    }
     if (srcC === S.trackActiveClip[srcT]) {
         S.seqActiveNotes.clear(); S.seqLastStep = -1; S.seqNoteOnClipTick = -1;
         resetPerClipBankParamsToDefault(srcT);
@@ -921,6 +941,11 @@ function copyRow(srcRow, dstRow) {
         S.clipNonEmpty[t][dstRow] = S.clipNonEmpty[t][srcRow];
         S.clipTPS[t][dstRow] = S.clipTPS[t][srcRow];
         S.drumClipNonEmpty[t][dstRow] = S.drumClipNonEmpty[t][srcRow];
+        for (var _k = 0; _k < 8; _k++) {
+            S.ccLaneLoopStart[t][dstRow][_k] = S.ccLaneLoopStart[t][srcRow][_k];
+            S.ccLaneLength[t][dstRow][_k]    = S.ccLaneLength[t][srcRow][_k];
+            S.ccLaneTps[t][dstRow][_k]       = S.ccLaneTps[t][srcRow][_k];
+        }
         if (dstRow === S.trackActiveClip[t]) {
             S.seqActiveNotes.clear(); S.seqLastStep = -1;
             refreshPerClipBankParams(t);
@@ -944,6 +969,11 @@ function cutRow(srcRow, dstRow) {
         S.clipNonEmpty[t][dstRow] = S.clipNonEmpty[t][srcRow];
         S.clipTPS[t][dstRow] = S.clipTPS[t][srcRow];
         S.drumClipNonEmpty[t][dstRow] = S.drumClipNonEmpty[t][srcRow];
+        for (var _k = 0; _k < 8; _k++) {
+            S.ccLaneLoopStart[t][dstRow][_k] = S.ccLaneLoopStart[t][srcRow][_k];
+            S.ccLaneLength[t][dstRow][_k]    = S.ccLaneLength[t][srcRow][_k];
+            S.ccLaneTps[t][dstRow][_k]       = S.ccLaneTps[t][srcRow][_k];
+        }
         if (dstRow === S.trackActiveClip[t]) {
             S.seqActiveNotes.clear(); S.seqLastStep = -1;
             refreshPerClipBankParams(t);
@@ -957,6 +987,11 @@ function cutRow(srcRow, dstRow) {
         S.clipNonEmpty[t][srcRow] = false;
         S.clipTPS[t][srcRow] = 24;
         S.drumClipNonEmpty[t][srcRow] = false;
+        for (var _k2 = 0; _k2 < 8; _k2++) {
+            S.ccLaneLoopStart[t][srcRow][_k2] = 0;
+            S.ccLaneLength[t][srcRow][_k2]    = 0;
+            S.ccLaneTps[t][srcRow][_k2]       = 0;
+        }
         if (srcRow === S.trackActiveClip[t]) {
             S.seqActiveNotes.clear(); S.seqLastStep = -1; S.seqNoteOnClipTick = -1;
             resetPerClipBankParamsToDefault(t);
@@ -3778,6 +3813,29 @@ function drawUI() {
             print(_loopX2, 22, _loopL2, 1);
             print(_loopX3, 34, _loopL3, 1);
             _drawLoopSteps(len);
+        } else if (S.activeBank === 6) {
+            var _t_l = S.activeTrack;
+            var _ac_l = effectiveClip(_t_l);
+            var _ccL_l = S.ccActiveLane[_t_l];
+            var _llen_l = S.ccLaneLength[_t_l][_ac_l][_ccL_l];
+            var _ltps_l = S.ccLaneTps[_t_l][_ac_l][_ccL_l];
+            var _lbl_l = S.trackCCType[_t_l][_ccL_l] === 2
+                       ? ('Sch' + S.trackCCAssign[_t_l][_ccL_l])
+                       : fmtCCLabel(S.trackCCAssign[_t_l][_ccL_l]);
+            var _resN = _ltps_l === 12 ? '1/32' : _ltps_l === 48 ? '1/8'
+                      : _ltps_l === 96 ? '1/4' : _ltps_l === 384 ? '1bar' : '1/16';
+            if (_llen_l > 0) {
+                print(Math.floor((128 - (_lbl_l.length + 5) * 6) / 2), 4,
+                      _lbl_l + ' Loop', 1);
+            } else {
+                print(Math.floor((128 - (_lbl_l.length + 12) * 6) / 2), 4,
+                      _lbl_l + ' Loop (clip)', 1);
+            }
+            fill_rect(0, 15, 128, 1, 1);
+            print(_loopX2, 22, _loopL2, 1);
+            var _resLine = 'PAD ROW=res (' + _resN + ')';
+            print(Math.floor((128 - _resLine.length * 6) / 2), 34, _resLine, 1);
+            _drawLoopSteps(_llen_l > 0 ? _llen_l : S.clipLength[_t_l][_ac_l]);
         } else {
             const ac_l    = effectiveClip(S.activeTrack);
             const steps_l = S.clipLength[S.activeTrack][ac_l];
@@ -4778,6 +4836,15 @@ function syncClipsFromDsp() {
             if (tpsRaw !== null && tpsRaw !== undefined) {
                 const tpsVal = parseInt(tpsRaw, 10);
                 S.clipTPS[t][c] = TPS_VALUES.indexOf(tpsVal) >= 0 ? tpsVal : 24;
+            }
+            var ccll = host_module_get_param('t' + t + '_c' + c + '_cc_lane_loops');
+            if (ccll) {
+                var _vals = ccll.split(' ');
+                for (var _k = 0; _k < 8 && _k * 3 + 2 < _vals.length; _k++) {
+                    S.ccLaneLoopStart[t][c][_k] = parseInt(_vals[_k * 3], 10) | 0;
+                    S.ccLaneLength[t][c][_k]    = parseInt(_vals[_k * 3 + 1], 10) | 0;
+                    S.ccLaneTps[t][c][_k]       = parseInt(_vals[_k * 3 + 2], 10) | 0;
+                }
             }
         }
         const ac2 = host_module_get_param('t' + t + '_active_clip');
@@ -6855,6 +6922,26 @@ function _onCC_jog(d1, d2) {
                                     host_module_set_param('t' + _t + '_l' + _lane + '_clip_length', String(_nv));
                                 }
                             }
+                            forceRedraw();
+                        }
+                    } else if (S.activeBank === 6) {
+                        var _ac = effectiveClip(_t);
+                        var _ccL = S.ccActiveLane[_t];
+                        var _cur = S.ccLaneLength[_t][_ac][_ccL];
+                        if (_cur === 0) {
+                            var _cTps = S.clipTPS[_t][_ac] || 24;
+                            var _lTps = S.ccLaneTps[_t][_ac][_ccL] || _cTps;
+                            _cur = Math.max(1, Math.round(S.clipLength[_t][_ac] * _cTps / _lTps));
+                        }
+                        var _nv  = Math.max(1, Math.min(256, _cur + delta));
+                        if (_nv !== _cur) {
+                            S.ccLaneLength[_t][_ac][_ccL] = _nv;
+                            S.loopJogActive = true;
+                            S.loopJogLastTick = S.tickCount;
+                            var _ls = S.ccLaneLoopStart[_t][_ac][_ccL] | 0;
+                            S.trackCurrentPage[_t] = Math.max(0, Math.floor((_ls + _nv - 1) / 16));
+                            if (typeof host_module_set_param === 'function')
+                                host_module_set_param('t' + _t + '_c' + _ac + '_k' + _ccL + '_cc_lane_length', String(_nv));
                             forceRedraw();
                         }
                     } else {
@@ -9037,6 +9124,24 @@ function _onPadPressTrackView(status, d1, d2) {
     if (d1 >= TRACK_PAD_BASE && d1 < TRACK_PAD_BASE + 32) {
         const padIdx = d1 - TRACK_PAD_BASE;
 
+        if (S.loopHeld && S.activeBank === 6 &&
+                S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
+            var row = Math.floor(padIdx / 8);
+            var col = padIdx % 8;
+            if (row === 0 && col < 5) {
+                var RES_TPS = [12, 24, 48, 96, 384];
+                var _t  = S.activeTrack;
+                var _ac = effectiveClip(_t);
+                var _ccL = S.ccActiveLane[_t];
+                S.ccLaneTps[_t][_ac][_ccL] = RES_TPS[col];
+                if (typeof host_module_set_param === 'function')
+                    host_module_set_param('t' + _t + '_c' + _ac + '_k' + _ccL + '_cc_lane_tps',
+                                          String(RES_TPS[col]));
+                forceRedraw();
+            }
+            return;
+        }
+
         /* Drum lane RESET: Shift+Delete+lane pad — full factory reset (length,
          * loop, pfx, Rpt groove all wiped). midi_note is preserved (lane
          * identity). */
@@ -9905,6 +10010,7 @@ function _doShiftStepCommon(idx) {
  * DSP write path. Packed encoding mirrors seq8_set_param.c: ls<<16 | length. */
 function _fireLoopWindowSet(track, ctx, startStep, lenSteps) {
     if (typeof host_module_set_param !== 'function') return;
+    if (ctx === 3) { _fireLoopWindowSetCC(track, startStep, lenSteps); return; }
     const packed = (startStep << 16) | (lenSteps & 0xFFFF);
     if (ctx === 0) {
         /* Melodic per-active-clip */
@@ -9942,10 +10048,27 @@ function _fireLoopWindowSet(track, ctx, startStep, lenSteps) {
     }
 }
 
+function _fireLoopWindowSetCC(track, startStep, lenSteps) {
+    if (typeof host_module_set_param !== 'function') return;
+    var ac = effectiveClip(track);
+    var lane = S.ccActiveLane[track];
+    S.ccLaneLoopStart[track][ac][lane] = startStep;
+    S.ccLaneLength[track][ac][lane] = lenSteps;
+    var packed = (startStep << 16) | (lenSteps & 0xFFFF);
+    host_module_set_param('t' + track + '_c' + ac + '_k' + lane + '_cc_loop_set', String(packed));
+    var startPage = startStep >> 4;
+    var lastPage  = startPage + ((lenSteps + 15) >> 4) - 1;
+    if (S.trackCurrentPage[track] < startPage) S.trackCurrentPage[track] = startPage;
+    else if (S.trackCurrentPage[track] > lastPage) S.trackCurrentPage[track] = lastPage;
+}
+
 /* Snapshot the gesture context at press-time so a later release fires in the
  * same context the user started in (immune to track/lane/bank flips). */
 function _loopGestureCtxFor(track) {
-    if (S.trackPadMode[track] !== PAD_MODE_DRUM) return 0;
+    if (S.trackPadMode[track] !== PAD_MODE_DRUM) {
+        if (S.activeBank === 6) return 3;
+        return 0;
+    }
     return S.activeBank === 7 ? 2 : 1;
 }
 
@@ -9974,10 +10097,24 @@ function _resolveLoopGesture(fireFallback) {
     S.loopGestureLane  = -1;
     if (fired) { forceRedraw(); return; }
     if (fireFallback) {
-        const currentLs  = (ctx === 0) ? (S.clipLoopStart[trk][clip] | 0)
-                                       : (S.drumLaneLoopStart[trk] | 0);
-        const currentLen = (ctx === 0) ? (S.clipLength[trk][clip] | 0)
-                                       : (S.drumLaneLength[trk] | 0);
+        var currentLs, currentLen;
+        if (ctx === 3) {
+            var _ccLane = S.ccActiveLane[trk];
+            currentLs  = S.ccLaneLoopStart[trk][clip][_ccLane] | 0;
+            currentLen = S.ccLaneLength[trk][clip][_ccLane] | 0;
+            if (currentLen === 0) {
+                var _cTps = S.clipTPS[trk][clip] || 24;
+                var _lTps = S.ccLaneTps[trk][clip][_ccLane] || _cTps;
+                currentLs  = Math.round((S.clipLoopStart[trk][clip] | 0) * _cTps / _lTps);
+                currentLen = Math.max(1, Math.round(S.clipLength[trk][clip] * _cTps / _lTps));
+            }
+        } else if (ctx === 0) {
+            currentLs  = S.clipLoopStart[trk][clip] | 0;
+            currentLen = S.clipLength[trk][clip] | 0;
+        } else {
+            currentLs  = S.drumLaneLoopStart[trk] | 0;
+            currentLen = S.drumLaneLength[trk] | 0;
+        }
         const startPage = currentLs >> 4;
         let newLs, newLen;
         if (currentLs === 0 || a < startPage) {
@@ -10064,7 +10201,7 @@ function _onStepButtons(d1, d2) {
             S.loopGestureFired = false;
             S.loopGestureCtx   = _loopGestureCtxFor(t);
             S.loopGestureTrack = t;
-            S.loopGestureClip  = (S.loopGestureCtx === 0) ? effectiveClip(t) : -1;
+            S.loopGestureClip  = (S.loopGestureCtx === 0 || S.loopGestureCtx === 3) ? effectiveClip(t) : -1;
             S.loopGestureLane  = (S.loopGestureCtx === 1) ? S.activeDrumLane[t] : -1;
             forceRedraw();
         } else if (idx !== S.loopGestureStart) {

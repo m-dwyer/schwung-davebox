@@ -188,6 +188,9 @@ typedef struct {
     uint16_t ticks[8][CC_AUTO_MAX_POINTS];
     uint8_t  vals[8][CC_AUTO_MAX_POINTS];
     uint8_t  rest_val[8];
+    uint16_t lane_loop_start[8]; /* per-lane loop start in steps; 0 = default */
+    uint16_t lane_length[8];     /* per-lane loop length in steps; 0 = inherit clip */
+    uint16_t lane_tps[8];        /* per-lane ticks_per_step; 0 = inherit clip tps */
 } cc_auto_t;
 
 /* Per-clip pad-pressure (aftertouch) automation. Interpolated breakpoints like
@@ -1590,6 +1593,15 @@ static void seq8_do_serialize(seq8_instance_t *inst, FILE *fp) {
                               (int)_cca->ticks[_ka][_ia], (int)_cca->vals[_ka][_ia]);
                   fputc('"', fp);
               }
+              for (_ka = 0; _ka < 8; _ka++) {
+                  if (_cca->lane_length[_ka] > 0)
+                      fprintf(fp, ",\"t%dc%dccl%d\":%d", _ta, _ca2, _ka,
+                              (int)(((uint32_t)_cca->lane_loop_start[_ka] << 16)
+                                    | _cca->lane_length[_ka]));
+                  if (_cca->lane_tps[_ka] > 0)
+                      fprintf(fp, ",\"t%dc%dcct%d\":%d", _ta, _ca2, _ka,
+                              (int)_cca->lane_tps[_ka]);
+              }
           }
     }
     /* Pad-pressure aftertouch automation (melodic clips, sparse per track/clip/lane).
@@ -1916,6 +1928,23 @@ static void seq8_load_state(seq8_instance_t *inst) {
                       uint16_t _idx = _cca->count[_ka]++;
                       _cca->ticks[_ka][_idx] = (uint16_t)clamp_i(_tv, 0, 65535);
                       _cca->vals[_ka][_idx]  = (uint8_t)clamp_i(_vv, 0, 127);
+                  }
+              }
+              for (_ka = 0; _ka < 8; _ka++) {
+                  char _lk[24];
+                  snprintf(_lk, sizeof(_lk), "t%dc%dccl%d", _ta, _ca2, _ka);
+                  int _lv = json_get_int(buf, _lk, 0);
+                  if (_lv > 0) {
+                      _cca->lane_loop_start[_ka] = (uint16_t)(((uint32_t)_lv >> 16) & 0xFFFF);
+                      _cca->lane_length[_ka] = (uint16_t)(_lv & 0xFFFF);
+                  }
+                  snprintf(_lk, sizeof(_lk), "t%dc%dcct%d", _ta, _ca2, _ka);
+                  int _tv = json_get_int(buf, _lk, 0);
+                  if (_tv > 0) {
+                      int vi, valid = 0;
+                      for (vi = 0; vi < 6; vi++)
+                          if (_tv == (int)TPS_VALUES[vi]) { valid = 1; break; }
+                      _cca->lane_tps[_ka] = valid ? (uint16_t)_tv : 0;
                   }
               }
           }
@@ -6873,6 +6902,13 @@ static void cc_auto_set_point(cc_auto_t *a, int k, uint16_t tick, uint8_t val) {
  * The anchor at the loop boundary is the value of a real point at/before ws
  * if one exists, otherwise the resting value.
  * Returns 0..127, or -1 when nothing is defined here (sets *defined=0). */
+/* Wrap a clip-absolute tick into a per-lane loop window. */
+static inline uint32_t cc_lane_wrap_tick(uint32_t ct, uint32_t lws, uint32_t llen_ticks) {
+    if (ct >= lws) return lws + ((ct - lws) % llen_ticks);
+    uint32_t d = (lws - ct) % llen_ticks;
+    return d == 0 ? lws : lws + llen_ticks - d;
+}
+
 static int cc_auto_eval(const cc_auto_t *a, int k, uint32_t t,
                         uint32_t ws, uint32_t we, int *defined) {
     int n = (int)a->count[k];
@@ -6884,24 +6920,30 @@ static int cc_auto_eval(const cc_auto_t *a, int k, uint32_t t,
         if (defined) *defined = 0;
         return -1;
     }
-    int lo = -1, hi = -1, i;
+    /* Window-aware scan: only consider points in [ws, we) for lo/hi */
+    int lo = -1, hi = -1, fi = -1, i;
     for (i = 0; i < n; i++) {
-        if (a->ticks[k][i] <= (uint16_t)t) lo = i;
-        else { hi = i; break; }
+        uint16_t tk = a->ticks[k][i];
+        if (tk < (uint16_t)ws || tk >= (uint16_t)we) continue;
+        if (fi == -1) fi = i;
+        if (tk <= (uint16_t)t) lo = i;
+        else if (hi == -1) { hi = i; }
     }
-    /* anchor: real point at/before window start, else resting value */
-    int anchor = (a->ticks[k][0] <= (uint16_t)ws) ? (int)a->vals[k][0]
-               : (rest_set ? (int)rest : -1);
+    /* Anchor: latest point at or before ws, else resting value */
+    int anchor = rest_set ? (int)rest : -1;
+    for (i = 0; i < n && a->ticks[k][i] <= (uint16_t)ws; i++)
+        anchor = (int)a->vals[k][i];
     if (lo == -1) {
-        /* HEAD: before the first point */
+        /* HEAD: before the first in-window point */
         if (anchor < 0) { if (defined) *defined = 0; return -1; }
-        uint32_t fT = a->ticks[k][0];
-        if (fT <= ws || t <= ws) return (fT <= ws) ? (int)a->vals[k][0] : anchor;
+        if (fi == -1) return anchor;
+        uint32_t fT = a->ticks[k][fi];
+        if (fT <= ws || t <= ws) return (fT <= ws) ? (int)a->vals[k][fi] : anchor;
         int sp = (int)(fT - ws);
         int fr = (int)(t - ws) * 127 / sp;
-        return clamp_i(anchor + ((int)a->vals[k][0] - anchor) * fr / 127, 0, 127);
+        return clamp_i(anchor + ((int)a->vals[k][fi] - anchor) * fr / 127, 0, 127);
     } else if (hi == -1) {
-        /* TAIL: after the last point */
+        /* TAIL: after the last in-window point */
         if (anchor < 0) { if (defined) *defined = 0; return -1; }
         uint32_t lT = a->ticks[k][lo];
         if (lT >= we || t >= we) return (lT >= we) ? (int)a->vals[k][lo] : anchor;
@@ -8956,6 +8998,17 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
                     (int)_ca->rest_val[4], (int)_ca->rest_val[5],
                     (int)_ca->rest_val[6], (int)_ca->rest_val[7]);
             }
+            if (!strcmp(p, "_cc_lane_loops")) {
+                cc_auto_t *_ca = &tr->clip_cc_auto[cidx];
+                int _pos = 0, _k2;
+                for (_k2 = 0; _k2 < 8; _k2++)
+                    _pos += snprintf(out + _pos, (size_t)(out_len - _pos),
+                        _k2 ? " %d %d %d" : "%d %d %d",
+                        (int)_ca->lane_loop_start[_k2],
+                        (int)_ca->lane_length[_k2],
+                        (int)_ca->lane_tps[_k2]);
+                return _pos;
+            }
             if (!strncmp(p, "_ccstepinfo_", 12)) {
                 /* "_ccstepinfo_<sidx>" → 16 values for the held step:
                  *   [0..7]  recorded point value in the step window, -1 if none;
@@ -8979,7 +9032,16 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
                     _pos += snprintf(out + _pos, (size_t)(out_len - _pos), _k2 ? " %d" : "%d", _pv);
                 }
                 for (_k2 = 0; _k2 < 8; _k2++) {
-                    int _def, _ov = cc_auto_eval(_ca, _k2, _t1, _ws, _we, &_def);
+                    uint32_t _ews = _ws, _ewe = _we, _et = _t1;
+                    if (_ca->lane_length[_k2] > 0) {
+                        uint32_t _ltps = _ca->lane_tps[_k2] > 0
+                                       ? _ca->lane_tps[_k2] : _tps;
+                        _ews = (uint32_t)_ca->lane_loop_start[_k2] * _ltps;
+                        uint32_t _llen = (uint32_t)_ca->lane_length[_k2] * _ltps;
+                        _ewe = _ews + _llen;
+                        _et  = cc_lane_wrap_tick(_t1, _ews, _llen);
+                    }
+                    int _def, _ov = cc_auto_eval(_ca, _k2, _et, _ews, _ewe, &_def);
                     _pos += snprintf(out + _pos, (size_t)(out_len - _pos), " %d", _def ? _ov : -1);
                 }
                 return _pos;
@@ -8997,10 +9059,20 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
                 uint32_t _tps = cl->ticks_per_step;
                 uint32_t _ws  = (uint32_t)cl->loop_start * _tps;
                 uint32_t _we  = (uint32_t)(cl->loop_start + cl->length) * _tps;
+                uint32_t _ews = _ws, _ewe = _we;
+                uint32_t _llen = 0;
+                if (_ca->lane_length[_k2] > 0) {
+                    uint32_t _ltps = _ca->lane_tps[_k2] > 0
+                                   ? _ca->lane_tps[_k2] : _tps;
+                    _ews = (uint32_t)_ca->lane_loop_start[_k2] * _ltps;
+                    _llen = (uint32_t)_ca->lane_length[_k2] * _ltps;
+                    _ewe = _ews + _llen;
+                }
                 int _pos = 0, _s;
                 for (_s = 0; _s < 16; _s++) {
                     uint32_t _t = (uint32_t)(_pg * 16 + _s) * _tps;
-                    int _def, _ov = cc_auto_eval(_ca, _k2, _t, _ws, _we, &_def);
+                    if (_llen > 0) _t = cc_lane_wrap_tick(_t, _ews, _llen);
+                    int _def, _ov = cc_auto_eval(_ca, _k2, _t, _ews, _ewe, &_def);
                     _pos += snprintf(out + _pos, (size_t)(out_len - _pos),
                                      _s ? " %d" : "%d", _def ? _ov : 255);
                 }
@@ -9915,9 +9987,20 @@ static void render_block(void *instance, int16_t *out_lr, int frames) {
                 uint32_t   _ws  = (uint32_t)_acl->loop_start * _tps;
                 uint32_t   _we  = (uint32_t)(_acl->loop_start + _acl->length) * _tps;
                 int _kp;
+                uint32_t _abs_tick = (uint32_t)inst->global_tick * (uint32_t)TICKS_PER_STEP
+                                   + (uint32_t)inst->master_tick_in_step;
                 for (_kp = 0; _kp < 8; _kp++) {
                     int _def;
-                    int _ov = cc_auto_eval(_ca, _kp, _ct, _ws, _we, &_def);
+                    uint32_t _lws = _ws, _lwe = _we, _lct = _ct;
+                    if (_ca->lane_length[_kp] > 0) {
+                        uint32_t _ltps = _ca->lane_tps[_kp] > 0
+                                       ? _ca->lane_tps[_kp] : _tps;
+                        _lws = (uint32_t)_ca->lane_loop_start[_kp] * _ltps;
+                        uint32_t _llen = (uint32_t)_ca->lane_length[_kp] * _ltps;
+                        _lwe = _lws + _llen;
+                        _lct = _lws + (_abs_tick % _llen);
+                    }
+                    int _ov = cc_auto_eval(_ca, _kp, _lct, _lws, _lwe, &_def);
                     /* A latched knob is actively being recorded: report the live
                      * value being written (not the playhead eval, which trails
                      * the just-written point) so the JS cc_cur_vals poll keeps

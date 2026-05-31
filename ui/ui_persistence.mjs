@@ -297,6 +297,12 @@ export function doClearSession() {
         S.trackCCAutoBits[_t] = new Array(NUM_CLIPS).fill(0);
         S.trackCCLiveVal[_t] = new Array(8).fill(-1);
         S.ccActiveLane[_t]  = 0;
+        for (var _c2 = 0; _c2 < NUM_CLIPS; _c2++)
+            for (var _k = 0; _k < 8; _k++) {
+                S.ccLaneLoopStart[_t][_c2][_k] = 0;
+                S.ccLaneLength[_t][_c2][_k]    = 0;
+                S.ccLaneTps[_t][_c2][_k]       = 0;
+            }
         for (let _b = 3; _b <= 4; _b++) {
             for (let _k = 0; _k < 8; _k++) {
                 const _pm = BANKS[_b].knobs[_k];

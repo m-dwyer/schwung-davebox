@@ -2374,6 +2374,48 @@ static void set_param(void *instance, const char *key, const char *val) {
                 inst->state_dirty = 1;
                 return;
             }
+            if (p[0] == '_' && p[1] == 'k' && p[2] >= '0' && p[2] <= '7') {
+                int _kidx = p[2] - '0';
+                cc_auto_t *_ca = &tr->clip_cc_auto[cidx];
+                if (!strcmp(p + 3, "_cc_loop_set")) {
+                    long packed = 0;
+                    const char *vp = val;
+                    while (*vp == ' ') vp++;
+                    while (*vp >= '0' && *vp <= '9') packed = packed * 10 + (*vp++ - '0');
+                    int ls  = (int)((packed >> 16) & 0xFFFF);
+                    int len = (int)(packed & 0xFFFF);
+                    if (len < 0) len = 0;
+                    if (ls < 0) ls = 0;
+                    if (ls > SEQ_STEPS - 1) ls = SEQ_STEPS - 1;
+                    if (len > 0 && ls + len > SEQ_STEPS) len = SEQ_STEPS - ls;
+                    _ca->lane_loop_start[_kidx] = (uint16_t)ls;
+                    _ca->lane_length[_kidx] = (uint16_t)len;
+                    inst->state_dirty = 1;
+                    return;
+                }
+                if (!strcmp(p + 3, "_cc_lane_length")) {
+                    int len = (int)strtol(val, NULL, 10);
+                    if (len < 0) len = 0;
+                    uint16_t ls = _ca->lane_loop_start[_kidx];
+                    if (len > 0 && (int)ls + len > SEQ_STEPS) len = SEQ_STEPS - (int)ls;
+                    _ca->lane_length[_kidx] = (uint16_t)len;
+                    inst->state_dirty = 1;
+                    return;
+                }
+                if (!strcmp(p + 3, "_cc_lane_tps")) {
+                    int tps_val = (int)strtol(val, NULL, 10);
+                    if (tps_val == 0) {
+                        _ca->lane_tps[_kidx] = 0;
+                    } else {
+                        int vi, valid = 0;
+                        for (vi = 0; vi < 6; vi++)
+                            if (tps_val == (int)TPS_VALUES[vi]) { valid = 1; break; }
+                        _ca->lane_tps[_kidx] = valid ? (uint16_t)tps_val : 0;
+                    }
+                    inst->state_dirty = 1;
+                    return;
+                }
+            }
             if (!strncmp(p, "_pfx_set", 8) && p[8] == '\0') {
                 /* tN_cC_pfx_set "key value" — apply pfx param to this clip's
                  * pfx_params (any clip, not just active). Mirrors drum-lane

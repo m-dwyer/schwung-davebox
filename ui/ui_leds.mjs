@@ -89,8 +89,14 @@ export function updateStepLEDs() {
                 setLED(16 + p, color);
             }
         } else {
-            const len    = S.clipLength[t][ac];
-            const lsBase = S.clipLoopStart[t][ac] | 0;
+            var _ccLen = 0, _ccLs = 0;
+            if (S.activeBank === 6) {
+                var _ccL = S.ccActiveLane[t];
+                _ccLen = S.ccLaneLength[t][ac][_ccL];
+                _ccLs  = S.ccLaneLoopStart[t][ac][_ccL] | 0;
+            }
+            const len    = _ccLen > 0 ? _ccLen : S.clipLength[t][ac];
+            const lsBase = _ccLen > 0 ? _ccLs : (S.clipLoopStart[t][ac] | 0);
             const steps  = S.clipSteps[t][ac];
             const startPage = lsBase >> 4;
             const endPage   = startPage + Math.ceil(len / 16) - 1;
