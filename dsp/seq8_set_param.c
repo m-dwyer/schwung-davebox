@@ -5170,7 +5170,15 @@ static void set_param(void *instance, const char *key, const char *val) {
              * end-of-turn, so chord-press survives the host's same-buffer
              * set_param coalescing (which is per-buffer last-wins regardless
              * of key — distinct keys do NOT defeat it).
-             * Routes through pfx_note_on/pfx_note_off_imm so play effects apply. */
+             * Routes through pfx_note_on/pfx_note_off_imm so play effects apply.
+             *
+             * When dsp_inbound_enabled is set, on_midi already dispatched
+             * the pad event on the audio thread — skip the JS fallback to
+             * avoid double-triggering. JS always queues live notes as a
+             * fallback for when the padmap push didn't reach DSP (the
+             * sentinel exists but on_midi can't dispatch without a valid
+             * pad_note_map). */
+            if (inst->dsp_inbound_enabled) return;
             const char *sp = val;
             while (*sp) {
                 while (*sp == ' ') sp++;

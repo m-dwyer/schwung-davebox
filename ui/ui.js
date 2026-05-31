@@ -3073,13 +3073,14 @@ function liveSendNote(t, type, pitch, vel, rawVel) {
          * tN_live_notes payload at end of the current JS turn. Recording
          * suppression: melodic record_note_on inline-monitors via DSP; drum
          * recording handled by press-handler direct-fire (also routes through
-         * queueLiveNoteOn). Suppress here to avoid double-monitoring. */
-        if (S.dspInboundEnabled && (type === 0x90 || type === 0x80)) {
-            /* PHASE-1: DSP on_midi owns note dispatch when capability gate is
-             * active. on_midi also gates on tr->recording for note-on to
-             * preserve the record_note_on monitor path. Remove this branch
-             * (and queueLiveNoteOn/Off below) when patches upstreamed. */
-        } else {
+         * queueLiveNoteOn). Suppress here to avoid double-monitoring.
+         *
+         * Always queued regardless of dspInboundEnabled — the DSP-side
+         * tN_live_notes handler gates on dsp_inbound_enabled instead, so
+         * the JS path serves as a fallback when the padmap push didn't
+         * reach DSP (stock Schwung v0.9.16 exposes the sentinel but
+         * on_midi delivery may not produce sound). */
+        if (type === 0x90 || type === 0x80) {
             const activelyRecording = S.recordArmed && !S.recordCountingIn && S.recordArmedTrack === t;
             const isOff = (type === 0x80) || (type === 0x90 && vel === 0);
             if (isOff) {
@@ -3094,18 +3095,15 @@ function liveSendNote(t, type, pitch, vel, rawVel) {
          * — record_note_on DSP handler does not call live_note_on() inline for
          * ROUTE_SCHWUNG, so no double-monitoring risk. Non-note events (CC, AT,
          * PB) pass through raw — only note on/off go through the live-notes
-         * payload parser. */
+         * payload parser.
+         *
+         * Always queued regardless of dspInboundEnabled — DSP-side gate. */
         if (type === 0x90 || type === 0x80) {
-            if (S.dspInboundEnabled) {
-                /* PHASE-1: DSP on_midi owns note dispatch when capability
-                 * gate is active. Remove this branch when patches upstreamed. */
+            const isOff = type === 0x80 || vel === 0;
+            if (isOff) {
+                queueLiveNoteOff(t, pitch);
             } else {
-                const isOff = type === 0x80 || vel === 0;
-                if (isOff) {
-                    queueLiveNoteOff(t, pitch);
-                } else {
-                    queueLiveNoteOn(t, pitch, vel);
-                }
+                queueLiveNoteOn(t, pitch, vel);
             }
         } else {
             if (typeof shadow_send_midi_to_dsp === 'function') shadow_send_midi_to_dsp([status, pitch, vel]);
