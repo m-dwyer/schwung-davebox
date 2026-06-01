@@ -219,9 +219,10 @@ export function updateStepLEDs() {
         var _ccWinEnd = _ccLsCC + (_ccLenCC > 0 ? _ccLenCC : S.clipLength[t][c]);
         var _ccPlayStep = -1;
         if (S.playing) {
-            var _lTps = S.ccLaneTps[t][c][lane] || (S.clipTPS[t][c] || 24);
+            var _dispTps = S.ccLaneTps[t][c][lane] || (S.clipTPS[t][c] || 24);
+            var _speedTps = S.ccLaneResTps[t][c][lane] || _dispTps;
             var _effLen = _ccLenCC > 0 ? _ccLenCC : S.clipLength[t][c];
-            var _lLenTicks = _effLen * _lTps;
+            var _lLenTicks = _effLen * _speedTps;
             var _lTickPos = S.masterPos % _lLenTicks;
             var _progress = _lTickPos / _lLenTicks;
             _ccPlayStep = _ccLsCC + Math.floor(_progress * _effLen);

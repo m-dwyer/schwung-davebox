@@ -2428,6 +2428,19 @@ static void set_param(void *instance, const char *key, const char *val) {
                     inst->state_dirty = 1;
                     return;
                 }
+                if (!strcmp(p + 3, "_cc_lane_res_tps")) {
+                    int tps_val = (int)strtol(val, NULL, 10);
+                    if (tps_val == 0) {
+                        _ca->lane_res_tps[_kidx] = 0;
+                    } else {
+                        int vi, valid = 0;
+                        for (vi = 0; vi < 6; vi++)
+                            if (tps_val == (int)TPS_VALUES[vi]) { valid = 1; break; }
+                        _ca->lane_res_tps[_kidx] = valid ? (uint16_t)tps_val : 0;
+                    }
+                    inst->state_dirty = 1;
+                    return;
+                }
             }
             if (!strncmp(p, "_pfx_set", 8) && p[8] == '\0') {
                 /* tN_cC_pfx_set "key value" — apply pfx param to this clip's

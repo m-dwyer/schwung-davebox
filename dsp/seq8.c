@@ -190,7 +190,8 @@ typedef struct {
     uint8_t  rest_val[8];
     uint16_t lane_loop_start[8]; /* per-lane loop start in steps; 0 = default */
     uint16_t lane_length[8];     /* per-lane loop length in steps; 0 = inherit clip */
-    uint16_t lane_tps[8];        /* per-lane ticks_per_step; 0 = inherit clip tps */
+    uint16_t lane_tps[8];        /* per-lane zoom ticks_per_step (display grid); 0 = inherit clip tps */
+    uint16_t lane_res_tps[8];    /* per-lane playback speed tps; 0 = inherit lane_tps/clip tps */
 } cc_auto_t;
 
 /* Per-clip pad-pressure (aftertouch) automation. Interpolated breakpoints like
@@ -1601,6 +1602,9 @@ static void seq8_do_serialize(seq8_instance_t *inst, FILE *fp) {
                   if (_cca->lane_tps[_ka] > 0)
                       fprintf(fp, ",\"t%dc%dcct%d\":%d", _ta, _ca2, _ka,
                               (int)_cca->lane_tps[_ka]);
+                  if (_cca->lane_res_tps[_ka] > 0)
+                      fprintf(fp, ",\"t%dc%dccrt%d\":%d", _ta, _ca2, _ka,
+                              (int)_cca->lane_res_tps[_ka]);
               }
           }
     }
@@ -1945,6 +1949,14 @@ static void seq8_load_state(seq8_instance_t *inst) {
                       for (vi = 0; vi < 6; vi++)
                           if (_tv == (int)TPS_VALUES[vi]) { valid = 1; break; }
                       _cca->lane_tps[_ka] = valid ? (uint16_t)_tv : 0;
+                  }
+                  snprintf(_lk, sizeof(_lk), "t%dc%dccrt%d", _ta, _ca2, _ka);
+                  int _rtv = json_get_int(buf, _lk, 0);
+                  if (_rtv > 0) {
+                      int vi, valid = 0;
+                      for (vi = 0; vi < 6; vi++)
+                          if (_rtv == (int)TPS_VALUES[vi]) { valid = 1; break; }
+                      _cca->lane_res_tps[_ka] = valid ? (uint16_t)_rtv : 0;
                   }
               }
           }
@@ -9003,10 +9015,11 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
                 int _pos = 0, _k2;
                 for (_k2 = 0; _k2 < 8; _k2++)
                     _pos += snprintf(out + _pos, (size_t)(out_len - _pos),
-                        _k2 ? " %d %d %d" : "%d %d %d",
+                        _k2 ? " %d %d %d %d" : "%d %d %d %d",
                         (int)_ca->lane_loop_start[_k2],
                         (int)_ca->lane_length[_k2],
-                        (int)_ca->lane_tps[_k2]);
+                        (int)_ca->lane_tps[_k2],
+                        (int)_ca->lane_res_tps[_k2]);
                 return _pos;
             }
             if (!strncmp(p, "_ccstepinfo_", 12)) {
@@ -9020,10 +9033,12 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
                 uint32_t _tps = cl->ticks_per_step;
                 uint32_t _ws  = (uint32_t)cl->loop_start * _tps;
                 uint32_t _we  = (uint32_t)(cl->loop_start + cl->length) * _tps;
-                uint32_t _t1 = (uint32_t)_sidx * _tps;
-                uint32_t _t2 = _t1 + (_tps ? _tps - 1 : 0);
                 int _pos = 0, _k2;
                 for (_k2 = 0; _k2 < 8; _k2++) {
+                    uint32_t _ktps = (_ca->lane_tps[_k2] > 0)
+                                   ? _ca->lane_tps[_k2] : _tps;
+                    uint32_t _t1 = (uint32_t)_sidx * _ktps;
+                    uint32_t _t2 = _t1 + (_ktps ? _ktps - 1 : 0);
                     int _pv = -1, _ip;
                     for (_ip = 0; _ip < (int)_ca->count[_k2]; _ip++) {
                         uint16_t _tk = _ca->ticks[_k2][_ip];
@@ -9032,18 +9047,17 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
                     _pos += snprintf(out + _pos, (size_t)(out_len - _pos), _k2 ? " %d" : "%d", _pv);
                 }
                 for (_k2 = 0; _k2 < 8; _k2++) {
-                    uint32_t _et = _t1;
+                    uint32_t _ktps2 = (_ca->lane_tps[_k2] > 0)
+                                    ? _ca->lane_tps[_k2] : _tps;
+                    uint32_t _et = (uint32_t)_sidx * _ktps2;
                     uint32_t _ews = _ws, _ewe = _we;
                     if (_ca->lane_length[_k2] > 0 || _ca->lane_tps[_k2] > 0) {
-                        uint32_t _ltps = _ca->lane_tps[_k2] > 0
-                                       ? _ca->lane_tps[_k2] : _tps;
                         uint32_t _elen = _ca->lane_length[_k2] > 0
                                        ? _ca->lane_length[_k2] : cl->length;
-                        uint32_t _cycle = (uint32_t)_elen * _ltps;
-                        uint32_t _data_len = (uint32_t)_elen * _tps;
-                        _ews = (uint32_t)_ca->lane_loop_start[_k2] * _tps;
-                        _ewe = _ews + _data_len;
-                        if (_t1 >= _ewe) _et = _ews + ((_t1 - _ews) % _data_len);
+                        _ews = (uint32_t)_ca->lane_loop_start[_k2] * _ktps2;
+                        uint32_t _dlen = (uint32_t)_elen * _ktps2;
+                        _ewe = _ews + _dlen;
+                        if (_et >= _ewe) _et = _ews + ((_et - _ews) % _dlen);
                     }
                     int _def, _ov = cc_auto_eval(_ca, _k2, _et, _ews, _ewe, &_def);
                     _pos += snprintf(out + _pos, (size_t)(out_len - _pos), " %d", _def ? _ov : -1);
@@ -9065,14 +9079,16 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
                 uint32_t _we  = (uint32_t)(cl->loop_start + cl->length) * _tps;
                 uint32_t _ews = _ws, _ewe = _we;
                 uint32_t _dlen = 0;
+                uint32_t _step_tps = (_ca->lane_tps[_k2] > 0)
+                                   ? _ca->lane_tps[_k2] : _tps;
                 if (_ca->lane_length[_k2] > 0) {
-                    _ews = (uint32_t)_ca->lane_loop_start[_k2] * _tps;
-                    _dlen = (uint32_t)_ca->lane_length[_k2] * _tps;
+                    _ews = (uint32_t)_ca->lane_loop_start[_k2] * _step_tps;
+                    _dlen = (uint32_t)_ca->lane_length[_k2] * _step_tps;
                     _ewe = _ews + _dlen;
                 }
                 int _pos = 0, _s;
                 for (_s = 0; _s < 16; _s++) {
-                    uint32_t _t = (uint32_t)(_pg * 16 + _s) * _tps;
+                    uint32_t _t = (uint32_t)(_pg * 16 + _s) * _step_tps;
                     if (_dlen > 0) _t = cc_lane_wrap_tick(_t, _ews, _dlen);
                     int _def, _ov = cc_auto_eval(_ca, _k2, _t, _ews, _ewe, &_def);
                     _pos += snprintf(out + _pos, (size_t)(out_len - _pos),
@@ -9090,7 +9106,8 @@ static int get_param(void *instance, const char *key, char *out, int out_len) {
                 while (*_q >= '0' && *_q <= '9') { _pg = _pg * 10 + (*_q++ - '0'); }
                 if (_k2 < 0 || _k2 > 7) return -1;
                 cc_auto_t *_ca = &tr->clip_cc_auto[cidx];
-                uint32_t _ktps = cl->ticks_per_step;
+                uint32_t _ktps = (_ca->lane_tps[_k2] > 0)
+                               ? _ca->lane_tps[_k2] : cl->ticks_per_step;
                 int _pos = 0, _s;
                 for (_s = 0; _s < 16; _s++) {
                     uint32_t _t1 = (uint32_t)(_pg * 16 + _s) * _ktps;
@@ -10019,14 +10036,17 @@ static void render_block(void *instance, int16_t *out_lr, int frames) {
                 for (_kp = 0; _kp < 8; _kp++) {
                     int _def;
                     uint32_t _lws = _ws, _lwe = _we, _lct = _ct;
-                    if (_ca->lane_length[_kp] > 0 || _ca->lane_tps[_kp] > 0) {
-                        uint32_t _ltps = _ca->lane_tps[_kp] > 0
-                                       ? _ca->lane_tps[_kp] : _tps;
+                    if (_ca->lane_length[_kp] > 0 || _ca->lane_tps[_kp] > 0
+                        || _ca->lane_res_tps[_kp] > 0) {
+                        uint32_t _disp_tps = _ca->lane_tps[_kp] > 0
+                                           ? _ca->lane_tps[_kp] : _tps;
+                        uint32_t _speed_tps = _ca->lane_res_tps[_kp] > 0
+                                            ? _ca->lane_res_tps[_kp] : _disp_tps;
                         uint32_t _elen = _ca->lane_length[_kp] > 0
                                        ? _ca->lane_length[_kp] : _acl->length;
-                        uint32_t _cycle = (uint32_t)_elen * _ltps;
-                        uint32_t _data_len = (uint32_t)_elen * _tps;
-                        _lws = (uint32_t)_ca->lane_loop_start[_kp] * _tps;
+                        uint32_t _cycle = (uint32_t)_elen * _speed_tps;
+                        uint32_t _data_len = (uint32_t)_elen * _disp_tps;
+                        _lws = (uint32_t)_ca->lane_loop_start[_kp] * _disp_tps;
                         _lwe = _lws + _data_len;
                         uint32_t _prog = _abs_tick % _cycle;
                         _lct = _lws + (uint32_t)((uint64_t)_prog * _data_len / _cycle);

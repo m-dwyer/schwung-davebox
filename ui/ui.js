@@ -2417,7 +2417,8 @@ function pollDSP() {
             var newPage;
             if (S.activeBank === 6 && S.trackPadMode[_sft] !== PAD_MODE_DRUM) {
                 var _ccLsf = S.ccActiveLane[_sft];
-                var _lTpsSf = S.ccLaneTps[_sft][_sfac][_ccLsf] || (S.clipTPS[_sft][_sfac] || 24);
+                var _dispTpsSf = S.ccLaneTps[_sft][_sfac][_ccLsf] || (S.clipTPS[_sft][_sfac] || 24);
+                var _lTpsSf = S.ccLaneResTps[_sft][_sfac][_ccLsf] || _dispTpsSf;
                 var _effLenSf = S.ccLaneLength[_sft][_sfac][_ccLsf] || S.clipLength[_sft][_sfac];
                 var _lLenTicksSf = _effLenSf * _lTpsSf;
                 var _progressSf = (S.masterPos % _lLenTicksSf) / _lLenTicksSf;
@@ -3907,23 +3908,34 @@ function drawUI() {
             var _ac_l = effectiveClip(_t_l);
             var _ccL_l = S.ccActiveLane[_t_l];
             var _llen_l = S.ccLaneLength[_t_l][_ac_l][_ccL_l];
-            var _ltps_l = S.ccLaneTps[_t_l][_ac_l][_ccL_l];
+            var _ltps_l = S.ccLaneResTps[_t_l][_ac_l][_ccL_l] || S.ccLaneTps[_t_l][_ac_l][_ccL_l];
             var _lbl_l = S.trackCCType[_t_l][_ccL_l] === 2
                        ? ('Sch' + S.trackCCAssign[_t_l][_ccL_l])
                        : fmtCCLabel(S.trackCCAssign[_t_l][_ccL_l]);
             var _resN = _ltps_l === 12 ? '1/32' : _ltps_l === 48 ? '1/8'
                       : _ltps_l === 96 ? '1/4' : _ltps_l === 384 ? '1bar' : '1/16';
-            if (_llen_l > 0) {
-                print(Math.floor((128 - (_lbl_l.length + 5) * 6) / 2), 4,
-                      _lbl_l + ' Loop', 1);
-            } else {
-                print(Math.floor((128 - (_lbl_l.length + 12) * 6) / 2), 4,
-                      _lbl_l + ' Loop (clip)', 1);
-            }
+            var _lcHdr = 'Lane config: K' + (_ccL_l + 1) + '-' + _lbl_l;
+            pixelPrint(Math.floor((128 - _lcHdr.length * 6) / 2), 4, _lcHdr, 1);
             fill_rect(0, 15, 128, 1, 1);
-            print(_loopX2, 22, _loopL2, 1);
-            var _resLine = '< ' + _resN + ' >  Loop Res';
-            print(Math.floor((128 - _resLine.length * 6) / 2), 34, _resLine, 1);
+            pixelPrint(1, 18, 'STEP BTN=Leng by page', 1);
+            pixelPrint(1, 25, 'JOG TURN=Leng by step', 1);
+            var _zoomTps_l = S.ccLaneTps[_t_l][_ac_l][_ccL_l] || (S.clipTPS[_t_l][_ac_l] || 24);
+            var _zoomN = _zoomTps_l === 12 ? '1/32' : _zoomTps_l === 48 ? '1/8'
+                       : _zoomTps_l === 96 ? '1/4' : _zoomTps_l === 384 ? '1bar' : '1/16';
+            var _resLabel = 'Resolution: <';
+            var _resValX = 1 + _resLabel.length * 6;
+            var _resValW = _resN.length * 6 + 2;
+            pixelPrint(1, 34, _resLabel, 1);
+            fill_rect(_resValX - 1, 33, _resValW, 7, 1);
+            pixelPrint(_resValX, 34, _resN, 0);
+            pixelPrint(_resValX + _resValW, 34, '>', 1);
+            var _zoomLabel = 'Zoom: +';
+            var _zoomValX = 1 + _zoomLabel.length * 6;
+            var _zoomValW = _zoomN.length * 6 + 2;
+            pixelPrint(1, 41, _zoomLabel, 1);
+            fill_rect(_zoomValX - 1, 40, _zoomValW, 7, 1);
+            pixelPrint(_zoomValX, 41, _zoomN, 0);
+            pixelPrint(_zoomValX + _zoomValW, 41, '-', 1);
             _drawLoopSteps(_llen_l > 0 ? _llen_l : S.clipLength[_t_l][_ac_l]);
         } else {
             const ac_l    = effectiveClip(S.activeTrack);
@@ -3972,7 +3984,8 @@ function drawUI() {
         var _gParam = S.trackCCType[_gt][_gLane] === 2
                     ? (S.schLabel[_gt][_gLane] || '') : '';
         var _gEffLen = S.ccLaneLength[_gt][_gac][_gLane] || S.clipLength[_gt][_gac];
-        var _gLTps = S.ccLaneTps[_gt][_gac][_gLane] || (S.clipTPS[_gt][_gac] || 24);
+        var _gDispTps = S.ccLaneTps[_gt][_gac][_gLane] || (S.clipTPS[_gt][_gac] || 24);
+        var _gLTps = S.ccLaneResTps[_gt][_gac][_gLane] || _gDispTps;
         var _gResN = _gLTps === 12 ? '1/32' : _gLTps === 48 ? '1/8'
                    : _gLTps === 96 ? '1/4' : _gLTps === 384 ? '1bar' : '1/16';
         drawBankHeadingInverted(BANKS[6].name);
@@ -3995,14 +4008,24 @@ function drawUI() {
             if (_ccHas) _badge('CC');
         }
         /* Lane info rows */
-        var _gKnobLbl = 'K' + (_gLane + 1) + '-' + _gLbl;
-        print(4, 10, _gKnobLbl, 1);
-        fill_rect(4, 19, _gKnobLbl.length * 6, 1, 1);
-        if (_gParam) print(128 - _gParam.length * 6 - 4, 10, _gParam, 1);
         var _gVal = S.playing ? S.trackCCLiveVal[_gt][_gLane] : S.clipCCVal[_gt][_gac][_gLane];
         var _gValStr = (_gVal >= 0 && _gVal <= 127) ? String(_gVal) : '--';
-        print(4, 21, _gValStr, 1);
-        print(128 - ('Res: ' + _gResN).length * 6 - 4, 21, 'Res: ' + _gResN, 1);
+        var _gLine1L = 'K' + (_gLane + 1) + ' ' + _gLbl + ':';
+        print(4, 10, _gLine1L, 1);
+        var _gValX = 4 + _gLine1L.length * 6;
+        print(_gValX, 10, _gValStr, 1);
+        fill_rect(_gValX, 19, _gValStr.length * 6, 1, 1);
+        if (_gParam) {
+            var _gPTrunc = _gParam.length > 12 ? _gParam.substring(0, 12) : _gParam;
+            print(128 - _gPTrunc.length * 6 - 1, 10, _gPTrunc, 1);
+        }
+        var _gZoomTps = S.ccLaneTps[_gt][_gac][_gLane] || (S.clipTPS[_gt][_gac] || 24);
+        var _gZoomN = _gZoomTps === 12 ? '1/32' : _gZoomTps === 48 ? '1/8'
+                    : _gZoomTps === 96 ? '1/4' : _gZoomTps === 384 ? '1bar' : '1/16';
+        var _gResStr = 'Res: ' + _gResN;
+        var _gZoomStr = 'Zoom: ' + _gZoomN;
+        print(4, 21, _gResStr, 1);
+        print(128 - _gZoomStr.length * 6 - 4, 21, _gZoomStr, 1);
         /* Automation graph: 128px wide, just above progress bar */
         var _gBarY = 60, _gBarH = 3;
         var _gH = 24, _gY = _gBarY - _gH - 3;
@@ -5057,10 +5080,11 @@ function syncClipsFromDsp() {
             var ccll = host_module_get_param('t' + t + '_c' + c + '_cc_lane_loops');
             if (ccll) {
                 var _vals = ccll.split(' ');
-                for (var _k = 0; _k < 8 && _k * 3 + 2 < _vals.length; _k++) {
-                    S.ccLaneLoopStart[t][c][_k] = parseInt(_vals[_k * 3], 10) | 0;
-                    S.ccLaneLength[t][c][_k]    = parseInt(_vals[_k * 3 + 1], 10) | 0;
-                    S.ccLaneTps[t][c][_k]       = parseInt(_vals[_k * 3 + 2], 10) | 0;
+                for (var _k = 0; _k < 8 && _k * 4 + 3 < _vals.length; _k++) {
+                    S.ccLaneLoopStart[t][c][_k] = parseInt(_vals[_k * 4], 10) | 0;
+                    S.ccLaneLength[t][c][_k]    = parseInt(_vals[_k * 4 + 1], 10) | 0;
+                    S.ccLaneTps[t][c][_k]       = parseInt(_vals[_k * 4 + 2], 10) | 0;
+                    S.ccLaneResTps[t][c][_k]    = parseInt(_vals[_k * 4 + 3], 10) | 0;
                 }
             }
         }
@@ -7980,14 +8004,15 @@ function _onCC_transport(d1, d2) {
             var RES_TPS = [12, 24, 48, 96, 384];
             var _ac_lr = effectiveClip(_t_lr);
             var _ccL_lr = S.ccActiveLane[_t_lr];
-            var _curTps = S.ccLaneTps[_t_lr][_ac_lr][_ccL_lr] || (S.clipTPS[_t_lr][_ac_lr] || 24);
+            var _dispTpsLr = S.ccLaneTps[_t_lr][_ac_lr][_ccL_lr] || (S.clipTPS[_t_lr][_ac_lr] || 24);
+            var _curTps = S.ccLaneResTps[_t_lr][_ac_lr][_ccL_lr] || _dispTpsLr;
             var _ci = RES_TPS.indexOf(_curTps);
             if (_ci < 0) _ci = 1;
             if (d1 === MoveLeft && _ci > 0) _ci--;
             else if (d1 === MoveRight && _ci < RES_TPS.length - 1) _ci++;
-            S.ccLaneTps[_t_lr][_ac_lr][_ccL_lr] = RES_TPS[_ci];
+            S.ccLaneResTps[_t_lr][_ac_lr][_ccL_lr] = RES_TPS[_ci];
             if (typeof host_module_set_param === 'function')
-                host_module_set_param('t' + _t_lr + '_c' + _ac_lr + '_k' + _ccL_lr + '_cc_lane_tps',
+                host_module_set_param('t' + _t_lr + '_c' + _ac_lr + '_k' + _ccL_lr + '_cc_lane_res_tps',
                                       String(RES_TPS[_ci]));
             forceRedraw();
             return;
@@ -8034,6 +8059,46 @@ function _onCC_transport(d1, d2) {
     /* Up/Down: scene group nav in Session View or while overview held; octave shift in Track View */
     if (d1 === MoveDown && d2 === 127 && (S.sessionView || S.sessionOverlayHeld) && S.sceneRow < NUM_CLIPS - 4) { S.sceneRow = Math.min(NUM_CLIPS - 4, S.sceneRow + 4); forceRedraw(); }
     if (d1 === MoveUp   && d2 === 127 && (S.sessionView || S.sessionOverlayHeld) && S.sceneRow > 0)              { S.sceneRow = Math.max(0, S.sceneRow - 4);              forceRedraw(); }
+    if ((d1 === MoveUp || d1 === MoveDown) && d2 > 0 && !S.sessionView && !S.sessionOverlayHeld &&
+            S.loopHeld && S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
+        var RES_TPS = [12, 24, 48, 96, 384];
+        var _zt = S.activeTrack, _zac = effectiveClip(_zt), _zL = S.ccActiveLane[_zt];
+        var _zOldTps = S.ccLaneTps[_zt][_zac][_zL] || (S.clipTPS[_zt][_zac] || 24);
+        var _zci = RES_TPS.indexOf(_zOldTps);
+        if (_zci < 0) _zci = 1;
+        if (d1 === MoveDown && _zci > 0) _zci--;
+        else if (d1 === MoveUp && _zci < RES_TPS.length - 1) _zci++;
+        var _zNewTps = RES_TPS[_zci];
+        if (_zNewTps !== _zOldTps) {
+            var _zOldLen = S.ccLaneLength[_zt][_zac][_zL] || S.clipLength[_zt][_zac];
+            var _zOldTicks = _zOldLen * _zOldTps;
+            var _zNewLen = Math.ceil(_zOldTicks / _zNewTps);
+            if (_zNewLen <= 256) {
+                S.ccLaneTps[_zt][_zac][_zL] = _zNewTps;
+                S.ccLaneLength[_zt][_zac][_zL] = _zNewLen;
+                var _zOldRes = S.ccLaneResTps[_zt][_zac][_zL];
+                if (_zOldRes > 0) {
+                    var _zNewRes = Math.round(_zOldRes * _zNewTps / _zOldTps);
+                    var _zResValid = RES_TPS.indexOf(_zNewRes) >= 0;
+                    S.ccLaneResTps[_zt][_zac][_zL] = _zResValid ? _zNewRes : 0;
+                }
+                if (typeof host_module_set_param === 'function') {
+                    host_module_set_param('t' + _zt + '_c' + _zac + '_k' + _zL + '_cc_lane_tps',
+                                          String(_zNewTps));
+                    var _zPacked = ((S.ccLaneLoopStart[_zt][_zac][_zL] | 0) << 16) | (_zNewLen & 0xFFFF);
+                    host_module_set_param('t' + _zt + '_c' + _zac + '_k' + _zL + '_cc_loop_set',
+                                          String(_zPacked));
+                    if (_zOldRes > 0)
+                        host_module_set_param('t' + _zt + '_c' + _zac + '_k' + _zL + '_cc_lane_res_tps',
+                                              String(S.ccLaneResTps[_zt][_zac][_zL]));
+                }
+                var _zMaxPage = Math.max(0, Math.ceil(_zNewLen / 16) - 1);
+                if (S.trackCurrentPage[_zt] > _zMaxPage) S.trackCurrentPage[_zt] = _zMaxPage;
+                forceRedraw();
+            }
+        }
+        return;
+    }
     if (d1 === MoveUp   && d2 > 0 && !S.sessionView && !S.sessionOverlayHeld) {
         if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
             setDrumLanePage(S.activeTrack, 1);
@@ -8309,7 +8374,8 @@ function _onCC_stepedit(d1, d2) {
         S.knobTurnedTick[_kIdx] = S.tickCount;
         S.ccActiveLane[_t]      = _kIdx;
         S.screenDirty  = true;
-        const _tps   = S.clipTPS[_t][_ac] || 24;
+        var _laneTps = S.ccLaneTps[_t][_ac][_kIdx];
+        const _tps   = (_laneTps > 0) ? _laneTps : (S.clipTPS[_t][_ac] || 24);
         const _tick  = S.heldStep * _tps;
         const _hold  = Math.min(65535, _tick + _tps - 1);
         /* Floor at "—": from an unset step, down → stays "—" (clear this knob's

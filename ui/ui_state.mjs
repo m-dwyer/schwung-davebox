@@ -266,6 +266,9 @@ export const S = {
     ccLaneTps: Array.from({length: 8}, function() {
         return Array.from({length: 16}, function() { return new Array(8).fill(0); });
     }),
+    ccLaneResTps: Array.from({length: 8}, function() {
+        return Array.from({length: 16}, function() { return new Array(8).fill(0); });
+    }),
     /* CC-knob acceleration (fractional accumulator + run-based gain): per knob,
      * last turn time, direction, consecutive-detent run, and the sub-unit
      * accumulator. */
