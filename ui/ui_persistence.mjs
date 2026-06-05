@@ -138,7 +138,6 @@ export function writeSidecar() {
             pm: S.perfModsToggled, lm: S.perfLatchMode ? 1 : 0,
             rs: S.perfRecalledSlot, us: S.perfSnapshots.slice(8),
             bm: S.beatMarkersEnabled ? 1 : 0,
-            ss: S.trackSchwungSlot.slice(),
             dva: S.drumVelZoneArmed.slice(),
             dleu: S.drumLaneEuclidN.map(function(lane) { return lane.slice(); }),
             to: S.trackOctave.slice(),
@@ -288,7 +287,6 @@ export function doClearSession() {
         for (let _c = 0; _c < NUM_CLIPS; _c++) S.clipSeqFollow[_t][_c] = true;
         S.trackChannel[_t] = 1; S.trackRoute[_t] = 0; S.trackPadMode[_t] = 0;
         S.trackVelOverride[_t] = 0; S.trackLooper[_t] = 1;
-        S.trackSchwungSlot[_t] = -1;
         S.trackOctave[_t] = 0;
         S.drumVelZoneArmed[_t] = false;
         S.trackCCAssign[_t] = CC_ASSIGN_DEFAULTS.slice();

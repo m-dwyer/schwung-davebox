@@ -84,7 +84,7 @@ import { saveState, writeSidecar, doClearSession, showActionPopup, uuidToStatePa
     SNAPSHOT_CAP, snapshotLabel, loadSnapshotManifest, commitSnapshot, applySnapshotToLive, dropSnapshots } from '/data/UserData/schwung/modules/tools/davebox/ui_persistence.mjs';
 import { drawGlobalMenu } from '/data/UserData/schwung/modules/tools/davebox/ui_dialogs.mjs';
 import { trackClipHasContent, sceneAllQueued, updateSceneMapLEDs } from '/data/UserData/schwung/modules/tools/davebox/ui_scene.mjs';
-import { effectiveClip, updateStepLEDs, updateSessionLEDs, updateTrackLEDs, flashAtRate, drawPositionBar, invalidateLEDCache } from '/data/UserData/schwung/modules/tools/davebox/ui_leds.mjs';
+import { effectiveClip, updateStepLEDs, updateSessionLEDs, updateTrackLEDs, flashAtRate, drawPositionBar, invalidateLEDCache, paintCoRunSideButtons } from '/data/UserData/schwung/modules/tools/davebox/ui_leds.mjs';
 import { SPLASH_FRAMES, SPLASH_COUNT, SPLASH_W, SPLASH_H, pickSplashIdx } from '/data/UserData/schwung/modules/tools/davebox/ui_splash.mjs';
 import { requestExport, confirmExportStart, pollPendingExport } from '/data/UserData/schwung/modules/tools/davebox/ui_export.mjs';
 
@@ -620,15 +620,31 @@ function reapplyPalette() { move_midi_internal_send(_CC_REAPPLY_PKT); }
 /* Resolve the Schwung chain slot index for a dAVEBOx track's MIDI channel.
  * shadow_get_slots() returns {channel, name} per slot where channel is 1-16
  * (matching trackChannel) or 0 for "All". Returns -1 if no match. */
+/* First (lowest-index) Schwung slot that receives a track's MIDI channel, or -1.
+ * Thin wrapper over schSlotsForTrack so the match logic lives in one place. */
 function schSlotForTrack(t) {
-    if (typeof shadow_get_slots !== 'function') return -1;
+    const m = schSlotsForTrack(t);
+    if (m === 0) return -1;
+    let i = 0;
+    while (!(m & (1 << i))) i++;
+    return i;
+}
+
+/* Bitmask (bits 0-3) of ALL Schwung slots that receive a track's MIDI channel —
+ * i.e. every slot whose receive channel matches trackChannel[t] or is "All" (0).
+ * Multiple slots on the same channel are layered (all play the track), so all of
+ * them get a bit. 0 = no slot receives this track. Lowest set bit = the slot the
+ * co-run editor opens to; the whole mask is blinked on the side buttons. */
+function schSlotsForTrack(t) {
+    if (typeof shadow_get_slots !== 'function') return 0;
     const ch = S.trackChannel[t];
     const slots = shadow_get_slots();
-    if (!slots) return -1;
-    for (let i = 0; i < slots.length; i++) {
-        if (slots[i].channel === ch || slots[i].channel === 0) return i;
+    if (!slots) return 0;
+    let mask = 0;
+    for (let i = 0; i < slots.length && i < 4; i++) {
+        if (slots[i].channel === ch || slots[i].channel === 0) mask |= (1 << i);
     }
-    return -1;
+    return mask;
 }
 
 /* Format CC number as a 4-char display label: CC7→"CC7 ", CC74→"CC74", C100→"C100" */
@@ -3504,19 +3520,14 @@ function drawUI() {
      * verified harmless in real use (nothing the user does during co-run
      * depends on live LED feedback). */
     if (S.moveCoRunTrack >= 0) {
-        /* Track buttons: blink the paired Move track (white/off at /24 rate,
-         * matching the NoteSession exit-hint); solid white on the other three
-         * as a "press to switch Move tracks" affordance. Force-refresh every
-         * 8 ticks so any sporadic Move firmware overwrites self-correct. */
-        const _coRunCh  = (S.trackChannel[S.moveCoRunTrack] | 0);
-        const _coRunCC  = (_coRunCh >= 1 && _coRunCh <= 4) ? (44 - _coRunCh) : -1;
-        const _crForce  = (S.tickCount % 8) === 0;
-        const _crBlink  = (Math.floor(S.tickCount / 24) % 2) ? White : LED_OFF;
-        for (let _i = 0; _i < 4; _i++) {
-            const _cc = 40 + _i;
-            if (_cc === _coRunCC) setButtonLED(_cc, _crBlink, _crForce);
-            else if (_crForce)   setButtonLED(_cc, White, true);
-        }
+        /* Side clip buttons: the button paired to the Move track this dAVEBOx
+         * track routes to blinks; the rest stay dark grey. Move's track numbering
+         * is reversed (Track 1 = CC 43 = top .. Track 4 = CC 40 = bottom), so a
+         * channel ch (1-4) maps to top-to-bottom bit (ch-1). Forced every
+         * POLL_INTERVAL to re-assert over Move firmware's pass-through writes. */
+        const _coRunCh = (S.trackChannel[S.moveCoRunTrack] | 0);
+        const _litMask = (_coRunCh >= 1 && _coRunCh <= 4) ? (1 << (_coRunCh - 1)) : 0;
+        paintCoRunSideButtons(_litMask, (S.tickCount % POLL_INTERVAL) === 0);
         return;
     }
     /* Alt-param mode is transient: any bank change, track change, or entering
@@ -3550,7 +3561,6 @@ function drawUI() {
         return;
     }
     if (S.confirmStateWipe) { drawStateWipeConfirm(); return; }
-    if (S.pendingSchwungSlotPicker) { drawSchwungSlotPicker(); return; }
     if (S.recordBlockedDialog) { drawRecordBlockedDialog(); return; }
     if (S.confirmLgto)         { drawLgtoConfirm();         return; }
     if (S.confirmBakeScene) { drawBakeSceneConfirm(); return; }
@@ -4776,21 +4786,14 @@ function openSchwungSlotEditor(t) {
         showActionPopup('NOT', 'SCHWUNG-ROUTED');
         return;
     }
-    /* Close the global menu in both branches so Menu (exit co-run) doesn't
-     * land back on a half-open menu. */
+    /* Close the global menu so Menu (exit co-run) doesn't land back on a
+     * half-open menu. */
     S.globalMenuOpen = false;
     S.lastSentMenuEditValue = null;
-    const slot = S.trackSchwungSlot[t];
-    /* Shift held = force picker (re-assignment). Without Shift, an
-     * already-assigned track goes straight to co-run. */
-    if (slot >= 0 && slot <= 3 && !S.shiftHeld) {
-        enterSchwungCoRun(t, slot);
-        return;
-    }
-    /* Pre-select the current assignment in the picker (or Slot 1 / index 0 if
-     * unassigned) so jog-click + Shift held confirms the same slot quickly. */
-    const _idx = (slot >= 0 && slot <= 3) ? slot : 0;
-    S.pendingSchwungSlotPicker = { track: t, selectedIndex: _idx };
+    /* Auto-open the slot the track plays through (channel-matched) — no picker.
+     * Resolution is deferred to tick() so shadow_get_slots runs in a safe
+     * context; see the pendingSchwungCoRunTrack handler. */
+    S.pendingSchwungCoRunTrack = t;
     S.screenDirty = true;
 }
 
@@ -4798,11 +4801,9 @@ function openSchwungSlotEditor(t) {
  * suppresses dAVEBOx's OLED drawing + track-button LEDs (handled where each
  * is written), and tells Schwung's shadow_ui to also tick the chain editor. */
 function enterSchwungCoRun(t, slot) {
-    S.trackSchwungSlot[t] = slot;
     S.schwungCoRunSlot = slot;
     if (typeof shadow_corun_begin === 'function')
         shadow_corun_begin(CORUN_TARGET_CHAIN_EDIT, slot, DAVEBOX_CORUN_KEEP_MASK);
-    saveState();
     S.screenDirty = true;
 }
 
@@ -4813,6 +4814,7 @@ function enterSchwungCoRun(t, slot) {
 function exitSchwungCoRun() {
     if (S.schwungCoRunSlot < 0) return;
     S.schwungCoRunSlot = -1;
+    S._coRunChanSlots = 0;
     if (typeof shadow_corun_end === 'function')
         shadow_corun_end();
     /* Modifier-key release CCs the user pressed inside the co-run may have
@@ -4909,48 +4911,6 @@ function exitMoveNativeCoRun() {
     forceRedraw();
 }
 
-function resolveSchwungSlotPicker(action) {
-    const p = S.pendingSchwungSlotPicker;
-    if (!p) return;
-    const t = p.track;
-    S.pendingSchwungSlotPicker = null;
-    S.screenDirty = true;
-    if (action >= 0 && action <= 3) {
-        enterSchwungCoRun(t, action);
-    } else {
-        S.globalMenuOpen = true;
-    }
-}
-
-function drawSchwungSlotPicker() {
-    clear_screen();
-    const p = S.pendingSchwungSlotPicker;
-    if (!p) return;
-    print(2, 2,  'Edit Schwung slot', 1);
-    print(2, 10, 'for track ' + (p.track + 1), 1);
-    fill_rect(0, 18, 128, 1, 1);
-
-    const total = 5;
-    const visible = 3;
-    const sel = p.selectedIndex;
-    let top = Math.max(0, Math.min(sel - 1, total - visible));
-    const lineH = 9;
-    const listTopY = 22;
-    for (let i = 0; i < visible && (top + i) < total; i++) {
-        const idx = top + i;
-        const y = listTopY + i * lineH;
-        const label = (idx < 4) ? ('Slot ' + (idx + 1)) : 'Cancel';
-        if (idx === sel) {
-            fill_rect(2, y - 1, 124, lineH - 1, 1);
-            print(5, y, label, 0);
-        } else {
-            print(5, y, label, 1);
-        }
-    }
-    if (top > 0)               print(120, listTopY, '^', 1);
-    if (top + visible < total) print(120, listTopY + (visible - 1) * lineH, 'v', 1);
-}
-
 function restoreUiSidecar(applyDefaultsNow) {
     const uiSp = uuidToUiStatePath(S.currentSetUuid);
     let us = null;
@@ -5002,12 +4962,9 @@ function restoreUiSidecar(applyDefaultsNow) {
             const _pm = S.perfModsToggled | S.perfModsHeld;
             if (_pm) S.pendingDefaultSetParams.push({ key: 'perf_mods', val: String(_pm) });
         }
-        if (us.v >= 4 && Array.isArray(us.ss)) {
-            for (let _t = 0; _t < NUM_TRACKS; _t++) {
-                const _s = us.ss[_t];
-                S.trackSchwungSlot[_t] = (typeof _s === 'number' && _s >= 0 && _s < 4) ? _s : -1;
-            }
-        }
+        /* us.ss (per-track Schwung slot) is obsolete — the co-run slot is now
+         * derived from each slot's receive channel at entry time, so old sidecars'
+         * ss is ignored and no longer written. */
         if (us.v >= 5 && Array.isArray(us.dva)) {
             for (let _t = 0; _t < NUM_TRACKS; _t++)
                 S.drumVelZoneArmed[_t] = us.dva[_t] === true;
@@ -6045,6 +6002,48 @@ function _tickImpl() {
 
         if ((S.tickCount % POLL_INTERVAL) === 0) { pollDSP(); S.screenDirty = true; }
 
+        /* Schwung co-run: refresh the channel-matched slot bitmask for the
+         * side-button blink (shadow_get_slots is a cheap shared-memory read;
+         * gate to the poll cadence to match the LED force cadence). */
+        if (S.schwungCoRunSlot >= 0 && (S.tickCount % POLL_INTERVAL) === 0) {
+            S._coRunChanSlots = schSlotsForTrack(S.activeTrack);
+        }
+
+        /* Deferred Schwung co-run entry (queued by openSchwungSlotEditor). Resolve
+         * the slot(s) the track plays through and open the first (lowest-index)
+         * match. No match → show a "NO SLOT" popup, wait ~1s so it's readable
+         * before the chain editor takes the OLED, then fall back to slot 1. */
+        if (S.pendingSchwungCoRunTrack >= 0) {
+            const _t = S.pendingSchwungCoRunTrack;
+            if (S.schwungCoRunSlot >= 0 || _t !== S.activeTrack) {
+                /* Already in co-run, or the user navigated to another track while a
+                 * no-match entry was waiting out its popup — drop the queued entry
+                 * rather than hijacking the OLED for a track they left. (Both entry
+                 * paths queue S.activeTrack, so _t != activeTrack means a switch.) */
+                S.pendingSchwungCoRunTrack = -1;
+                S.pendingSchwungCoRunDelay = 0;
+            } else if (S.pendingSchwungCoRunDelay > 0) {
+                if (--S.pendingSchwungCoRunDelay === 0) {
+                    S.pendingSchwungCoRunTrack = -1;
+                    enterSchwungCoRun(_t, 0);  /* slot 1 fallback after the NO SLOT popup */
+                }
+            } else {
+                const _msk = schSlotsForTrack(_t);
+                if (_msk === 0) {
+                    showActionPopup('NO SLOT', 'CH ' + (S.trackChannel[_t] | 0));
+                    /* Enter right as the popup expires so there's no gap where the
+                     * normal UI flashes before the editor takes the OLED. */
+                    S.pendingSchwungCoRunDelay = ACTION_POPUP_TICKS;
+                } else {
+                    S.pendingSchwungCoRunTrack = -1;
+                    S._coRunChanSlots = _msk;  /* seed the blink mask so it's right on frame 1 */
+                    let _slot = 0;
+                    while (_slot < 4 && !(_msk & (1 << _slot))) _slot++;
+                    enterSchwungCoRun(_t, _slot);
+                }
+            }
+        }
+
         /* Metro beat detection: checked every tick via dedicated get_param for minimal jitter */
         if (S.metronomeOn > 0) {
             const _mbcRaw = host_module_get_param('metro_beat_count');
@@ -6265,13 +6264,13 @@ function _tickImpl() {
         /* Contextual button LEDs: dim available indicator (16) on actionable buttons. */
         setButtonLED(MoveShift,       16);
         setButtonLED(MoveNoteSession, 16);
-        /* Session/Track view button as exit affordance. In co-run (either mode:
-         * Edit Slot / Edit Synth) hold it SOLID bright white; force-resend every
-         * POLL_INTERVAL so the steady value re-asserts over the layer that owns
-         * LEDs underneath — the Schwung shim's overtake loop, or Move firmware's
-         * pass-through writes under skip_led_clear. (A non-changing value is
-         * otherwise cache-gated, sent once then eaten.) Global Menu / Tap Tempo
-         * keep the blink, since there's no competing LED layer there. */
+        /* Session/Track view button. In Schwung co-run the CC 50 press AND its
+         * LED are owned by the Schwung chain editor (Menu opens master/send FX,
+         * editor paints it white via its LED queue) — NOT a dAVEBOx exit. We
+         * can't win that LED (the editor's queue flush lands after us each
+         * frame), so just paint White to agree rather than fight. In Move co-run
+         * the button is disabled + dark; force OFF to override Move firmware.
+         * Global Menu / Tap Tempo keep the blink (no competing LED layer). */
         if (S.schwungCoRunSlot >= 0) {
             setButtonLED(MoveNoteSession, White, (S.tickCount % POLL_INTERVAL) === 0);
         } else if (S.moveCoRunTrack >= 0) {
@@ -6598,13 +6597,6 @@ function _onCC_jog(d1, d2) {
     /* CLEAR AUTOMATION modal: jog click toggles a row / executes CLEAR. */
     if (d1 === 3 && d2 === 127 && S.clearAutoMenu) {
         clearAutoMenuClick();
-        return;
-    }
-    /* Schwung-slot picker: jog click confirms slot (0-3) or Cancel (4 -> -1). */
-    if (d1 === 3 && d2 === 127 && S.pendingSchwungSlotPicker) {
-        const p = S.pendingSchwungSlotPicker;
-        const action = (p.selectedIndex >= 4) ? -1 : p.selectedIndex;
-        resolveSchwungSlotPicker(action);
         return;
     }
     /* Scene bake confirm: two-phase jog flow — loop count, then wrap yes/no. */
@@ -7017,16 +7009,6 @@ function _onCC_jog(d1, d2) {
         }
         if (S.clearAutoMenu) {
             clearAutoMenuRotate(decodeDelta(d2));
-            return;
-        }
-        if (S.pendingSchwungSlotPicker) {
-            const delta = decodeDelta(d2);
-            if (delta !== 0) {
-                const p = S.pendingSchwungSlotPicker;
-                const total = 5;
-                p.selectedIndex = (p.selectedIndex + (delta > 0 ? 1 : total - 1)) % total;
-                S.screenDirty = true;
-            }
             return;
         }
         if (S.confirmBakeScene) {

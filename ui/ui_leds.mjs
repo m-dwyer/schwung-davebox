@@ -51,12 +51,25 @@ export function invalidateLEDCache() {
     lastSentButtonLED.fill(-1);
 }
 
+/* Co-run side clip buttons (CC 40-43): blink the buttons whose bit is set in
+ * `litMask` (bit 0 = TOP = CC 43 .. bit 3 = bottom = CC 40) between dark-grey and
+ * light-grey; the rest stay dark grey. Shared by Schwung co-run (mask = slots
+ * receiving the track's channel) and Move co-run (single paired track) so the
+ * blink rate, colors, and force cadence stay in one place. */
+export function paintCoRunSideButtons(litMask, force) {
+    const blinkOn = (Math.floor(Date.now() / 250) % 2) === 1;
+    for (let i = 0; i < 4; i++) {
+        const lit = (litMask >> i) & 1;
+        setButtonLED(43 - i, lit ? (blinkOn ? LightGrey : DarkGrey) : DarkGrey, force);
+    }
+}
+
 export function updateStepLEDs() {
     if (!S.ledInitComplete) return;
 
     /* Co-run (Schwung chain-edit or Move-native): the co-run target owns the
      * surface, so blank the step button main LEDs — except Step 3 (index 2),
-     * which blinks dark-grey/off at a steady rate as the "Edit Slot/Synth"
+     * which blinks dark-grey/bright-white at a steady rate as the "Edit Slot/Synth"
      * affordance. Return early so the normal step grid neither paints nor burns
      * LED budget (see SCHWUNG_DAVEBOX_LIMITATIONS.md §14). */
     if (S.schwungCoRunSlot >= 0 || S.moveCoRunTrack >= 0) {
@@ -74,7 +87,7 @@ export function updateStepLEDs() {
          * force below. Without it our LED_OFF lands once then loses to that layer. */
         const _force = (S.tickCount % POLL_INTERVAL) === 0;
         for (let i = 0; i < 16; i++) {
-            setLED(16 + i, i === 2 ? (_blinkOn ? DarkGrey : LED_OFF) : LED_OFF, _force);
+            setLED(16 + i, i === 2 ? (_blinkOn ? White : DarkGrey) : LED_OFF, _force);
         }
         return;
     }
@@ -417,19 +430,18 @@ export function updateSessionLEDs() {
 export function updateTrackLEDs() {
     if (!S.ledInitComplete) return;
 
-    /* Track buttons (CCs 40-43) — bright White while co-run is active so the
-     * user sees they're disconnected from dAVEBOx and owned by Schwung's
-     * chain editor. On exit, restore to OFF (dAVEBOx doesn't otherwise drive
-     * these LEDs). The transition latch fires the OFF writes exactly once
-     * when co-run clears. */
+    /* Side clip buttons in Schwung co-run: all dark grey, with EVERY slot that
+     * receives the active track's channel (_coRunChanSlots bitmask; layered slots
+     * all blink) blinking dark-grey/light-grey. Slot order is TOP-to-bottom:
+     * slot 1 (bit 0) = top button = CC 43, slot 4 (bit 3) = bottom = CC 40.
+     * Blink runs off wall-clock so the rate matches Move co-run; force every
+     * POLL_INTERVAL so it re-asserts over the Schwung shim's overtake LED loop.
+     * On exit, restore to OFF exactly once. */
     {
         const inCoRun = S.schwungCoRunSlot >= 0;
         if (inCoRun) {
-            const force = S.tickCount % POLL_INTERVAL === 0;
-            for (let _i = 0; _i < 4; _i++) {
-                if (force) setButtonLED(40 + _i, White, true);
-                else cachedSetButtonLED(40 + _i, White);
-            }
+            /* _coRunChanSlots bit i = slot (i+1), already top-to-bottom (bit 0 = top). */
+            paintCoRunSideButtons(S._coRunChanSlots, S.tickCount % POLL_INTERVAL === 0);
             S._coRunTrackLedsLit = true;
         } else if (S._coRunTrackLedsLit) {
             for (let _i = 0; _i < 4; _i++) setButtonLED(40 + _i, LED_OFF, true);

@@ -180,8 +180,10 @@ export const S = {
     trackQueuedClip: new Array(8).fill(-1),
     trackChannel: new Array(8).fill(1),
     trackRoute: new Array(8).fill(0),
-    trackSchwungSlot: new Array(8).fill(-1),  /* -1 = unassigned; 0-3 = Schwung chain slot picked from this track's "Edit Slot" menu */
     schwungCoRunSlot: -1,                     /* -1 = off; 0-3 = Schwung chain editor is co-running on this slot (dAVEBOx skips OLED + suppresses track-button LEDs) */
+    _coRunChanSlots: 0,                       /* Schwung co-run: bitmask (bits 0-3) of slots whose receive channel matches the active track; blinked on the side buttons. 0 = none. Refreshed on poll cadence. */
+    pendingSchwungCoRunTrack: -1,             /* -1 = none; t = track queued to enter Schwung co-run; slot resolved in tick (schSlotsForTrack) so shadow_get_slots runs in tick context */
+    pendingSchwungCoRunDelay: 0,             /* >0 = ticks remaining before entering co-run after a no-match "NO SLOT" popup (lets the message show before the editor takes the OLED) */
     moveCoRunTrack: -1,                       /* -1 = off; 0-3 = Move firmware is co-running on this track (dAVEBOx skips OLED; shim filters nav CCs + touch 0-9 from tool, lets them reach Move) */
     moveCoRunDrumHeld: -1,                    /* d1 note of drum lane pad held in co-run (Shift still active); -1 = none. note-off + Shift-off sent on physical release */
     trackPadMode: new Array(8).fill(0),
@@ -446,7 +448,6 @@ export const S = {
      * file is on disk by then, so the copy-into-snapshot runs in tick().
      * { id, label } (id reused = overwrite). */
     pendingSnapshotCopy: null,
-    pendingSchwungSlotPicker: null,  /* { track, selectedIndex } when slot-pick dialog is open before co-run entry; index 0-3 = slot, 4 = Cancel */
     pendingEditEntryTrack: -1,  /* Shift+Step3: deferred co-run entry. -1 = none; track idx = fire on Shift release so Shift state doesn't leak into Move/Schwung */
     pendingUndoSync: 0,
     pendingDefaultSetParams: [],
