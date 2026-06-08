@@ -9,7 +9,7 @@
 #   - CHANGELOG.md [Unreleased] section has at least one entry
 #   - tag v<version> does not already exist
 #
-# After this finishes you still need to upload dist/davebox-module.tar.gz
+# After this finishes you still need to upload dist/overture-module.tar.gz
 # to the v<version> GitHub release (the script doesn't touch GitHub).
 
 set -euo pipefail
@@ -67,7 +67,7 @@ data = json.loads(rj.read_text())
 data["version"] = version
 data["download_url"] = (
     f"https://github.com/legsmechanical/schwung-davebox/releases/"
-    f"download/v{version}/davebox-module.tar.gz"
+    f"download/v{version}/overture-module.tar.gz"
 )
 rj.write_text(json.dumps(data, indent=2) + "\n")
 print(f"  release.json: version → {version}")
@@ -101,9 +101,9 @@ git push origin "$TAG"
 # --- summary ----------------------------------------------------------------
 echo
 echo "✓ Released $TAG"
-echo "  Tarball: dist/davebox-module.tar.gz"
+echo "  Tarball: dist/overture-module.tar.gz"
 echo
 echo "Next steps (manual):"
 echo "  1. Create v$VERSION release on GitHub"
-echo "  2. Upload dist/davebox-module.tar.gz as the release asset"
+echo "  2. Upload dist/overture-module.tar.gz as the release asset"
 echo "  3. Paste the [$VERSION] section from CHANGELOG.md as the release notes"

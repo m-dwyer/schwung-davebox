@@ -1,12 +1,12 @@
-import { S } from '/data/UserData/schwung/modules/tools/davebox/ui_state.mjs';
+import { S } from '/data/UserData/schwung/modules/tools/overture/ui_state.mjs';
 import {
     NUM_STEPS, NUM_TRACKS, LED_OFF,
     TRACK_COLORS, TRACK_DIM_COLORS, TRACK_PAD_BASE, SCENE_BTN_FLASH_TICKS,
     PAD_MODE_DRUM, BANKS,
     POLL_INTERVAL, TAP_TEMPO_FLASH_TICKS, PARAM_LED_BANKS,
     CC_GRADIENT_BASE, CC_GRADIENT_LEVELS
-} from '/data/UserData/schwung/modules/tools/davebox/ui_constants.mjs';
-import { trackClipHasContent } from '/data/UserData/schwung/modules/tools/davebox/ui_scene.mjs';
+} from '/data/UserData/schwung/modules/tools/overture/ui_constants.mjs';
+import { trackClipHasContent } from '/data/UserData/schwung/modules/tools/overture/ui_scene.mjs';
 import {
     White, Red, Green, Blue, DarkBlue, LightGrey, DarkGrey, Cyan, PurpleBlue, VividYellow
 } from '/data/UserData/schwung/shared/constants.mjs';
@@ -73,7 +73,7 @@ export function updateStepLEDs() {
      * affordance. Return early so the normal step grid neither paints nor burns
      * LED budget (see SCHWUNG_DAVEBOX_LIMITATIONS.md §14). */
     if (S.schwungCoRunSlot >= 0 || S.moveCoRunTrack >= 0) {
-        /* Blink off wall-clock, NOT tickCount: dAVEBOx's tick() runs at a slower
+        /* Blink off wall-clock, NOT tickCount: Overture's tick() runs at a slower
          * wall-clock rate in Schwung co-run (the host also services Schwung's
          * chain editor) than in Move co-run, so a tickCount-based blink looks
          * slower in Schwung. ~250ms half-period ≈ the Move-co-run feel of the
@@ -452,7 +452,7 @@ export function updateTrackLEDs() {
     /* Move-native co-run: drawUI() returns early in co-run and handles the
      * track-button blink directly there (setButtonLED in the early-return block).
      * This path only fires on co-run EXIT to reclaim the four CCs from Move
-     * firmware so its colors don't persist into dAVEBOx track view. */
+     * firmware so its colors don't persist into Overture track view. */
     {
         const inMoveCoRun = (S.moveCoRunTrack | 0) >= 0;
         if (inMoveCoRun) {
@@ -725,7 +725,7 @@ export function updateTrackLEDs() {
      * shows the bright-White indicator written at the top of this function;
      * Move-native co-run blinks them dark-grey from drawUI. Either way, the
      * per-frame clip-playback paint here must stand down. Knob LEDs below still
-     * update normally so dAVEBOx's sequencer-side controls stay legible. */
+     * update normally so Overture's sequencer-side controls stay legible. */
   if (S.schwungCoRunSlot < 0 && (S.moveCoRunTrack | 0) < 0) {
     for (let idx = 0; idx < 4; idx++) {
         const row      = 3 - idx;

@@ -77,16 +77,16 @@ import {
     POLL_INTERVAL, TAP_TEMPO_FLASH_TICKS, TAP_TEMPO_RESET_MS,
     PARAM_LED_BANKS, STATE_VERSION,
     CC_GRADIENT_BASE, CC_GRADIENT_LEVELS, CC_GRADIENT_SCALARS
-} from '/data/UserData/schwung/modules/tools/davebox/ui_constants.mjs';
+} from '/data/UserData/schwung/modules/tools/overture/ui_constants.mjs';
 
-import { S, CC_ASSIGN_DEFAULTS, PERF_FACTORY_PRESETS } from '/data/UserData/schwung/modules/tools/davebox/ui_state.mjs';
+import { S, CC_ASSIGN_DEFAULTS, PERF_FACTORY_PRESETS } from '/data/UserData/schwung/modules/tools/overture/ui_state.mjs';
 import { saveState, writeSidecar, doClearSession, showActionPopup, uuidToStatePath, uuidToUiStatePath, readActiveSet, loadNameIndex, saveNameIndex, copyStateFiles, findInheritCandidates,
-    SNAPSHOT_CAP, snapshotLabel, loadSnapshotManifest, commitSnapshot, applySnapshotToLive, dropSnapshots } from '/data/UserData/schwung/modules/tools/davebox/ui_persistence.mjs';
-import { drawGlobalMenu } from '/data/UserData/schwung/modules/tools/davebox/ui_dialogs.mjs';
-import { trackClipHasContent, sceneAllQueued, updateSceneMapLEDs } from '/data/UserData/schwung/modules/tools/davebox/ui_scene.mjs';
-import { effectiveClip, updateStepLEDs, updateSessionLEDs, updateTrackLEDs, flashAtRate, drawPositionBar, invalidateLEDCache, paintCoRunSideButtons } from '/data/UserData/schwung/modules/tools/davebox/ui_leds.mjs';
-import { SPLASH_FRAMES, SPLASH_COUNT, SPLASH_W, SPLASH_H, pickSplashIdx } from '/data/UserData/schwung/modules/tools/davebox/ui_splash.mjs';
-import { requestExport, confirmExportStart, pollPendingExport } from '/data/UserData/schwung/modules/tools/davebox/ui_export.mjs';
+    SNAPSHOT_CAP, snapshotLabel, loadSnapshotManifest, commitSnapshot, applySnapshotToLive, dropSnapshots } from '/data/UserData/schwung/modules/tools/overture/ui_persistence.mjs';
+import { drawGlobalMenu } from '/data/UserData/schwung/modules/tools/overture/ui_dialogs.mjs';
+import { trackClipHasContent, sceneAllQueued, updateSceneMapLEDs } from '/data/UserData/schwung/modules/tools/overture/ui_scene.mjs';
+import { effectiveClip, updateStepLEDs, updateSessionLEDs, updateTrackLEDs, flashAtRate, drawPositionBar, invalidateLEDCache, paintCoRunSideButtons } from '/data/UserData/schwung/modules/tools/overture/ui_leds.mjs';
+import { SPLASH_FRAMES, SPLASH_COUNT, SPLASH_W, SPLASH_H, pickSplashIdx } from '/data/UserData/schwung/modules/tools/overture/ui_splash.mjs';
+import { requestExport, confirmExportStart, pollPendingExport } from '/data/UserData/schwung/modules/tools/overture/ui_export.mjs';
 
 /* ------------------------------------------------------------------ */
 /* Parameter bank definitions                                           */
@@ -443,7 +443,7 @@ function buildGlobalMenuItems() {
 /* Co-run target enum + keep-mask flags — mirrors corun_target_t and the
  * CORUN_GRP_* / CORUN_KEEP_* bits in Schwung's shadow_constants.h. The shim
  * registers these as globals on shadow_ui's JS context; redeclaring them
- * here makes the dAVEBOx tool context self-contained on platforms that scope
+ * here makes the Overture tool context self-contained on platforms that scope
  * globals differently. Keep in sync with docs/CORUN.md. */
 const CORUN_TARGET_NONE        = 0;
 const CORUN_TARGET_CHAIN_EDIT  = 1;
@@ -453,12 +453,12 @@ const CORUN_GRP_STEPS          = 1 << 2;
 const CORUN_GRP_TRANSPORT      = 1 << 3;
 const CORUN_GRP_MENU           = 1 << 10;
 /* Default split: tool keeps pads / steps / transport / Menu, cedes the rest. */
-const DAVEBOX_CORUN_KEEP_DEFAULT = CORUN_GRP_PADS | CORUN_GRP_STEPS | CORUN_GRP_TRANSPORT | CORUN_GRP_MENU;
-/* Opt out of framework Back-as-exit. dAVEBOx uses Menu as the canonical exit
+const OVERTURE_CORUN_KEEP_DEFAULT = CORUN_GRP_PADS | CORUN_GRP_STEPS | CORUN_GRP_TRANSPORT | CORUN_GRP_MENU;
+/* Opt out of framework Back-as-exit. Overture uses Menu as the canonical exit
  * (existing muscle memory) and lets Back cede to the peer for sub-view nav
  * (chain editor pop-up, Move firmware preset/synth navigation). */
 const CORUN_KEEP_BACK_BIT      = 1 << 15;
-const DAVEBOX_CORUN_KEEP_MASK  = DAVEBOX_CORUN_KEEP_DEFAULT | CORUN_KEEP_BACK_BIT;
+const OVERTURE_CORUN_KEEP_MASK  = OVERTURE_CORUN_KEEP_DEFAULT | CORUN_KEEP_BACK_BIT;
 
 const LOOPER_RATES_STRAIGHT = [12, 24, 48, 96, 192];   /* 1/32, 1/16, 1/8, 1/4, 1/2 */
 const PERF_LATCH_LONG_PRESS = 100;     /* ~510ms → clear all toggled mods + exit Latch mode */
@@ -612,7 +612,7 @@ function setPaletteEntryRGB(idx, r, g, b) {
 
 function reapplyPalette() { move_midi_internal_send(_CC_REAPPLY_PKT); }
 
-/* Resolve the Schwung chain slot index for a dAVEBOx track's MIDI channel.
+/* Resolve the Schwung chain slot index for a Overture track's MIDI channel.
  * shadow_get_slots() returns {channel, name} per slot where channel is 1-16
  * (matching trackChannel) or 0 for "All". Returns -1 if no match. */
 /* First (lowest-index) Schwung slot that receives a track's MIDI channel, or -1.
@@ -1378,7 +1378,7 @@ function doLaneDoubleFill() {
 }
 
 function openGlobalMenu() {
-    /* Co-run owns the OLED — exit it before opening the menu so dAVEBOx
+    /* Co-run owns the OLED — exit it before opening the menu so Overture
      * can draw again. */
     if (S.schwungCoRunSlot >= 0) exitSchwungCoRun();
     if (S.moveCoRunTrack >= 0) exitMoveNativeCoRun();
@@ -1564,7 +1564,7 @@ function drawInheritPicker() {
     print(2, 2,  'Copied Move set', 1);
     print(2, 10, 'detected',        1);
     fill_rect(0, 18, 128, 1, 1);
-    print(2, 20, 'Inherit dAVEBOx', 1);
+    print(2, 20, 'Inherit Overture', 1);
     print(2, 28, 'state from?',     1);
     fill_rect(0, 36, 128, 1, 1);
 
@@ -2359,7 +2359,7 @@ function resetPerClipBankParamsToDefault(t) {
 
 function pollDSP() {
     /* Reconcile co-run state with SHM. The shim auto-clears co-run on user
-     * Back press (framework exit gesture), so dAVEBOx may discover target=NONE
+     * Back press (framework exit gesture), so Overture may discover target=NONE
      * here without having driven the exit itself. Use the existing exit
      * helpers for cleanup — they're idempotent on the second SHM write and
      * carry the palette/LED-cache/modifier-clear work we need either way. */
@@ -3587,7 +3587,7 @@ function drawPerfModeOled() {
 
 function drawUI() {
     /* CO-RUN: shadow_ui's chain editor owns the OLED while this is active.
-     * Skip every dAVEBOx draw path so it doesn't fight the chain editor's
+     * Skip every Overture draw path so it doesn't fight the chain editor's
      * frame. shadow_ui still calls clear_screen + redraw each tick. */
     if (S.schwungCoRunSlot >= 0) return;
     /* Move-native co-run: Move firmware owns the OLED (preset browser /
@@ -3597,7 +3597,7 @@ function drawUI() {
      * verified harmless in real use (nothing the user does during co-run
      * depends on live LED feedback). */
     if (S.moveCoRunTrack >= 0) {
-        /* Side clip buttons: the button paired to the Move track this dAVEBOx
+        /* Side clip buttons: the button paired to the Move track this Overture
          * track routes to blinks; the rest stay dark grey. Move's track numbering
          * is reversed (Track 1 = CC 43 = top .. Track 4 = CC 40 = bottom), so a
          * channel ch (1-4) maps to top-to-bottom bit (ch-1). Forced every
@@ -3700,18 +3700,17 @@ function drawUI() {
             }
             return;
         }
-        /* DAVEBOX banner — white bar, letters animated when transport running */
+        /* Overture banner — white bar, letters animated when transport running */
         fill_rect(0, 0, 128, 12, 1);
-        let dA, dE, dO;
+        let oO, oE;
         if (S.playing) {
-            dA = (Math.floor(S.masterPos /  96) % 2 === 0) ? 'A' : '@';
-            dE = (Math.floor(S.masterPos /  48) % 2 === 0) ? '3' : 'E';
-            dO = (Math.floor(S.masterPos / 192) % 2 === 0) ? 'O' : 'o';
+            oO = (Math.floor(S.masterPos / 192) % 2 === 0) ? 'O' : 'o';
+            oE = (Math.floor(S.masterPos /  48) % 2 === 0) ? 'e' : '3';
         } else {
-            dA = 'A'; dE = 'E'; dO = 'O';
+            oO = 'O'; oE = 'e';
         }
-        const banner = 'd' + dA + 'V' + dE + 'B' + dO + 'x';
-        print(43, 2, banner, 0);
+        const banner = oO + 'vertur' + oE; /* "Overture" */
+        print(40, 2, banner, 0);
         drawMetroIndicator();
         drawTrackRow(34);
         for (let t = 0; t < NUM_TRACKS; t++) {
@@ -4856,9 +4855,9 @@ function clearAutoMenuClick() {
 }
 
 /* Open the Schwung-slot picker (first use) or enter co-run directly if the
- * track already has a slot assigned. Co-run keeps dAVEBOx loaded; the chain
+ * track already has a slot assigned. Co-run keeps Overture loaded; the chain
  * editor for the picked slot takes over OLED + jog + track buttons, while
- * pads / step buttons / knobs / transport stay with dAVEBOx. */
+ * pads / step buttons / knobs / transport stay with Overture. */
 function openSchwungSlotEditor(t) {
     if (S.trackRoute[t] !== 0) {  /* 0 = ROUTE_SCHWUNG; fmtRoute('Swng') */
         showActionPopup('NOT', 'SCHWUNG-ROUTED');
@@ -4876,16 +4875,16 @@ function openSchwungSlotEditor(t) {
 }
 
 /* Enter co-run for slot N on track t. Persists the track's slot choice,
- * suppresses dAVEBOx's OLED drawing + track-button LEDs (handled where each
+ * suppresses Overture's OLED drawing + track-button LEDs (handled where each
  * is written), and tells Schwung's shadow_ui to also tick the chain editor. */
 function enterSchwungCoRun(t, slot) {
     S.schwungCoRunSlot = slot;
     if (typeof shadow_corun_begin === 'function')
-        shadow_corun_begin(CORUN_TARGET_CHAIN_EDIT, slot, DAVEBOX_CORUN_KEEP_MASK);
+        shadow_corun_begin(CORUN_TARGET_CHAIN_EDIT, slot, OVERTURE_CORUN_KEEP_MASK);
     S.screenDirty = true;
 }
 
-/* Exit co-run. Called on programmatic dAVEBOx state changes (track switch,
+/* Exit co-run. Called on programmatic Overture state changes (track switch,
  * global-menu open, etc.) or by the pollDSP reconcile when the shim's
  * framework Back-handler has ended the session. Calling shadow_corun_end()
  * after the shim already ended is a no-op. */
@@ -4910,13 +4909,13 @@ function exitSchwungCoRun() {
     forceRedraw();
 }
 
-/* Enter Move-native co-run for dAVEBOx track t. Asks the shim to (a) yield
+/* Enter Move-native co-run for Overture track t. Asks the shim to (a) yield
  * the OLED to Move firmware and (b) flip its sh_midi filter / shadow_ui
  * forward so the nav-CC + touch-note set routes to Move firmware instead
- * of dAVEBOx. Fires one cable-0 track-button tap so Move firmware lands
+ * of Overture. Fires one cable-0 track-button tap so Move firmware lands
  * on the preset browser for the relevant track without the user touching
  * the front panel. Move's track-button CC mapping is REVERSED
- * (CC 43 = Track 1 ... CC 40 = Track 4), and dAVEBOx tracks 5-8 with
+ * (CC 43 = Track 1 ... CC 40 = Track 4), and Overture tracks 5-8 with
  * ROUTE_MOVE rely on the user's trackChannel to address one of Move's
  * 4 tracks — if trackChannel is outside 1-4 we just enter co-run without
  * an auto-tap and let the user pick the Move track manually. */
@@ -4924,7 +4923,7 @@ function enterMoveNativeCoRun(t) {
     if (typeof shadow_corun_begin !== 'function') return;
     if (typeof move_midi_inject_to_move !== 'function') return;
     S.moveCoRunTrack = t;
-    shadow_corun_begin(CORUN_TARGET_MOVE_NATIVE, t, DAVEBOX_CORUN_KEEP_MASK);
+    shadow_corun_begin(CORUN_TARGET_MOVE_NATIVE, t, OVERTURE_CORUN_KEEP_MASK);
     /* Let Move firmware's own LED writes (track buttons, knob rings, transport)
      * reach hardware while it drives the device-edit UI. skip_led_clear makes the
      * shim's overtake LED-strip loop early-return, so Move's LEDs pass through live.
@@ -4947,9 +4946,9 @@ function enterMoveNativeCoRun(t) {
 /* Exit Move-native co-run. The shim drops its input split + display
  * bypass the next time it reads corun_move_native_track from SHM, so
  * Move firmware's framebuffer stops reaching the OLED and the nav CCs
- * start flowing to dAVEBOx again. We force a full redraw so any LEDs
+ * start flowing to Overture again. We force a full redraw so any LEDs
  * Move firmware was driving (knob rings, track buttons, Shift, Back)
- * get repainted from dAVEBOx state right away. */
+ * get repainted from Overture state right away. */
 function exitMoveNativeCoRun() {
     if (S.moveCoRunTrack < 0) return;
     S.moveCoRunTrack = -1;
@@ -4957,7 +4956,7 @@ function exitMoveNativeCoRun() {
     S.moveCoRunPressQueue = null;  /* cancel any in-flight track-row press sequence */
     if (typeof shadow_corun_end === 'function')
         shadow_corun_end();
-    /* Resume the shim's overtake LED-strip loop so dAVEBOx owns the LEDs again
+    /* Resume the shim's overtake LED-strip loop so Overture owns the LEDs again
      * (mirror of the skip_led_clear(1) in enterMoveNativeCoRun). */
     if (typeof shadow_set_skip_led_clear === 'function') shadow_set_skip_led_clear(0);
     /* If a drum pad hold inject was in flight, send the note-off before the
@@ -5320,7 +5319,7 @@ globalThis.init = function () {
      * browser emulator + vitest harness can assert UI-mode behaviour (active
      * track / bank / clip, view toggles) that has no DSP get_param read-back.
      * Read-only inspection; a harmless extra global on device. */
-    if (typeof globalThis !== 'undefined') globalThis.daveboxUiState = S;
+    if (typeof globalThis !== 'undefined') globalThis.overtureUiState = S;
     /* Clear any lingering co-run flag from a prior session — shim's SHM
      * may still hold target/id if we were warm-restarted (Shift+Back +
      * relaunch does not reset shadow_control). */
@@ -6365,7 +6364,7 @@ function _tickImpl() {
         setButtonLED(MoveNoteSession, 16);
         /* Session/Track view button. In Schwung co-run the CC 50 press AND its
          * LED are owned by the Schwung chain editor (Menu opens master/send FX,
-         * editor paints it white via its LED queue) — NOT a dAVEBOx exit. We
+         * editor paints it white via its LED queue) — NOT a Overture exit. We
          * can't win that LED (the editor's queue flush lands after us each
          * frame), so just paint White to agree rather than fight. In Move co-run
          * the button is disabled + dark; force OFF to override Move firmware.
@@ -7515,8 +7514,8 @@ function _onCC_buttons(d1, d2) {
 
     /* Move's Menu button (CC 50) is in CORUN_KEEP_DEFAULT so the shim routes
      * it to us during co-run. Charles's framework reserves Back as the
-     * canonical exit, but Menu-as-second-exit is a dAVEBOx convenience for
-     * existing muscle memory — outside co-run dAVEBOx ignores Menu (no other
+     * canonical exit, but Menu-as-second-exit is a Overture convenience for
+     * existing muscle memory — outside co-run Overture ignores Menu (no other
      * handler exists), so this branch is dormant unless a session is active. */
     if (d1 === 50 && d2 === 127) {
         /* Schwung co-run exits on Menu. Move co-run disables Menu entirely —
@@ -7861,10 +7860,10 @@ function unlatchAllTracks() {
 
 function _onCC_transport(d1, d2) {
     /* Back: close global menu if open; otherwise (with Shift) hide module.
-     * Back during co-run never reaches us because dAVEBOx opts out of the
+     * Back during co-run never reaches us because Overture opts out of the
      * framework Back-as-exit (CORUN_KEEP_BACK in keep_mask) and cedes Back
      * to the peer (chain editor sub-view pop / Move firmware navigation).
-     * Menu is the dAVEBOx exit during co-run, handled in _onCC_buttons. */
+     * Menu is the Overture exit during co-run, handled in _onCC_buttons. */
     if (d1 === MoveBack && d2 === 127) {
         if (S.tapTempoOpen) {
             closeTapTempo();
@@ -10125,9 +10124,9 @@ function _onPadPressTrackView(status, d1, d2) {
 function _onPadPress(status, d1, d2) {
         /* Move-native co-run + drum-mode active track: synthesize the
          * native Move "Shift + drum pad" gesture on cable-0 so Move
-         * firmware silently selects the cell for editing. dAVEBOx keeps
+         * firmware silently selects the cell for editing. Overture keeps
          * its normal pad handling below (the sequencer still fires the
-         * drum from this track), so the pad tap = audible dAVEBOx drum
+         * drum from this track), so the pad tap = audible Overture drum
          * + silent Move-side cell change. Mask: left 4 columns of each
          * pad row, where notes 68-99 are laid out bottom-to-top as
          * 68-75 / 76-83 / 84-91 / 92-99 — left-4x4 is (d1 - 68) % 8 < 4.
@@ -10143,7 +10142,7 @@ function _onPadPress(status, d1, d2) {
              * physically released (_onPadRelease sends noteOff + ShiftOff). Move sees a
              * genuine held Shift+pad: selects the drum cell for editing AND detects a hold
              * naturally for its per-drum volume/tuning editor. No deferred threshold needed.
-             * Still causes one dAVEBOx drum hit (double-hit fix TBD). */
+             * Still causes one Overture drum hit (double-hit fix TBD). */
             move_midi_inject_to_move([0x0B, 0xB0, 49, 127]);  /* Shift on */
             move_midi_inject_to_move([0x09, 0x90, d1, 100]);  /* pad on — held until release */
             S.moveCoRunDrumHeld = d1;
@@ -11351,7 +11350,7 @@ function _onMidiInternalImpl(data) {
 
     /* Master volume knob (CC 79) + its capacitive touch (note 8) are owned by
      * Move firmware (button_passthrough[79] + the shim's overtake-mode volume
-     * passthrough). dAVEBOx does nothing with them, but the host still forwards
+     * passthrough). Overture does nothing with them, but the host still forwards
      * the full detent stream to us in overtake mode — processing every one
      * competes with sequencer/MIDI output and stutters playback. Drop them
      * immediately so volume adjustment stays entirely Move-native. */

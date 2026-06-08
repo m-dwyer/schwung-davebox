@@ -180,11 +180,11 @@ export const S = {
     trackQueuedClip: new Array(8).fill(-1),
     trackChannel: new Array(8).fill(1),
     trackRoute: new Array(8).fill(0),
-    schwungCoRunSlot: -1,                     /* -1 = off; 0-3 = Schwung chain editor is co-running on this slot (dAVEBOx skips OLED + suppresses track-button LEDs) */
+    schwungCoRunSlot: -1,                     /* -1 = off; 0-3 = Schwung chain editor is co-running on this slot (Overture skips OLED + suppresses track-button LEDs) */
     _coRunChanSlots: 0,                       /* Schwung co-run: bitmask (bits 0-3) of slots whose receive channel matches the active track; blinked on the side buttons. 0 = none. Refreshed on poll cadence. */
     pendingSchwungCoRunTrack: -1,             /* -1 = none; t = track queued to enter Schwung co-run; slot resolved in tick (schSlotsForTrack) so shadow_get_slots runs in tick context */
     pendingSchwungCoRunDelay: 0,             /* >0 = ticks remaining before entering co-run after a no-match "NO SLOT" popup (lets the message show before the editor takes the OLED) */
-    moveCoRunTrack: -1,                       /* -1 = off; 0-3 = Move firmware is co-running on this track (dAVEBOx skips OLED; shim filters nav CCs + touch 0-9 from tool, lets them reach Move) */
+    moveCoRunTrack: -1,                       /* -1 = off; 0-3 = Move firmware is co-running on this track (Overture skips OLED; shim filters nav CCs + touch 0-9 from tool, lets them reach Move) */
     moveCoRunDrumHeld: -1,                    /* d1 note of drum lane pad held in co-run (Shift still active); -1 = none. note-off + Shift-off sent on physical release */
     trackPadMode: new Array(8).fill(0),
     trackVelOverride: new Array(8).fill(0),
@@ -223,7 +223,7 @@ export const S = {
      * track changes and session reload. Sidecar v=8. */
     trackActiveBank: new Array(8).fill(0),
     /* Latches: track-button LED reclaim after Move-native co-run exit (Move
-     * firmware writes CC 40-43 colors during co-run; dAVEBOx must blank them
+     * firmware writes CC 40-43 colors during co-run; Overture must blank them
      * once on exit). Schwung co-run has a parallel _coRunTrackLedsLit latch. */
     _moveCoRunTrackLedsActive: false,
     knobTouched: -1,

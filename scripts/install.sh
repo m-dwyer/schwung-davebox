@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
-MODULE_ID="davebox"
+MODULE_ID="overture"
 MOVE_HOST="${MOVE_HOST:-move.local}"
 MOVE_USER="${MOVE_USER:-ableton}"
 MOVE_ROOT_USER="${MOVE_ROOT_USER:-root}"   # privileged login for the service restart

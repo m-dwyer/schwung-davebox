@@ -5,19 +5,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
-MODULE_ID="davebox"
+MODULE_ID="overture"
 CROSS_PREFIX="${CROSS_PREFIX:-aarch64-linux-gnu-}"
 
 # Re-enter inside Docker if we don't have a cross compiler.
 if ! command -v "${CROSS_PREFIX}gcc" >/dev/null 2>&1; then
     echo "Cross compiler not found, building via Docker..."
-    docker build -t davebox-builder -f Dockerfile .
-    docker run --rm -v "$PROJECT_DIR:/build" -w /build davebox-builder \
+    docker build -t overture-builder -f Dockerfile .
+    docker run --rm -v "$PROJECT_DIR:/build" -w /build overture-builder \
         bash -c "CROSS_PREFIX=aarch64-linux-gnu- ./scripts/build.sh"
     exit $?
 fi
 
-echo "=== Building dAVEBOx ==="
+echo "=== Building Overture ==="
 echo "Compiler: ${CROSS_PREFIX}gcc"
 
 mkdir -p "dist/${MODULE_ID}"
@@ -37,7 +37,7 @@ cp module.json           "dist/${MODULE_ID}/"
 python3 scripts/bundle_ui.py
 # Ship the Ableton-export packager + JSON templates alongside the module (read at
 # export time; pack.py is invoked on-device via host_system_cmd). These are plain
-# files in the module dir, so install.sh's `scp dist/davebox/*` carries them too.
+# files in the module dir, so install.sh's `scp dist/overture/*` carries them too.
 cp export/pack.py                          "dist/${MODULE_ID}/pack.py"
 cp export/ableton-master.json             "dist/${MODULE_ID}/ableton-master.json"
 # drift-dummy lives under the gitignored notes/ (unpublished upstream). Skip when
@@ -53,7 +53,7 @@ python3 - <<'PYEOF'
 import wave, struct, audioop, warnings
 warnings.filterwarnings('ignore')   # suppress audioop deprecation on Python 3.13+
 src = "assets/db-click.wav"
-dst = "dist/davebox/click-seq8.wav"
+dst = "dist/overture/click-seq8.wav"
 with wave.open(src, 'rb') as r:
     rate, nch, sw, nf = r.getframerate(), r.getnchannels(), r.getsampwidth(), r.getnframes()
     raw = r.readframes(nf)
@@ -132,8 +132,8 @@ echo "GLIBC check passed (all symbols <= 2.35)"
 echo ""
 
 # ----- Release tarball -----------------------------------------------------
-# Produces dist/davebox-module.tar.gz suitable for upload as a GitHub release
-# asset. The tarball, when extracted, gives a single top-level davebox/ folder
+# Produces dist/overture-module.tar.gz suitable for upload as a GitHub release
+# asset. The tarball, when extracted, gives a single top-level overture/ folder
 # matching schwung-manager's expected layout.
 echo "=== Building release tarball ==="
 tar -czf "dist/${MODULE_ID}-module.tar.gz" -C dist "${MODULE_ID}/"

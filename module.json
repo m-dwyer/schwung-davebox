@@ -1,8 +1,8 @@
 {
-    "id": "davebox",
-    "name": "dAVEBOx",
+    "id": "overture",
+    "name": "Overture",
     "version": "1.0b3",
-    "abbrev": "dAVEBOx",
+    "abbrev": "Overture",
     "description": "Creative 8-track MIDI sequencer with per-clip effects chains and live performance modes.",
     "author": "legsmechanical",
     "api_version": 2,

@@ -1,5 +1,5 @@
-import { S } from '/data/UserData/schwung/modules/tools/davebox/ui_state.mjs';
-import { MCUFONT } from '/data/UserData/schwung/modules/tools/davebox/ui_constants.mjs';
+import { S } from '/data/UserData/schwung/modules/tools/overture/ui_state.mjs';
+import { MCUFONT } from '/data/UserData/schwung/modules/tools/overture/ui_constants.mjs';
 import {
     drawMenuHeader, drawMenuList, menuLayoutDefaults
 } from '/data/UserData/schwung/shared/menu_layout.mjs';

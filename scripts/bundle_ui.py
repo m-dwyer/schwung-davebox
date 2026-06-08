@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bundle dAVEBOx ES modules into dist/davebox/ui.js.
+"""Bundle Overture ES modules into dist/overture/ui.js.
 
 The Schwung shadow_ui loader only resolves imports from /data/UserData/schwung/shared/.
 Imports from the tool's own directory are not supported, so we concatenate local
@@ -26,7 +26,7 @@ ORDER = [
 ]
 
 SHARED_PREFIX = '/data/UserData/schwung/shared/'
-LOCAL_PREFIX  = '/data/UserData/schwung/modules/tools/davebox/'
+LOCAL_PREFIX  = '/data/UserData/schwung/modules/tools/overture/'
 
 
 def collect_import(lines, start):
@@ -113,7 +113,7 @@ for fname in ORDER:
 
 # Generate output
 out = []
-out.append('/* dAVEBOx UI — bundled from source modules by scripts/bundle_ui.py */')
+out.append('/* Overture UI — bundled from source modules by scripts/bundle_ui.py */')
 out.append('/* Source: ' + ', '.join(Path(f).name for f in ORDER) + ' */')
 out.append('')
 
@@ -139,12 +139,12 @@ for fname, body in file_bodies:
 
 text = '\n'.join(out)
 
-out_path = Path('dist/davebox/ui.js')
+out_path = Path('dist/overture/ui.js')
 out_path.parent.mkdir(parents=True, exist_ok=True)
 out_path.write_text(text)
 
 lines_out = text.count('\n') + 1
-print(f'Bundle: {len(file_bodies)} files → dist/davebox/ui.js '
+print(f'Bundle: {len(file_bodies)} files → dist/overture/ui.js '
       f'({lines_out} lines, {len(text):,} bytes)')
 print(f'Shared imports: {sum(len(v) for v in shared_imports.values())} names '
       f'from {len(shared_imports)} modules')

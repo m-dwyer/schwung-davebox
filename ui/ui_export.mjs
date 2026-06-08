@@ -1,4 +1,4 @@
-/* dAVEBOx → Ableton (.ablbundle) export — orchestration (Phase 1 skeleton).
+/* Overture → Ableton (.ablbundle) export — orchestration (Phase 1 skeleton).
  *
  * Architecture (see notes/ableton-export-plan.md, Phase 0 RESULT):
  *  - JS builds Song.abl (text JSON — host_write_file is safe for text) + a small
@@ -9,7 +9,7 @@
  *
  * Phase 1 scope: menu entry + transport guard + a minimal valid 8x16 bundle
  * (every track gets a Dummy Drift instrument — Live rejects a track with no
- * device; 16 empty scenes; tempo from dAVEBOx). No instrument mapping / no baked
+ * device; 16 empty scenes; tempo from Overture). No instrument mapping / no baked
  * MIDI / no samples yet (Phases 2-5).
  *
  * The menu action runs in MIDI-handler context where get_param returns null, so
@@ -17,16 +17,16 @@
  * from tick() (get_param-safe), matching the codebase's defer-to-tick idiom.
  */
 
-import { S } from '/data/UserData/schwung/modules/tools/davebox/ui_state.mjs';
-import { showActionPopup } from '/data/UserData/schwung/modules/tools/davebox/ui_persistence.mjs';
-import { NUM_TRACKS, NUM_CLIPS, ACTION_POPUP_TICKS } from '/data/UserData/schwung/modules/tools/davebox/ui_constants.mjs';
+import { S } from '/data/UserData/schwung/modules/tools/overture/ui_state.mjs';
+import { showActionPopup } from '/data/UserData/schwung/modules/tools/overture/ui_persistence.mjs';
+import { NUM_TRACKS, NUM_CLIPS, ACTION_POPUP_TICKS } from '/data/UserData/schwung/modules/tools/overture/ui_constants.mjs';
 
-const EXPORT_MODULE_DIR = '/data/UserData/schwung/modules/tools/davebox';
-const EXPORT_OUT_DIR    = '/data/UserData/schwung/davebox-exports';
+const EXPORT_MODULE_DIR = '/data/UserData/schwung/modules/tools/overture';
+const EXPORT_OUT_DIR    = '/data/UserData/schwung/overture-exports';
 /* Scratch workspace nested under the exports dir (keeps the schwung folder
  * uncluttered); created per export and removed afterward. */
 const EXPORT_STAGING    = EXPORT_OUT_DIR + '/staging';
-const EXPORT_SCENES     = NUM_CLIPS;   /* dAVEBOx clip N -> scene N */
+const EXPORT_SCENES     = NUM_CLIPS;   /* Overture clip N -> scene N */
 /* DSP writes per-clip rendered notes here; JS reads them (must match
  * EXPORT_RENDER_PATH in dsp/seq8.c). Inside staging → cleaned with it.
  * Sidesteps the 16KB get_param cap. */
@@ -41,7 +41,7 @@ const ROUTE_SCHWUNG = 0;
 const ROUTE_MOVE    = 1;
 const ROUTE_EXT     = 2;
 
-/* dAVEBOx per-track colors → Ableton clip-color palette index, picked by the
+/* Overture per-track colors → Ableton clip-color palette index, picked by the
  * user (2026-05-24) to match the device track colors. Applied to EVERY exported
  * track by index (Move/Schwung/Ext alike) so the grid always matches the device. */
 const DB_TRACK_COLORS = [1, 17, 7, 10, 25, 15, 6, 12];
@@ -59,7 +59,7 @@ function deepClone(obj) { return JSON.parse(JSON.stringify(obj)); }
 
 /* Remove the staging workspace. NOT host_remove_dir — that host API rejects any
  * path outside the modules dir (schwung_host.c validate), and staging lives under
- * davebox-exports/. host_system_cmd's `rm ` prefix is allowlisted; the path is a
+ * overture-exports/. host_system_cmd's `rm ` prefix is allowlisted; the path is a
  * fixed constant (no spaces / no user input). rm -rf is a no-op if absent. */
 function removeStagingDir() {
     if (typeof host_system_cmd === 'function')
@@ -173,7 +173,7 @@ function collectSamples(node, ctx) {
 
 /* ---- per-track instrument + name + color resolution ---------------------- */
 
-/* Resolve a dAVEBOx track to an export instrument subtree, display name, color,
+/* Resolve a Overture track to an export instrument subtree, display name, color,
  * and mixer, by its route + channel. Falls back to the Dummy Drift (name
  * "dB N") whenever no concrete source is found. trackChannel is 1-based; Move
  * tracks listen on the 0-based channel (channel-1). */
@@ -401,7 +401,7 @@ function dateStamp() {
 /* Filesystem-safe set name; spaces collapsed, exotic chars dropped. */
 function sanitizeName(name) {
     const s = (name || '').replace(/[^A-Za-z0-9 _-]/g, '').replace(/\s+/g, ' ').trim();
-    return s || 'davebox';
+    return s || 'overture';
 }
 
 /* <set>-YYYYMMDD.ablbundle, appending -2/-3/... on same-day collisions. */
