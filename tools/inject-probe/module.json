@@ -1,0 +1,19 @@
+{
+    "id": "inject-probe",
+    "name": "Inject Probe",
+    "version": "0.1.0",
+    "abbrev": "INJ",
+    "description": "Dev tool: pure-JS, parametric MIDI-injection probe for mapping Move's live engine/control seams. Dial cable/type/channel/data/pattern and inject into MoveOriginal's MIDI_IN via move_midi_inject_to_move — no DSP, no cross-compile. Includes a canned per-track-volume gesture.",
+    "api_version": 2,
+    "ui": "ui.js",
+    "component_type": "tool",
+    "tool_config": {
+        "interactive": true,
+        "skip_file_browser": true,
+        "overtake": true
+    },
+    "capabilities": {
+        "midi_out": true,
+        "suspend_keeps_js": true
+    }
+}
