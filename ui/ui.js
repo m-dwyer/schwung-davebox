@@ -748,6 +748,109 @@ function fmtCCLabel(cc) {
     return n >= 100 ? 'C' + n : 'CC' + n;
 }
 
+function truncText(s, maxLen) {
+    s = String(s || '');
+    return s.length > maxLen ? s.substring(0, Math.max(0, maxLen - 1)) + '.' : s;
+}
+
+function routeScopeLabel(t) {
+    const route = S.trackRoute[t] | 0;
+    const ch = S.trackChannel[t] | 0;
+    if (route === 1) return 'T' + (t + 1) + ' Move Ch' + ch;
+    if (route === 2) return 'T' + (t + 1) + ' External Ch' + ch;
+    const slot = schSlotForTrack(t);
+    return 'T' + (t + 1) + ' Schwung ' + (slot >= 0 ? editSoundSlotLabel(slot) : 'Ch' + ch);
+}
+
+function autoLaneLabel(t, k, includeLane) {
+    const prefix = includeLane ? ('L' + (k + 1) + ' ') : '';
+    const typ = S.trackCCType[t][k] | 0;
+    const assign = S.trackCCAssign[t][k] | 0;
+    if (typ === 1) return prefix + 'AT';
+    if (typ === 2) return prefix + 'Sch' + assign;
+    if (assign < 0) return prefix + '--';
+    return prefix + fmtCCLabel(assign);
+}
+
+function autoLaneFullLabel(t, k) {
+    const typ = S.trackCCType[t][k] | 0;
+    const assign = S.trackCCAssign[t][k] | 0;
+    if (typ === 1) return 'Channel Aftertouch';
+    if (typ === 2) {
+        const name = S.schLabel[t][k];
+        return name ? ('Schwung K' + assign + ' ' + name) : ('Schwung chain knob ' + assign);
+    }
+    if (assign < 0) return 'Unassigned automation lane';
+    if ((S.trackRoute[t] | 0) === 1) return 'Move K' + (k + 1) + ' current param';
+    return 'Control Change ' + fmtCCLabel(assign);
+}
+
+function autoLaneValueLabel(t, ac, k) {
+    const rawV = S.playing ? S.trackCCLiveVal[t][k] : S.clipCCVal[t][ac][k];
+    return (rawV >= 0 && rawV <= 127) ? String(rawV) : '--';
+}
+
+function paramPeekInfo() {
+    const t = S.activeTrack;
+    const bank = S.activeBank;
+    const k = S.knobTouched;
+    const ac = effectiveClip(t);
+    const clipLabel = SCENE_LETTERS[ac] || String(ac + 1);
+    if (bank === 6 && S.trackPadMode[t] !== PAD_MODE_DRUM) {
+        return {
+            header: 'AUTO T' + (t + 1) + ' C' + clipLabel,
+            knob: 'K' + (k + 1) + ' ' + autoLaneLabel(t, k, true),
+            full: autoLaneFullLabel(t, k),
+            value: 'Value ' + autoLaneValueLabel(t, ac, k),
+            scope: 'Clip ' + clipLabel + ' lane / ' + routeScopeLabel(t)
+        };
+    }
+    const pm = (BANKS[bank] && BANKS[bank].knobs) ? BANKS[bank].knobs[k] : null;
+    const bankName = BANKS[bank] ? BANKS[bank].name : 'BANK';
+    if (!pm || !pm.full) {
+        return {
+            header: bankName + ' T' + (t + 1),
+            knob: 'K' + (k + 1) + ' --',
+            full: 'Unassigned',
+            value: 'Value --',
+            scope: routeScopeLabel(t)
+        };
+    }
+    const val = S.bankParams[t][bank][k];
+    const scope = pm.scope === 'clip' ? ('Clip ' + clipLabel)
+               : pm.scope === 'track' ? ('Track T' + (t + 1))
+               : pm.scope === 'action' ? 'Action'
+               : pm.scope === 'seqfollow' ? ('Clip ' + clipLabel)
+               : pm.scope;
+    return {
+        header: bankName + ' T' + (t + 1),
+        knob: 'K' + (k + 1) + ' ' + (pm.abbrev || '--'),
+        full: pm.full,
+        value: 'Value ' + (pm.fmt ? pm.fmt(val) : String(val)),
+        scope: scope + ' / ' + routeScopeLabel(t)
+    };
+}
+
+function drawParamPeek() {
+    const p = paramPeekInfo();
+    fill_rect(0, 0, 128, 9, 1);
+    print(4, 1, truncText(p.header, 20), 0);
+    print(4, 13, truncText(p.knob, 20), 1);
+    print(4, 25, truncText(p.full, 20), 1);
+    print(4, 38, truncText(p.value, 20), 1);
+    print(4, 52, truncText(p.scope, 20), 1);
+}
+
+function drawShiftStepHelp() {
+    fill_rect(0, 0, 128, 9, 1);
+    print(4, 1, 'SHIFT SHORTCUTS', 0);
+    print(4, 12, 'S2 Global  S3 Edit', 1);
+    print(4, 22, 'S5 Tap     S6 Metro', 1);
+    print(4, 32, 'S7 Swing   S9 Scale', 1);
+    print(4, 42, 'S10 VelIn  S15 x2', 1);
+    print(4, 52, 'S16 Quant  S8 Mode', 1);
+}
+
 /* ------------------------------------------------------------------ */
 /* Step entry state                                                     */
 /* ------------------------------------------------------------------ */
@@ -3991,6 +4094,12 @@ function drawUI() {
         return;
     }
 
+    if (S.shiftHeld && !S.sessionView && S.heldStep < 0 && S.knobTouched < 0 &&
+            !S.deleteHeld && !S.copyHeld && !S.muteHeld && !S.loopHeld) {
+        drawShiftStepHelp();
+        return;
+    }
+
     /* Step edit: show assigned notes and step identity */
     if (S.heldStep >= 0) {
         if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
@@ -4058,9 +4167,7 @@ function drawUI() {
                 var _x6 = 4 + _col6 * 31, _y6 = 11 + _row6 * 18;
                 var _hi6 = (S.knobTouched === _k6) || (S.ccActiveLane[_t6s] === _k6);
                 if (_hi6) fill_rect(_x6 - 1, _y6 - 1, 29, 18, 1);
-                var _lbl6 = S.trackCCType[_t6s][_k6] === 2 ? ('Sch' + S.trackCCAssign[_t6s][_k6])
-                          : S.trackCCType[_t6s][_k6] === 1 ? 'AT'
-                          : (S.trackCCAssign[_t6s][_k6] > 0 ? 'C' + S.trackCCAssign[_t6s][_k6] : '--');
+                var _lbl6 = autoLaneLabel(_t6s, _k6, false);
                 var _vs6;
                 if (S.ccStepEditSet[_k6]) {
                     _vs6 = String(S.ccStepEditVal[_k6]);
@@ -4225,9 +4332,7 @@ function drawUI() {
             var _ccL_l = S.ccActiveLane[_t_l];
             var _llen_l = S.ccLaneLength[_t_l][_ac_l][_ccL_l];
             var _ltps_l = S.ccLaneResTps[_t_l][_ac_l][_ccL_l] || S.ccLaneTps[_t_l][_ac_l][_ccL_l];
-            var _lbl_l = S.trackCCType[_t_l][_ccL_l] === 2
-                       ? ('Sch' + S.trackCCAssign[_t_l][_ccL_l])
-                       : fmtCCLabel(S.trackCCAssign[_t_l][_ccL_l]);
+            var _lbl_l = autoLaneLabel(_t_l, _ccL_l, true);
             var _resN = _ltps_l === 12 ? '1/32' : _ltps_l === 48 ? '1/8'
                       : _ltps_l === 96 ? '1/4' : _ltps_l === 384 ? '1bar' : '1/16';
             var _lcHdr = 'Lane config: K' + (_ccL_l + 1) + '-' + _lbl_l;
@@ -4294,9 +4399,7 @@ function drawUI() {
         var _gt = S.activeTrack;
         var _gac = effectiveClip(_gt);
         var _gLane = S.ccActiveLane[_gt];
-        var _gLbl = S.trackCCType[_gt][_gLane] === 2
-                  ? ('Sch' + S.trackCCAssign[_gt][_gLane])
-                  : fmtCCLabel(S.trackCCAssign[_gt][_gLane]);
+        var _gLbl = autoLaneLabel(_gt, _gLane, true);
         var _gParam = S.trackCCType[_gt][_gLane] === 2
                     ? (S.schLabel[_gt][_gLane] || '') : '';
         var _gEffLen = S.ccLaneLength[_gt][_gac][_gLane] || S.clipLength[_gt][_gac];
@@ -4430,6 +4533,10 @@ function drawUI() {
     if (bank >= 0 && (S.knobTouched >= 0 || inTimeout ||
             (S.altMode && bankHasAltParams(S.activeTrack, bank)) ||
             (S.shiftHeld && bank === 1 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM))) {
+        if (S.knobTouched >= 0 && !S.stepIntervalMode) {
+            drawParamPeek();
+            return;
+        }
         const isDrumLaneBank = (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 0);
         if (isDrumLaneBank) {
             /* DRUM LANE bank overview: mirrors CLIP bank at lane level */
@@ -4622,8 +4729,7 @@ function drawUI() {
              * value. In normal mode, the touched/active lane gets the full-cell
              * inversion as before. */
             const touchedHi = (S.knobTouched === k) || (S.ccActiveLane[t] === k);
-            const lbl = S.trackCCType[t][k] === 2 ? ('Sch' + S.trackCCAssign[t][k])
-                      : S.trackCCType[t][k] === 1 ? 'AT' : fmtCCLabel(S.trackCCAssign[t][k]);
+            const lbl = autoLaneLabel(t, k, false);
             const rawV = S.playing ? S.trackCCLiveVal[t][k] : S.clipCCVal[t][ac][k];
             const val  = (rawV >= 0 && rawV <= 127) ? String(rawV) : '--';
             if (S.altMode) {

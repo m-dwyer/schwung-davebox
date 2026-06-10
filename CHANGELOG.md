@@ -8,6 +8,11 @@ the section into a versioned heading at release time.
 
 ## [Unreleased]
 ### Features
+- **Param Peek and shortcut help.** Touching a knob now opens a compact OLED
+  readout with the bank/context, full parameter label, current value, and
+  track/clip/route scope. AUTO lane labels are explicit (`L1 AT`, `L2 CC74`,
+  `L3 Sch5`, `L4 --`), and holding Shift in Track View shows a compact
+  Shift+Step shortcut overlay.
 - **Hold a step + jog = step length (and the jog no longer changes banks mid-edit).** While holding a step (Step Edit), turning the jog wheel now sets that step's length, matching Move's "hold step + wheel" gesture. This also fixes a bug: previously the jog silently cycled parameter banks *underneath* the Step Edit screen, so you'd only discover the bank had moved (e.g. DELAY → NOTE FX) when you released the step.
 - **Bank position strip in the Track View header.** The header now shows a compact "you are here in the bank chain" strip on the right — the active bank is a tall block, the others short stubs — so you can see how many banks exist and where you are as you turn the jog (like Move's Device View). Replaces the old inconsistent `>>` hints.
 - **Side buttons select tracks (Move-native track navigation).** The four side buttons now **switch the active track** (CC top→bottom = tracks 1→4) instead of switching clips; **hold Shift** while pressing to reach tracks **5–8**. **Hold a side button** to reveal that track's **16 clips on the step buttons** — tap a step to select/launch a clip, release to exit. The side-button LEDs now show **track identity** (active track solid in its colour, the rest dim). Per-clip **Copy / Cut / Delete / hard-reset** move to **Session view** on the clip pads (Copy/Delete + pad), where they already lived; Track-View clip ops via the side buttons are retired. Shift+jog and Shift+bottom-pad still switch tracks as fallbacks.

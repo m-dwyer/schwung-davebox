@@ -182,6 +182,9 @@ While the transport is running, switching to a track with nothing playing or que
 
 While holding Shift in Track View, available shortcuts light up on the step buttons:
 
+The OLED also shows a compact shortcut overlay while Shift is held, so you can
+check the major destinations without memorizing the full table.
+
 | Step | Action |
 |---|---|
 | 2 | Open Global Menu at Global section |
@@ -535,6 +538,11 @@ Quick toggle: **Shift + Step 11** flips ARP IN on/off using the last-used style.
 Each of the 8 knobs controls its own automation lane — a recordable stream of CC or aftertouch data that plays back with the clip. Each lane can hold up to 1024 recorded points (at 1/32 resolution, smoothly interpolated between points) plus an optional resting value that the lane returns to at each loop.
 
 **Assigning what a knob controls:** jog click to enter alt mode on this bank, then turn a knob to step through the target options: aftertouch (AT), any CC number (CC0–CC127), or — on Schwung-routed tracks with patched Schwung — Schwung chain knob assignments (Sch1–Sch8). Sch lanes automate the knob assignments configured on the track's chain slot. The assignment applies to the whole track — all clips on that track share it.
+
+**Param Peek:** touch any knob to show its bank/context, full target label,
+current value, and scope. AUTO lanes use explicit labels such as `L1 AT`,
+`L2 CC74`, `L3 Sch5`, or `L4 --`; Move-routed AUTO lanes identify the target
+conservatively as the current Move parameter for that physical knob.
 
 **The "—" floor:** every knob starts at "—" (send nothing). Turn below 0 to reach "—"; turn up from "—" to reach 0.
 
