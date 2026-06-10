@@ -69,7 +69,7 @@ export function updateStepLEDs() {
 
     /* Co-run (Schwung chain-edit or Move-native): the co-run target owns the
      * surface, so blank the step button main LEDs — except Step 3 (index 2),
-     * which blinks dark-grey/bright-white at a steady rate as the "Edit Slot/Synth"
+     * which blinks dark-grey/bright-white at a steady rate as the "Edit Sound"
      * affordance. Return early so the normal step grid neither paints nor burns
      * LED budget (see SCHWUNG_DAVEBOX_LIMITATIONS.md §14). */
     if (S.schwungCoRunSlot >= 0 || S.moveCoRunTrack >= 0) {
@@ -500,14 +500,14 @@ export function updateTrackLEDs() {
             let color;
             if (_inCoRun) {
                 /* Co-run: only the Step 3 icon stays lit (solid White) as the
-                 * Edit Slot/Synth affordance; all other step icons go dark. */
+                 * Edit Sound affordance; all other step icons go dark. */
                 color = (i === 2) ? White : LED_OFF;
             } else {
                 let on = false;
                 if (S.shiftHeld && !_knobShiftMode && !_compoundHeld) {
                     if (i === 1 || (i >= 4 && i <= 6) || i === 8) on = true; /* shared shortcuts */
                     if (!S.sessionView) {
-                        if (i === 2)                            on = true; /* Step3 = Edit Slot/Synth — Track View only */
+                        if (i === 2)                            on = true; /* Step3 = Edit Sound — Track View only */
                         else if (i === 7)                       on = true;
                         else if (i === 9)                       on = true;
                         else if (i === 10 && !isDrum)           on = true;
@@ -531,7 +531,7 @@ export function updateTrackLEDs() {
     if (S.sessionView && S.shiftHeld &&
         !(S.muteHeld || S.deleteHeld || S.copyHeld || S.loopHeld)) {
         for (let i = 0; i < 16; i++) {
-            const on = i === 1 || (i >= 4 && i <= 6) || i === 8; /* shared shortcuts only — Step3 (Edit Slot/Synth) is Track View only */
+            const on = i === 1 || (i >= 4 && i <= 6) || i === 8; /* shared shortcuts only — Step3 (Edit Sound) is Track View only */
             setLED(16 + i, on ? LightGrey : LED_OFF);
         }
     }

@@ -1029,12 +1029,11 @@ Shown at the top of the Global Menu for the active track. Updates live if you sw
 | VelIn | Live, 1–127 | Live = raw velocity. Fixed value overrides all input velocity. |
 | Looper | On, Off | Whether track feeds Performance Mode |
 | AftTch | Off, Poly, Channel | Pad-pressure aftertouch (melodic tracks only). Poly sends individual pressure per note; Channel sends one pressure value for the whole track. Move-routed tracks only offer Off/Poly. Default Off. |
-| Edit Slot... | Action | Open Schwung chain editor (Schwung-routed only). |
-| Edit Synth... | Action | Open Move preset browser / device editor (Move-routed only). |
+| Edit Sound... | Action | Open the active route's native sound editor. |
 
-### Edit Slot / Edit Synth
+### Edit Sound
 
-These features edit the active track's sound source from within dAVEBOx: Schwung-routed tracks open the Schwung chain editor with `Edit Slot...`, and Move-routed tracks open Move's native preset/device editor with `Edit Synth...`. The sequencer keeps running while co-run gives the OLED and navigation controls to the native editor.
+Edit Sound edits the active track's sound source from within Overture: Schwung-routed tracks open the matching Schwung chain editor slot, and Move-routed tracks open Move's native preset/device editor. The sequencer keeps running while co-run gives the OLED and navigation controls to the native editor. Before handoff, Overture shows the target route or a route problem such as `NO SLOT`, `MOVE CH>4`, or `CO-RUN UNAVAILABLE`.
 
 ## Global settings
 
@@ -1151,7 +1150,7 @@ When you delete a Move set, dAVEBOx automatically removes its own saved data for
 | Step | Action | Views |
 |---|---|---|
 | 2 | Global Menu (global section) | Both |
-| 3 | Edit Synth/Slot | Track |
+| 3 | Edit Sound | Track |
 | 5 | Tap Tempo | Both |
 | 6 | Metro (Cnt-In ↔ Always) | Both |
 | 7 | Swing | Both |

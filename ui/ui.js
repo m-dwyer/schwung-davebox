@@ -321,27 +321,12 @@ function buildGlobalMenuItems() {
                 format: function(v) { return v === 2 ? 'Chan' : v === 1 ? 'Poly' : 'Off'; }
             })
         ] : []),
-        /* Co-run capability gate. The chain-editor co-run feature requires the
-         * patched Schwung shim (adds shadow_corun_begin + co-run draw paths
-         * in shadow_ui.js). On stock Schwung the API is undefined and the
-         * menu entry isn't built, so the feature is invisible. All other
-         * co-run code is dormant unless this entry triggers it. Also hidden on
-         * non-Schwung-routed tracks (symmetric with Edit Synth below). */
-        ...((S.trackRoute[S.activeTrack] === 0 &&
-             typeof shadow_corun_begin === 'function') ? [
-            createAction('Edit Slot...', function() {
-                openSchwungSlotEditor(S.activeTrack);
-            })
-        ] : []),
-        /* Move-native co-run entry — visible only when (a) active track is
-         * ROUTE_MOVE, (b) the patched Schwung shim exposes the corun API, and
-         * (c) the cable-0 MIDI inject API is present (Schwung >= v0.7.0).
-         * On stock Schwung or non-Move-routed tracks the entry isn't built. */
-        ...((S.trackRoute[S.activeTrack] === 1 &&
-             typeof shadow_corun_begin === 'function' &&
-             typeof move_midi_inject_to_move === 'function') ? [
-            createAction('Edit Synth...', function() {
-                enterMoveNativeCoRun(S.activeTrack);
+        /* One user-facing sound-edit command. Route-specific dispatch stays in
+         * editSoundForTrack() so Move-native and Schwung chain-edit co-run keep
+         * their separate internals while the menu exposes one gesture. */
+        ...((S.trackRoute[S.activeTrack] === 0 || S.trackRoute[S.activeTrack] === 1) ? [
+            createAction('Edit Sound...', function() {
+                editSoundForTrack(S.activeTrack);
             })
         ] : []),
         createDivider('Global'),
@@ -682,6 +667,77 @@ function schSlotsForTrack(t) {
         if (slots[i].channel === ch || slots[i].channel === 0) mask |= (1 << i);
     }
     return mask;
+}
+
+const EDIT_SOUND_PREFLIGHT_TICKS = 24;
+
+function editSoundSlotLabel(slot) {
+    return 'Slot' + ((slot | 0) + 1);
+}
+
+function editSoundPreflightLine(t, route, slot) {
+    const ch = S.trackChannel[t] | 0;
+    if (route === 1) return 'T' + (t + 1) + ' Move Ch' + ch;
+    return 'T' + (t + 1) + ' Schwung ' + editSoundSlotLabel(slot);
+}
+
+function queueEditSoundEntry(t, route, slot) {
+    S.pendingEditSoundEntry = {
+        track: t | 0,
+        route: route | 0,
+        slot: slot | 0,
+        delay: EDIT_SOUND_PREFLIGHT_TICKS
+    };
+    S.screenDirty = true;
+}
+
+function clearPendingEditSoundEntry() {
+    S.pendingEditSoundEntry = null;
+}
+
+function editSoundForTrack(t) {
+    const route = S.trackRoute[t] | 0;
+    clearPendingEditSoundEntry();
+    S.globalMenuOpen = false;
+    S.lastSentMenuEditValue = null;
+
+    if (typeof shadow_corun_begin !== 'function') {
+        showActionPopup('CO-RUN', 'UNAVAILABLE');
+        return;
+    }
+
+    if (route === 1) {
+        if (typeof move_midi_inject_to_move !== 'function') {
+            showActionPopup('CO-RUN', 'UNAVAILABLE');
+            return;
+        }
+        const ch = S.trackChannel[t] | 0;
+        if (ch < 1 || ch > 4) {
+            showActionPopup('MOVE CH>4', 'Ch' + ch);
+            queueEditSoundEntry(t, route, -1);
+            return;
+        }
+        showActionPopup('EDIT SOUND', editSoundPreflightLine(t, route, -1));
+        queueEditSoundEntry(t, route, -1);
+        return;
+    }
+
+    if (route === 0) {
+        const mask = schSlotsForTrack(t);
+        if (mask === 0) {
+            showActionPopup('NO SLOT', 'Ch' + (S.trackChannel[t] | 0));
+            queueEditSoundEntry(t, route, 0);
+            return;
+        }
+        let slot = 0;
+        while (slot < 4 && !(mask & (1 << slot))) slot++;
+        S._coRunChanSlots = mask;
+        showActionPopup('EDIT SOUND', editSoundPreflightLine(t, route, slot));
+        queueEditSoundEntry(t, route, slot);
+        return;
+    }
+
+    showActionPopup('CO-RUN', 'UNAVAILABLE');
 }
 
 /* Format CC number as a 4-char display label: CC7→"CC7 ", CC74→"CC74", C100→"C100" */
@@ -1509,11 +1565,10 @@ function openGlobalMenu() {
     S.jogTouched              = false;
 }
 
-/* Rebuild the global menu items list if the active track has changed
- * since the last build. Edit Slot... and Edit Synth... visibility
- * depends on the track's Route, so a Shift+jog track switch with the
- * menu open must rebuild the list. Cursor preserved by label-match
- * when possible, otherwise clamped. */
+/* Rebuild the global menu items list if the active track has changed since the
+ * last build. The Edit Sound action is route-dependent, so a Shift+jog track
+ * switch with the menu open must rebuild the list. Cursor preserved by
+ * label-match when possible, otherwise clamped. */
 function ensureGlobalMenuFresh() {
     if (!S.globalMenuOpen) return;
     if (S.globalMenuBuiltForTrack === S.activeTrack) return;
@@ -4984,26 +5039,6 @@ function clearAutoMenuClick() {
     S.screenDirty = true;
 }
 
-/* Open the Schwung-slot picker (first use) or enter co-run directly if the
- * track already has a slot assigned. Co-run keeps Overture loaded; the chain
- * editor for the picked slot takes over OLED + jog + track buttons, while
- * pads / step buttons / knobs / transport stay with Overture. */
-function openSchwungSlotEditor(t) {
-    if (S.trackRoute[t] !== 0) {  /* 0 = ROUTE_SCHWUNG; fmtRoute('Swng') */
-        showActionPopup('NOT', 'SCHWUNG-ROUTED');
-        return;
-    }
-    /* Close the global menu so Menu (exit co-run) doesn't land back on a
-     * half-open menu. */
-    S.globalMenuOpen = false;
-    S.lastSentMenuEditValue = null;
-    /* Auto-open the slot the track plays through (channel-matched) — no picker.
-     * Resolution is deferred to tick() so shadow_get_slots runs in a safe
-     * context; see the pendingSchwungCoRunTrack handler. */
-    S.pendingSchwungCoRunTrack = t;
-    S.screenDirty = true;
-}
-
 /* Enter co-run for slot N on track t. Persists the track's slot choice,
  * suppresses Overture's OLED drawing + track-button LEDs (handled where each
  * is written), and tells Schwung's shadow_ui to also tick the chain editor. */
@@ -6239,37 +6274,16 @@ function _tickImpl() {
             S._coRunChanSlots = schSlotsForTrack(S.activeTrack);
         }
 
-        /* Deferred Schwung co-run entry (queued by openSchwungSlotEditor). Resolve
-         * the slot(s) the track plays through and open the first (lowest-index)
-         * match. No match → show a "NO SLOT" popup, wait ~1s so it's readable
-         * before the chain editor takes the OLED, then fall back to slot 1. */
-        if (S.pendingSchwungCoRunTrack >= 0) {
-            const _t = S.pendingSchwungCoRunTrack;
-            if (S.schwungCoRunSlot >= 0 || _t !== S.activeTrack) {
-                /* Already in co-run, or the user navigated to another track while a
-                 * no-match entry was waiting out its popup — drop the queued entry
-                 * rather than hijacking the OLED for a track they left. (Both entry
-                 * paths queue S.activeTrack, so _t != activeTrack means a switch.) */
-                S.pendingSchwungCoRunTrack = -1;
-                S.pendingSchwungCoRunDelay = 0;
-            } else if (S.pendingSchwungCoRunDelay > 0) {
-                if (--S.pendingSchwungCoRunDelay === 0) {
-                    S.pendingSchwungCoRunTrack = -1;
-                    enterSchwungCoRun(_t, 0);  /* slot 1 fallback after the NO SLOT popup */
-                }
-            } else {
-                const _msk = schSlotsForTrack(_t);
-                if (_msk === 0) {
-                    showActionPopup('NO SLOT', 'CH ' + (S.trackChannel[_t] | 0));
-                    /* Enter right as the popup expires so there's no gap where the
-                     * normal UI flashes before the editor takes the OLED. */
-                    S.pendingSchwungCoRunDelay = ACTION_POPUP_TICKS;
-                } else {
-                    S.pendingSchwungCoRunTrack = -1;
-                    S._coRunChanSlots = _msk;  /* seed the blink mask so it's right on frame 1 */
-                    let _slot = 0;
-                    while (_slot < 4 && !(_msk & (1 << _slot))) _slot++;
-                    enterSchwungCoRun(_t, _slot);
+        if (S.pendingEditSoundEntry) {
+            const _e = S.pendingEditSoundEntry;
+            if (_e.track !== S.activeTrack || _e.route !== (S.trackRoute[_e.track] | 0)) {
+                clearPendingEditSoundEntry();
+            } else if (--_e.delay <= 0) {
+                clearPendingEditSoundEntry();
+                if (_e.route === 1) enterMoveNativeCoRun(_e.track);
+                else if (_e.route === 0) {
+                    S._coRunChanSlots = schSlotsForTrack(_e.track);
+                    enterSchwungCoRun(_e.track, _e.slot);
                 }
             }
         }
@@ -7586,14 +7600,7 @@ function _onCC_buttons(d1, d2) {
         if (!S.shiftHeld && S.pendingEditEntryTrack >= 0) {
             const _t = S.pendingEditEntryTrack;
             S.pendingEditEntryTrack = -1;
-            if (S.trackRoute[_t] === 1 &&
-                typeof shadow_corun_begin === 'function' &&
-                typeof move_midi_inject_to_move === 'function') {
-                enterMoveNativeCoRun(_t);
-            } else if (S.trackRoute[_t] === 0 &&
-                typeof shadow_corun_begin === 'function') {
-                openSchwungSlotEditor(_t);
-            }
+            editSoundForTrack(_t);
         }
         if (!S.sessionView) forceRedraw();
     }
