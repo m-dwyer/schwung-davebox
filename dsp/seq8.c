@@ -3707,28 +3707,6 @@ static void arp_tick(seq8_instance_t *inst, seq8_track_t *tr) {
 /* TRACK ARP engine (per-track, live-input first stage)               */
 /* ------------------------------------------------------------------ */
 
-static void tarp_init_defaults(seq8_track_t *tr) {
-    tr->tarp_on    = 0;
-    tr->tarp_latch = 0;
-    tr->tarp_sync  = 1;
-    arp_init_defaults(&tr->tarp);
-    tr->tarp.style     = 0; /* 0=Off; style drives tarp_on */
-    tr->tarp.retrigger = 0; /* TARP default off; arp_init_defaults sets 1 */
-}
-
-static void drum_repeat_init_defaults(seq8_track_t *tr) {
-    int l, s;
-    for (l = 0; l < DRUM_LANES; l++) {
-        tr->drum_repeat_gate[l]      = 0xFF;
-        tr->drum_repeat_gate_len[l]  = 8;
-        tr->drum_repeat2_rate_idx[l] = 2; /* 1/8 default */
-        for (s = 0; s < 8; s++) {
-            tr->drum_repeat_vel_scale[l][s] = 100;
-            tr->drum_repeat_nudge[l][s]     = 0;
-        }
-    }
-}
-
 /* Silence TRACK ARP sounding note (via immediate note-off through the chain)
  * and reset runtime state. */
 static void tarp_silence(seq8_instance_t *inst, seq8_track_t *tr) {
