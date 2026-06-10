@@ -28,96 +28,13 @@
 #include <sys/stat.h>
 
 #include "host/plugin_api_v1.h"
+#include "seq8_constants.h"
 
 /* ------------------------------------------------------------------ */
-/* Build constants                                                      */
+/* Core transport/message types                                          */
 /* ------------------------------------------------------------------ */
 
-#define SEQ8_LOG_PATH           "/data/UserData/schwung/seq8.log"
-#define SEQ8_PAD_DROP_LOG_PATH  "/data/UserData/schwung/seq8-pad-drop.log"
-#define SEQ8_STATE_PATH_FALLBACK "/data/UserData/schwung/seq8-state.json"
-
-#define NUM_TRACKS          8
-#define NUM_CLIPS           16
-
-/* MIDI routing: where track output is delivered */
-#define ROUTE_SCHWUNG  0   /* host->midi_send_internal → Schwung active chain */
-#define ROUTE_MOVE     1   /* host->midi_inject_to_move → Move native tracks */
-#define ROUTE_EXTERNAL 2   /* USB-A out: DSP enqueues → JS drains via get_param("ext_queue") */
-
-/* External MIDI queue: DSP buffers ROUTE_EXTERNAL events; JS drains and sends via move_midi_external_send */
-#define EXT_QUEUE_SIZE 64
 typedef struct { uint8_t s; uint8_t d1; uint8_t d2; } ext_msg_t;
-
-/* Pad input modes */
-#define PAD_MODE_MELODIC_SCALE  0   /* isomorphic 4ths diatonic layout */
-#define PAD_MODE_DRUM           1   /* 32-lane drum sequencer */
-
-/* Drum mode */
-#define DRUM_LANES          32
-/* Baseline MIDI note for lane 0 — standard Ableton Drum Rack layout.
- * Lane L plays note (DRUM_BASE_NOTE + L). Verify against live device before shipping. */
-#define DRUM_BASE_NOTE      36
-
-/* Scale-aware play effects: interval tables matching JS SCALE_INTERVALS order */
-static const uint8_t SCALE_IVLS[14][8] = {
-    {0, 2, 4, 5, 7, 9,11, 0},  /* 0  Major           */
-    {0, 2, 3, 5, 7, 8,10, 0},  /* 1  Minor           */
-    {0, 2, 3, 5, 7, 9,10, 0},  /* 2  Dorian          */
-    {0, 1, 3, 5, 7, 8,10, 0},  /* 3  Phrygian        */
-    {0, 2, 4, 6, 7, 9,11, 0},  /* 4  Lydian          */
-    {0, 2, 4, 5, 7, 9,10, 0},  /* 5  Mixolydian      */
-    {0, 1, 3, 5, 6, 8,10, 0},  /* 6  Locrian         */
-    {0, 2, 3, 5, 7, 8,11, 0},  /* 7  Harmonic Minor  */
-    {0, 2, 3, 5, 7, 9,11, 0},  /* 8  Melodic Minor   */
-    {0, 2, 4, 7, 9, 0, 0, 0},  /* 9  Pent Major      */
-    {0, 3, 5, 7,10, 0, 0, 0},  /* 10 Pent Minor      */
-    {0, 3, 5, 6, 7,10, 0, 0},  /* 11 Blues           */
-    {0, 2, 4, 6, 8,10, 0, 0},  /* 12 Whole Tone      */
-    {0, 2, 3, 5, 6, 8, 9,11},  /* 13 Diminished      */
-};
-static const uint8_t SCALE_SIZES[14] = {7,7,7,7,7,7,7,7,7,5,5,6,6,8};
-
-/* Sequencer engine */
-#define BPM_DEFAULT         140
-#define PPQN                96
-#define TICKS_PER_STEP      24
-#define GATE_TICKS          12
-static const uint16_t TPS_VALUES[6] = {12, 24, 48, 96, 192, 384};
-#define SEQ_STEPS           256   /* max steps per clip (array size) */
-#define SEQ_STEPS_DEFAULT   16    /* default clip length on init     */
-#define SEQ_NOTE            60
-#define SEQ_VEL             100
-
-/* Play effects (ported from NoteTwist) */
-#define MAX_PFX_EVENTS      256
-#define MAX_GEN_NOTES       6
-#define MAX_REPEATS         16
-#define NUM_CLOCK_VALUES       17
-#define DEFAULT_DELAY_TIME_IDX      10   /* 1/8D = 360 clocks at 480 PPQN */
-#define DEFAULT_DRUM_DELAY_TIME_IDX  5   /* 1/16 */
-#define MAX_DELAY_SAMPLES   (30ULL * 44100)
-
-/* 1 SEQ8 tick = 480/96 = 5 clocks at 480 PPQN (NoteTwist's resolution) */
-#define TICKS_TO_480PPQN    5
-
-/* CLOCK_VALUES: delay intervals in 480 PPQN clocks.
- * Indices: 0=1/64 1=1/64D 2=1/32 3=1/16T 4=1/32D 5=1/16 6=1/8T 7=1/16D
- *          8=1/8  9=1/4T 10=1/8D 11=1/4 12=1/4D 13=1/2 14=1/2D 15=1/1 16=1/1D */
-static const int CLOCK_VALUES[NUM_CLOCK_VALUES] = {
-    30, 45, 60, 80, 90, 120, 160, 180, 240, 320, 360, 480, 720, 960, 1440, 1920, 2880
-};
-
-/* GATE_FIXED_TICKS: fixed gate durations in 96 PPQN ticks.
- * Index = fb_gate_time - 1 (value 1..10): 0=1/64 1=1/32 2=1/16T 3=1/16 4=1/8T
- *         5=1/8 6=1/4T 7=1/4 8=1/2 9=1bar */
-#define NUM_GATE_FIXED 10
-static const int GATE_FIXED_TICKS[NUM_GATE_FIXED] = {
-    6, 12, 16, 24, 32, 48, 64, 96, 192, 384
-};
-
-/* QUANT_STEPS: launch quantization in steps. 0=Now(1), 1=1/16(1), 2=1/8(2), 3=1/4(4), 4=1/2(8), 5=1-bar(16) */
-static const uint32_t QUANT_STEPS[6] = {1, 1, 2, 4, 8, 16};
 
 
 /* ------------------------------------------------------------------ */
@@ -156,30 +73,6 @@ typedef struct {
  * NOTE FX + HARMZ + DELAY just like a normal sequenced note.
  *
  * Sole emit path while on=1: arp owns active_notes[primary] keying. */
-#define ARP_MAX_HELD     16
-#define ARP_MAX_OCTAVES  4
-#define ARP_MAX_CYCLE    (ARP_MAX_HELD * ARP_MAX_OCTAVES) /* 64 */
-#define ARP_RATE_DEFAULT 1                                /* 1/16 */
-
-/* SEQ ARP rate index → master 96-PPQN ticks per arp step.
- * 0=1/32, 1=1/16, 2=1/16t, 3=1/8, 4=1/8t, 5=1/4, 6=1/4t, 7=1/2, 8=1/2t, 9=1-bar. */
-static const uint16_t ARP_RATE_TICKS[10] = { 12, 24, 16, 48, 32, 96, 64, 192, 128, 384 };
-
-/* Drum Repeat rate pad index → ticks per repeat step (96 PPQN).
- * Pad 0-3 (bottom row): 1/32 1/16 1/8 1/4
- * Pad 4-7 (row 2):      1/32T 1/16T 1/8T 1/4T */
-static const uint16_t DRUM_REPEAT_RATE_TICKS[8] = { 12, 24, 48, 96, 8, 16, 32, 64 };
-
-/* Per-track drum input quantize snap intervals (96 PPQN).
- * Index 0=Off, 1=1/64, 2=1/32, 3=1/16, 4=1/16T, 5=1/8, 6=1/8T, 7=1/4, 8=1/4T */
-static const uint8_t DRUM_INQ_TICKS[9] = { 0, 6, 12, 24, 16, 48, 32, 96, 64 };
-
-/* Default CC assignments for CC PARAM bank knobs K1-K8 */
-static const uint8_t CC_ASSIGN_DEFAULT[8] = { 7, 74, 71, 73, 72, 91, 93, 10 };
-
-#define CC_AUTO_MAX_POINTS 1024
-#define CC_TOUCH_GRACE_BLOCKS 8  /* blocks (~46ms) to suppress automation after a live knob turn */
-
 /* Per-clip CC automation: up to CC_AUTO_MAX_POINTS sorted {tick, val} points per knob.
  * Playback interpolates linearly between adjacent points (see cc_auto_eval).
  * rest_val[k] = per-clip resting value (0..127), or 0xFF = unset ("—", send nothing). */
@@ -198,10 +91,6 @@ typedef struct {
  * cc_auto, but lanes are keyed by pitch (poly) rather than fixed knobs:
  * pitch[lane] = 0..127 poly note, 255 = channel-wide, 254 = free slot.
  * 1/32-snapped on record, linear-interpolated + hold on playback. */
-#define AT_MAX_LANES   12     /* max distinct AT pitches per clip (poly) */
-#define AT_MAX_POINTS  512    /* breakpoints per lane (1/32-snapped → 16 bars) */
-#define AT_LANE_FREE   254
-#define AT_LANE_CHAN   255
 typedef struct {
     uint8_t  pitch[AT_MAX_LANES];
     uint16_t count[AT_MAX_LANES];
@@ -323,8 +212,6 @@ typedef struct {
 /* Note-centric model (v10+)                                           */
 /* ------------------------------------------------------------------ */
 
-#define MAX_NOTES_PER_CLIP  512
-
 typedef struct {
     uint32_t tick;               /* absolute clip tick 0..clip_len*TPS-1 */
     uint16_t gate;               /* gate duration in ticks */
@@ -400,8 +287,6 @@ typedef struct {
     /* NOTE FX K5 "Len" — see clip_pfx_params_t.note_length_mode. */
     uint8_t note_length_mode;
 } drum_pfx_params_t;
-
-#define DRUM_PFX_MAX_EVENTS 64
 
 /* Per-lane drum pfx runtime state: slimmed play_fx_t for monophonic lanes.
  * One instance per drum lane; 32 per track in seq8_track_t.drum_lane_pfx[]. */
