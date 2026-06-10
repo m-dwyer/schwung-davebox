@@ -215,4 +215,61 @@ typedef struct {
     uint8_t      lane_idx;
 } drum_pfx_t;
 
+typedef struct {
+    uint8_t  steps[SEQ_STEPS];
+    uint8_t  step_notes[SEQ_STEPS][8];
+    uint8_t  step_note_count[SEQ_STEPS];
+    uint8_t  step_vel[SEQ_STEPS];
+    uint16_t step_gate[SEQ_STEPS];
+    int16_t  note_tick_offset[SEQ_STEPS][8];
+    uint8_t  step_iter[SEQ_STEPS];
+    uint8_t  step_random[SEQ_STEPS];
+    uint8_t  step_ratchet[SEQ_STEPS];
+    uint16_t loop_cycle;
+    uint16_t length;
+    uint16_t loop_start;
+    uint8_t  active;
+    uint16_t clock_shift_pos;
+    int8_t   stretch_exp;
+    int16_t  nudge_pos;
+    uint16_t ticks_per_step;
+    clip_pfx_params_t pfx_params;
+    note_t   notes[MAX_NOTES_PER_CLIP];
+    uint16_t note_count;
+    uint8_t  occ_cache[32];
+    uint8_t  occ_dirty;
+    uint8_t  playback_dir;
+    uint8_t  playback_audio_reverse;
+    int8_t   pp_dir_state;
+} clip_t;
+
+typedef struct {
+    clip_t  clip;
+    drum_pfx_params_t pfx_params;
+    uint8_t midi_note;
+    uint8_t _pad[3];
+} drum_lane_t;
+
+typedef struct {
+    drum_lane_t lanes[DRUM_LANES];
+} drum_clip_t;
+
+typedef struct {
+    uint8_t  steps[SEQ_STEPS];
+    uint8_t  step_notes[SEQ_STEPS][8];
+    uint8_t  step_note_count[SEQ_STEPS];
+    uint8_t  step_vel[SEQ_STEPS];
+    uint16_t step_gate[SEQ_STEPS];
+    int16_t  note_tick_offset[SEQ_STEPS][8];
+    uint8_t  step_iter[SEQ_STEPS];
+    uint8_t  step_random[SEQ_STEPS];
+    uint8_t  step_ratchet[SEQ_STEPS];
+    uint16_t length;
+    uint16_t loop_start;
+    uint8_t  active;
+    uint8_t  playback_dir;
+    uint8_t  playback_audio_reverse;
+    drum_pfx_params_t pfx_params;
+} drum_rec_snap_lane_t;
+
 #endif /* SEQ8_TYPES_H */
