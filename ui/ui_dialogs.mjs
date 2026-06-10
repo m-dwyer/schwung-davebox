@@ -183,6 +183,16 @@ function routeCheckSchwungStatus(ch, slots) {
     return thru ? 'THRU!' : 'NO SLOT';
 }
 
+function routeCheckStatus(t, slots) {
+    const expectedRoute = t < 4 ? 1 : 0;
+    const expectedCh = t + 1;
+    const actualRoute = S.trackRoute[t] | 0;
+    const actualCh = S.trackChannel[t] | 0;
+    if (actualRoute !== expectedRoute) return 'ROUTE!';
+    if (actualCh !== expectedCh) return 'CH' + actualCh + '!';
+    return expectedRoute === 1 ? 'MANUAL' : routeCheckSchwungStatus(expectedCh, slots);
+}
+
 function drawRouteCheck() {
     clear_screen();
     const selected = Math.max(0, Math.min(7, S.routeCheckSelected | 0));
@@ -195,7 +205,7 @@ function drawRouteCheck() {
         const n = t + 1;
         const move = t < 4;
         const route = move ? ('Move Ch' + n) : ('Schw Ch' + n);
-        const status = move ? 'MANUAL' : routeCheckSchwungStatus(n, slots);
+        const status = routeCheckStatus(t, slots);
         const active = t === selected;
         if (active) fill_rect(0, y - 1, 128, 10, 1);
         print(2, y, 'T' + n + ' ' + route, active ? 0 : 1);
