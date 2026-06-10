@@ -185,7 +185,7 @@ While holding Shift in Track View, available shortcuts light up on the step butt
 | Step | Action |
 |---|---|
 | 2 | Open Global Menu at Global section |
-| 3 | Edit the active track's sound source (forthcoming — requires a future Schwung update) |
+| 3 | Edit the active track's sound source via co-run |
 | 5 | Tap Tempo screen |
 | 6 | Metro toggle (Count-In ↔ Always) |
 | 7 | Open Global Menu at Swing |
@@ -1029,12 +1029,12 @@ Shown at the top of the Global Menu for the active track. Updates live if you sw
 | VelIn | Live, 1–127 | Live = raw velocity. Fixed value overrides all input velocity. |
 | Looper | On, Off | Whether track feeds Performance Mode |
 | AftTch | Off, Poly, Channel | Pad-pressure aftertouch (melodic tracks only). Poly sends individual pressure per note; Channel sends one pressure value for the whole track. Move-routed tracks only offer Off/Poly. Default Off. |
-| Edit Slot... | Action | Open Schwung chain editor (Schwung-routed only). *Forthcoming — requires a future Schwung update.* |
-| Edit Synth... | Action | Open Move preset browser (Move-routed only). *Forthcoming — requires a future Schwung update.* |
+| Edit Slot... | Action | Open Schwung chain editor (Schwung-routed only). |
+| Edit Synth... | Action | Open Move preset browser / device editor (Move-routed only). |
 
-### Edit Slot / Edit Synth (forthcoming)
+### Edit Slot / Edit Synth
 
-These features allow editing the active track's sound source from within dAVEBOx — the Schwung chain editor (Edit Slot) or Move's preset browser (Edit Synth). Both require a future Schwung update that has not yet been released. They will appear in the Track Config menu once the update is available.
+These features edit the active track's sound source from within dAVEBOx: Schwung-routed tracks open the Schwung chain editor with `Edit Slot...`, and Move-routed tracks open Move's native preset/device editor with `Edit Synth...`. The sequencer keeps running while co-run gives the OLED and navigation controls to the native editor.
 
 ## Global settings
 
@@ -1150,7 +1150,7 @@ When you delete a Move set, dAVEBOx automatically removes its own saved data for
 | Step | Action | Views |
 |---|---|---|
 | 2 | Global Menu (global section) | Both |
-| 3 | Edit Synth/Slot (forthcoming) | Track |
+| 3 | Edit Synth/Slot | Track |
 | 5 | Tap Tempo | Both |
 | 6 | Metro (Cnt-In ↔ Always) | Both |
 | 7 | Swing | Both |
