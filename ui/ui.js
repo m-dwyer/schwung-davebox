@@ -762,6 +762,15 @@ function routeScopeLabel(t) {
     return 'T' + (t + 1) + ' Schwung ' + (slot >= 0 ? editSoundSlotLabel(slot) : 'Ch' + ch);
 }
 
+function routeScopeShortLabel(t) {
+    const route = S.trackRoute[t] | 0;
+    const ch = S.trackChannel[t] | 0;
+    if (route === 1) return 'T' + (t + 1) + ' Move Ch' + ch;
+    if (route === 2) return 'T' + (t + 1) + ' Ext Ch' + ch;
+    const slot = schSlotForTrack(t);
+    return 'T' + (t + 1) + ' Schw ' + (slot >= 0 ? 'S' + (slot + 1) : 'Ch' + ch);
+}
+
 function autoLaneLabel(t, k, includeLane) {
     const prefix = includeLane ? ('L' + (k + 1) + ' ') : '';
     const typ = S.trackCCType[t][k] | 0;
@@ -798,11 +807,11 @@ function paramPeekInfo() {
     const clipLabel = SCENE_LETTERS[ac] || String(ac + 1);
     if (bank === 6 && S.trackPadMode[t] !== PAD_MODE_DRUM) {
         return {
-            header: 'AUTO T' + (t + 1) + ' C' + clipLabel,
+            header: 'AUTO T' + (t + 1) + ' Clip ' + clipLabel,
             knob: 'K' + (k + 1) + ' ' + autoLaneLabel(t, k, true),
             full: autoLaneFullLabel(t, k),
             value: 'Value ' + autoLaneValueLabel(t, ac, k),
-            scope: 'Clip ' + clipLabel + ' lane / ' + routeScopeLabel(t)
+            scope: 'Lane / ' + routeScopeShortLabel(t)
         };
     }
     const pm = (BANKS[bank] && BANKS[bank].knobs) ? BANKS[bank].knobs[k] : null;
