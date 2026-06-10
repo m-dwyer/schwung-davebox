@@ -66,9 +66,11 @@ rj = pathlib.Path("release.json")
 data = json.loads(rj.read_text())
 data["version"] = version
 data["download_url"] = (
-    f"https://github.com/legsmechanical/schwung-davebox/releases/"
+    f"https://github.com/m-dwyer/overture/releases/"
     f"download/v{version}/overture-module.tar.gz"
 )
+data["name"] = "Overture"
+data["description"] = "Hybrid 8-track sequencer for Ableton Move with Move-native and Schwung/open-engine tracks."
 rj.write_text(json.dumps(data, indent=2) + "\n")
 print(f"  release.json: version → {version}")
 

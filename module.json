@@ -1,9 +1,9 @@
 {
     "id": "overture",
     "name": "Overture",
-    "version": "1.0b3",
+    "version": "1.1.0",
     "abbrev": "Overture",
-    "description": "Creative 8-track MIDI sequencer with per-clip effects chains and live performance modes.",
+    "description": "Hybrid 8-track sequencer for Ableton Move with Move-native and Schwung/open-engine tracks.",
     "author": "legsmechanical",
     "api_version": 2,
     "ui": "ui.js",
