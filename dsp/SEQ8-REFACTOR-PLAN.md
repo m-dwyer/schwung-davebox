@@ -31,11 +31,15 @@ Acceptance:
 
 ## Phase 2: Core Types Header
 
+Status: done on `main`.
+
 Goal: make the data model visible without changing behavior.
 
 - Extract pure data types into `seq8_types.h`:
   - MIDI queue/event structs.
-  - pfx, arp, automation, note, clip, drum lane, track, and instance structs.
+  - pfx, arp, automation, note, clip, drum lane, and track structs.
+- Extract runtime instance state into `seq8_instance.h` so resource-owning fields
+  stay separate from the portable data model.
 - Keep helper functions, init logic, serialization, get/set param, and render
   logic in `seq8.c`.
 - Keep `seq8_set_param.c` included by `seq8.c`.
