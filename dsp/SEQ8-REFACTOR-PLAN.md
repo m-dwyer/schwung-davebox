@@ -53,12 +53,21 @@ Acceptance:
 
 ## Phase 3: Initialization and Reset Helpers
 
+Status: in progress on `main`.
+
 Goal: separate defaulting/reset behavior from runtime processing.
 
 - Extract clip, drum, pfx, arp, automation, and track init/reset helpers into a
   focused internal module or section.
 - Keep call order unchanged in create/load/transport paths.
 - Add small comments where default values are part of persisted state semantics.
+
+Completed slices:
+
+- `seq8_init.h` owns pfx, clip, drum lane, track, drum repeat, TARP, and
+  automation full-reset helpers.
+- `seq8.c` still owns lifecycle, file I/O, dispatch, render scheduling, and
+  behavior-heavy reset paths.
 
 Acceptance:
 
