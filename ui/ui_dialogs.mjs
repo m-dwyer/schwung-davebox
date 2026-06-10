@@ -149,9 +149,57 @@ function drawExportDoneDialog() {
     print(okX + 10, btnY + 2, 'OK', 0);
 }
 
+function routeCheckSlots() {
+    if (typeof shadow_get_slots !== 'function') return null;
+    const slots = shadow_get_slots();
+    return Array.isArray(slots) ? slots : null;
+}
+
+function slotIsThru(slot) {
+    if (!slot) return false;
+    if (slot.thru === true || slot.is_thru === true) return true;
+    if (slot.forward_channel === -2 || slot.channel === -2) return true;
+    const type = String(slot.type || slot.mode || slot.name || '').toLowerCase();
+    return type.indexOf('thru') >= 0;
+}
+
+function routeCheckSchwungStatus(ch, slots) {
+    if (!slots) return 'CHECK';
+    let first = -1;
+    let thru = false;
+    for (let i = 0; i < slots.length && i < 4; i++) {
+        const slot = slots[i] || {};
+        if (slotIsThru(slot)) {
+            if (slot.channel === ch || slot.channel === 0 ||
+                    slot.channel === -2 || slot.forward_channel === -2) thru = true;
+            continue;
+        }
+        if (slot.channel === ch || slot.channel === 0) {
+            first = i;
+            break;
+        }
+    }
+    if (first >= 0) return 'OK Slot' + (first + 1);
+    return thru ? 'THRU!' : 'NO SLOT';
+}
+
+function drawRouteCheck() {
+    clear_screen();
+    drawMenuHeader('ROUTE CHECK');
+    const slots = routeCheckSlots();
+    for (let row = 0; row < 8; row++) {
+        const y = 13 + row * 6;
+        const n = row + 1;
+        const move = row < 4;
+        print(1, y, 'T' + n + ' ' + (move ? 'Move Ch' : 'Schwung Ch') + n, 1);
+        print(84, y, move ? 'MANUAL' : routeCheckSchwungStatus(n, slots), 1);
+    }
+}
+
 export function drawGlobalMenu() {
     if (S.tapTempoOpen)        { drawTapTempoScreen();       return; }
     if (S.exportDoneDialog)    { drawExportDoneDialog();     return; }
+    if (S.routeCheckOpen)      { drawRouteCheck();           return; }
     if (S.confirmClearSession) { drawClearSessionConfirm();  return; }
     if (S.confirmConvertToDrum){ drawConvertToDrumConfirm(); return; }
     if (S.confirmExport)       { drawExportConfirm();        return; }

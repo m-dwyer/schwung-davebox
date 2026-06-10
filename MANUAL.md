@@ -1042,6 +1042,7 @@ These features edit the active track's sound source from within dAVEBOx: Schwung
 |---|---|---|---|
 | Metro | Off, Cnt-In, Play, Always | — | Metronome timing |
 | Metro Vol | 0–150% | 100% | |
+| Route Check | — | — | Shows expected Move/Schwung routes and detected Schwung slot status. |
 | Tap Tempo | — | — | Full-screen tap interface. Pad taps calculate BPM. Jog ±1 BPM. |
 | BPM | 40–250 | — | |
 | Key | C through B | — | |

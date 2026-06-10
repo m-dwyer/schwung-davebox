@@ -444,6 +444,10 @@ function buildGlobalMenuItems() {
             set: function(v) { S.beatMarkersEnabled = v; forceRedraw(); },
             onLabel: 'On', offLabel: 'Off'
         }),
+        createAction('Route Check', function() {
+            S.routeCheckOpen = true;
+            S.screenDirty = true;
+        }),
         createAction('Export to Ableton', function() {
             requestExport();
         }),
@@ -1530,6 +1534,18 @@ function ensureGlobalMenuFresh() {
             Math.max(0, S.globalMenuItems.length - 1));
     }
     S.globalMenuBuiltForTrack = S.activeTrack;
+}
+
+function routeCheckExpectedLabel(t) {
+    return t < 4 ? ('T' + (t + 1) + ' Move Ch' + (t + 1))
+                 : ('T' + (t + 1) + ' Schwung Ch' + (t + 1));
+}
+
+function routeCheckWarnForTrack(t) {
+    const expectedRoute = t < 4 ? 1 : 0;
+    const expectedCh = t + 1;
+    if (S.trackRoute[t] !== expectedRoute || S.trackChannel[t] !== expectedCh)
+        showActionPopup('ROUTE CHECK', routeCheckExpectedLabel(t));
 }
 
 
@@ -3082,6 +3098,7 @@ function applyTrackConfig(t, key, val) {
          * Channel selection so the AftTch menu + send stay in sync. */
         if (val === 1 && S.trackAtMode[t] === 2) { S.trackAtMode[t] = 1; writeSidecar(); }
     }
+    if (key === 'channel' || key === 'route') routeCheckWarnForTrack(t);
     else if (key === 'pad_mode') {
         S.trackPadMode[t] = val;
         if (val === PAD_MODE_DRUM) {
@@ -5034,6 +5051,8 @@ function exitSchwungCoRun() {
 function enterMoveNativeCoRun(t) {
     if (typeof shadow_corun_begin !== 'function') return;
     if (typeof move_midi_inject_to_move !== 'function') return;
+    const ch = S.trackChannel[t] | 0;
+    if (ch < 1 || ch > 4) showActionPopup('MOVE CH>4', 'CH ' + ch);
     S.moveCoRunTrack = t;
     shadow_corun_begin(CORUN_TARGET_MOVE_NATIVE, t, OVERTURE_CORUN_KEEP_MASK);
     /* Let Move firmware's own LED writes (track buttons, knob rings, transport)
@@ -7008,6 +7027,11 @@ function _onCC_jog(d1, d2) {
         return;
     }
     if (d1 === 3 && d2 === 127 && S.globalMenuOpen) {
+        if (S.routeCheckOpen) {
+            S.routeCheckOpen = false;
+            S.screenDirty = true;
+            return;
+        }
         if (S.exportDoneDialog) {            /* OK dismiss */
             S.exportDoneDialog = false;
             S.globalMenuOpen   = false;
@@ -7699,6 +7723,9 @@ function _onCC_buttons(d1, d2) {
             if (S.shiftHeld) {
                 if (S.globalMenuOpen) { S.globalMenuOpen = false; forceRedraw(); }
                 else { openGlobalMenu(); }
+            } else if (S.routeCheckOpen) {
+                S.routeCheckOpen = false;
+                forceRedraw();
             } else if (S.tapTempoOpen) {
                 closeTapTempo();
                 forceRedraw();
@@ -8034,6 +8061,9 @@ function _onCC_transport(d1, d2) {
             forceRedraw();
         } else if (S.globalMenuOpen && S.confirmExport) {
             S.confirmExport = false;
+            forceRedraw();
+        } else if (S.globalMenuOpen && S.routeCheckOpen) {
+            S.routeCheckOpen = false;
             forceRedraw();
         } else if (S.globalMenuOpen) {
             S.globalMenuOpen = false;

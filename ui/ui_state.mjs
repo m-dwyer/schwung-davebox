@@ -356,6 +356,7 @@ export const S = {
     globalMenuState: null,
     globalMenuStack: null,
     globalMenuBuiltForTrack: -1,
+    routeCheckOpen: false,
     bpmWasEditing: false,
     lastSentMenuEditValue: null,
     confirmClearSession: false,
