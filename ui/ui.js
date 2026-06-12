@@ -603,6 +603,7 @@ const BANK_DISPLAY_TICKS = 94;  /* ~1000ms at 94Hz device tick rate (was 392 = ~
 const STRETCH_BLOCKED_TICKS = 294;  /* ~1500ms at 196Hz */
 const NO_NOTE_FLASH_TICKS = 118;     /* ~600ms at 196Hz */
 const KNOB_TURN_HIGHLIGHT_TICKS = 120;            /* ~600ms at 196Hz — highlight after turn without touch */
+const PARAM_PEEK_DETAIL_TICKS = 47;               /* ~500ms at 94Hz */
 
 /* S.bankParams[track][bankIdx][knobIdx] = integer value (JS-authoritative).
  * Initialized from BANKS defaults; refreshed from DSP on bank select. */
@@ -765,10 +766,34 @@ function routeScopeLabel(t) {
 function routeScopeShortLabel(t) {
     const route = S.trackRoute[t] | 0;
     const ch = S.trackChannel[t] | 0;
-    if (route === 1) return 'T' + (t + 1) + ' Move Ch' + ch;
-    if (route === 2) return 'T' + (t + 1) + ' Ext Ch' + ch;
+    if (route === 1) return 'Move Ch' + ch;
+    if (route === 2) return 'Ext Ch' + ch;
     const slot = schSlotForTrack(t);
-    return 'T' + (t + 1) + ' Schw ' + (slot >= 0 ? 'S' + (slot + 1) : 'Ch' + ch);
+    return 'Schw ' + (slot >= 0 ? 'S' + (slot + 1) : 'Ch' + ch);
+}
+
+function ccCommonName(cc) {
+    switch (cc | 0) {
+    case 1:  return 'Mod Wheel';
+    case 7:  return 'Volume';
+    case 10: return 'Pan';
+    case 11: return 'Expression';
+    case 64: return 'Sustain';
+    case 74: return 'Filter';
+    case 91: return 'Reverb';
+    case 93: return 'Chorus';
+    default: return '';
+    }
+}
+
+function tpsDisplay(tps) {
+    if (tps === 12) return '1/32';
+    if (tps === 24) return '1/16';
+    if (tps === 48) return '1/8';
+    if (tps === 96) return '1/4';
+    if (tps === 192) return '1/2';
+    if (tps === 384) return '1bar';
+    return String(tps);
 }
 
 function autoLaneLabel(t, k, includeLane) {
@@ -781,22 +806,23 @@ function autoLaneLabel(t, k, includeLane) {
     return prefix + fmtCCLabel(assign);
 }
 
-function autoLaneFullLabel(t, k) {
+function autoLaneTargetLabel(t, k) {
     const typ = S.trackCCType[t][k] | 0;
     const assign = S.trackCCAssign[t][k] | 0;
-    if (typ === 1) return 'Channel Aftertouch';
+    if (typ === 1) return 'Aftertouch';
     if (typ === 2) {
         const name = S.schLabel[t][k];
-        return name ? ('Schwung K' + assign + ' ' + name) : ('Schwung chain knob ' + assign);
+        return name ? ('Sch K' + assign + ' ' + name) : ('Schwung knob ' + assign);
     }
-    if (assign < 0) return 'Unassigned automation lane';
-    if ((S.trackRoute[t] | 0) === 1) return 'Move K' + (k + 1) + ' target';
-    return 'Control Change ' + fmtCCLabel(assign);
+    if (assign < 0) return 'No target assigned';
+    if ((S.trackRoute[t] | 0) === 1) return 'Move target';
+    const name = ccCommonName(assign);
+    return name ? (fmtCCLabel(assign) + ' ' + name) : fmtCCLabel(assign);
 }
 
 function autoLaneValueLabel(t, ac, k) {
     const rawV = S.playing ? S.trackCCLiveVal[t][k] : S.clipCCVal[t][ac][k];
-    return (rawV >= 0 && rawV <= 127) ? String(rawV) : '--';
+    return (rawV >= 0 && rawV <= 127) ? ('Value ' + rawV) : 'No value set';
 }
 
 function paramPeekInfo() {
@@ -808,19 +834,33 @@ function paramPeekInfo() {
     if (bank === 6 && S.trackPadMode[t] === PAD_MODE_DRUM) {
         return {
             header: 'AUTO T' + (t + 1) + ' Drum',
-            knob: 'K' + (k + 1) + ' --',
-            full: 'Melodic AUTO only',
+            target: 'Melodic AUTO only',
             value: 'Use DRUM/NOTE banks',
-            scope: routeScopeShortLabel(t)
+            detail: 'Drum track',
+            route: 'Route: ' + routeScopeShortLabel(t)
         };
     }
     if (bank === 6 && S.trackPadMode[t] !== PAD_MODE_DRUM) {
+        const heldTicks = S.knobTouchStartTick >= 0 ? (S.tickCount - S.knobTouchStartTick) : 0;
+        if (heldTicks >= PARAM_PEEK_DETAIL_TICKS) {
+            const clipTps = S.clipTPS[t][ac] || 24;
+            const loopLen = S.ccLaneLength[t][ac][k] || S.clipLength[t][ac];
+            const zoomTps = S.ccLaneTps[t][ac][k] || clipTps;
+            const resTps = S.ccLaneResTps[t][ac][k] || zoomTps;
+            return {
+                header: autoLaneTargetLabel(t, k),
+                target: 'Lane ' + (k + 1) + ' / Clip ' + clipLabel,
+                value: 'Route: ' + routeScopeShortLabel(t),
+                detail: 'Loop ' + loopLen + ' steps',
+                route: 'Res ' + tpsDisplay(resTps) + ' Zoom ' + tpsDisplay(zoomTps)
+            };
+        }
         return {
             header: 'AUTO T' + (t + 1) + ' Clip ' + clipLabel,
-            knob: 'K' + (k + 1) + ' ' + autoLaneLabel(t, k, true),
-            full: autoLaneFullLabel(t, k),
-            value: 'Value ' + autoLaneValueLabel(t, ac, k),
-            scope: 'Lane / ' + routeScopeShortLabel(t)
+            target: autoLaneTargetLabel(t, k),
+            value: autoLaneValueLabel(t, ac, k),
+            detail: 'Clip ' + clipLabel + ', Lane ' + (k + 1),
+            route: 'Route: ' + routeScopeShortLabel(t)
         };
     }
     const pm = (BANKS[bank] && BANKS[bank].knobs) ? BANKS[bank].knobs[k] : null;
@@ -828,10 +868,10 @@ function paramPeekInfo() {
     if (!pm || !pm.full) {
         return {
             header: bankName + ' T' + (t + 1),
-            knob: 'K' + (k + 1) + ' --',
-            full: 'Unassigned',
+            target: 'No target assigned',
             value: 'Value --',
-            scope: routeScopeLabel(t)
+            detail: 'Knob ' + (k + 1),
+            route: 'Route: ' + routeScopeShortLabel(t)
         };
     }
     const val = S.bankParams[t][bank][k];
@@ -842,10 +882,10 @@ function paramPeekInfo() {
                : pm.scope;
     return {
         header: bankName + ' T' + (t + 1),
-        knob: 'K' + (k + 1) + ' ' + (pm.abbrev || '--'),
-        full: pm.full,
+        target: pm.full,
         value: 'Value ' + (pm.fmt ? pm.fmt(val) : String(val)),
-        scope: scope + ' / ' + routeScopeLabel(t)
+        detail: scope,
+        route: 'Route: ' + routeScopeShortLabel(t)
     };
 }
 
@@ -853,10 +893,10 @@ function drawParamPeek() {
     const p = paramPeekInfo();
     fill_rect(0, 0, 128, 9, 1);
     print(4, 1, truncText(p.header, 20), 0);
-    print(4, 13, truncText(p.knob, 20), 1);
-    print(4, 25, truncText(p.full, 20), 1);
-    print(4, 38, truncText(p.value, 20), 1);
-    print(4, 52, truncText(p.scope, 20), 1);
+    print(4, 13, truncText(p.target, 20), 1);
+    print(4, 25, truncText(p.value, 20), 1);
+    print(4, 38, truncText(p.detail, 20), 1);
+    print(4, 52, truncText(p.route, 20), 1);
 }
 
 function drawShiftStepHelp() {
@@ -6375,6 +6415,11 @@ function _tickImpl() {
         if (S.knobTouched >= 0 && S.knobTurnedTick[S.knobTouched] >= 0 &&
                 (S.tickCount - S.knobTurnedTick[S.knobTouched]) >= KNOB_TURN_HIGHLIGHT_TICKS) {
             S.knobTouched = -1;
+            S.knobTouchStartTick = -1;
+            S.screenDirty = true;
+        }
+        if (S.knobTouched >= 0 && S.knobTouchStartTick >= 0 &&
+                (S.tickCount - S.knobTouchStartTick) === PARAM_PEEK_DETAIL_TICKS) {
             S.screenDirty = true;
         }
         if (S.noNoteFlashEndTick >= 0 && S.tickCount >= S.noNoteFlashEndTick) {
@@ -11703,7 +11748,8 @@ function _onMidiInternalImpl(data) {
         if ((status & 0xF0) === 0x90) {
             if (d2 === 127) {
                 if (d1 <= 7 && S.activeBank >= 0) {
-                    S.knobTouched = d1; S.knobTurnedTick[d1] = -1; S.screenDirty = true;
+                    S.knobTouched = d1; S.knobTouchStartTick = S.tickCount;
+                    S.knobTurnedTick[d1] = -1; S.screenDirty = true;
                     /* CC bank: touching a knob makes it the active lane (persistent
                      * — drives the step-LED gradient and highlighted overview cell). */
                     if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
@@ -11795,6 +11841,7 @@ function _onMidiInternalImpl(data) {
                     /* SEQ ARP K5 / TRACK ARP K5 release: refresh pads (vel-slider editor → normal pads). */
                     if ((S.activeBank === 4 && d1 === 4) || (S.activeBank === 5 && d1 === 4)) forceRedraw();
                     S.knobTouched = -1;
+                    S.knobTouchStartTick = -1;
                     S.knobLocked[d1] = false;
                     S.knobAccum[d1]  = 0;
                     S.screenDirty = true;
@@ -11831,6 +11878,7 @@ function _onMidiInternalImpl(data) {
                 }
                 if ((S.activeBank === 4 && d1 === 4) || (S.activeBank === 5 && d1 === 4)) forceRedraw();
                 S.knobTouched = -1;
+                S.knobTouchStartTick = -1;
                 S.knobLocked[d1] = false;
                 S.knobAccum[d1]  = 0;
                 S.screenDirty = true;

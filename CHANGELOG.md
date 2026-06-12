@@ -9,9 +9,10 @@ the section into a versioned heading at release time.
 ## [Unreleased]
 ### Features
 - **Param Peek and shortcut help.** Touching a knob now opens a compact OLED
-  readout with the bank/context, full parameter label, current value, and
-  track/clip/route scope. AUTO lane labels are explicit (`L1 AT`, `L2 CC74`,
-  `L3 Sch5`, `L4 --`), and holding Shift in Track View shows a compact
+  readout with the bank/context, human-readable target, current value, and
+  route/scope. AUTO Param Peek names common CCs (`CC7 Volume`, `CC74 Filter`),
+  uses plain targets for aftertouch and Schwung lanes, and reveals lane timing
+  detail when the knob is held. Holding Shift in Track View shows a compact
   Shift+Step shortcut overlay.
 - **Hold a step + jog = step length (and the jog no longer changes banks mid-edit).** While holding a step (Step Edit), turning the jog wheel now sets that step's length, matching Move's "hold step + wheel" gesture. This also fixes a bug: previously the jog silently cycled parameter banks *underneath* the Step Edit screen, so you'd only discover the bank had moved (e.g. DELAY → NOTE FX) when you released the step.
 - **Bank position strip in the Track View header.** The header now shows a compact "you are here in the bank chain" strip on the right — the active bank is a tall block, the others short stubs — so you can see how many banks exist and where you are as you turn the jog (like Move's Device View). Replaces the old inconsistent `>>` hints.

@@ -237,6 +237,7 @@ export const S = {
     knobLastDir: new Array(8).fill(0),
     knobLocked: new Array(8).fill(false),
     knobTurnedTick: new Array(8).fill(-1),
+    knobTouchStartTick: -1,
     bankSelectTick: -1,
     jogTouched: false,
     stretchBlockedEndTick: -1,

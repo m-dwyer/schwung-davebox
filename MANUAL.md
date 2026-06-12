@@ -539,10 +539,13 @@ Each of the 8 knobs controls its own automation lane — a recordable stream of 
 
 **Assigning what a knob controls:** jog click to enter alt mode on this bank, then turn a knob to step through the target options: aftertouch (AT), any CC number (CC0–CC127), or — on Schwung-routed tracks with patched Schwung — Schwung chain knob assignments (Sch1–Sch8). Sch lanes automate the knob assignments configured on the track's chain slot. The assignment applies to the whole track — all clips on that track share it.
 
-**Param Peek:** touch any knob to show its bank/context, full target label,
-current value, and scope. AUTO lanes use explicit labels such as `L1 AT`,
-`L2 CC74`, `L3 Sch5`, or `L4 --`; Move-routed AUTO lanes identify the target
-conservatively as the current Move parameter for that physical knob.
+**Param Peek:** touch any knob to show its bank/context, target, value, and
+route. AUTO lanes use human-readable targets where possible, such as
+`Aftertouch`, `CC7 Volume`, `CC74 Filter`, `Schwung knob 5`, or
+`No target assigned`. Move-routed AUTO lanes identify the target conservatively
+as the current Move parameter target for that physical knob. Hold the knob to
+replace the summary with lane timing detail: lane/clip, route, loop length,
+resolution, and zoom.
 
 **The "—" floor:** every knob starts at "—" (send nothing). Turn below 0 to reach "—"; turn up from "—" to reach 0.
 
