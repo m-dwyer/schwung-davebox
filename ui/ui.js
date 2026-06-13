@@ -105,6 +105,11 @@ import {
     motionOverviewModel,
     paramPeekInfo
 } from './ui_motion.mjs';
+import {
+    runDeferredContentResyncTasks,
+    runEndOfTickPersistenceTasks,
+    runMoveCoRunTickTasks
+} from './ui_tick_tasks.mjs';
 
 /* ------------------------------------------------------------------ */
 /* Parameter bank definitions                                           */
@@ -5919,46 +5924,9 @@ function _tickImpl() {
         }
     }
 
-    /* Deferred Move co-run entry inject — see enterMoveNativeCoRun(). Fire the
-     * track-button press now that the shim's co-run path is active, so Move's
-     * track + knob LED repaint passes through to hardware instead of being stripped. */
-    if (S.pendingMoveCoRunInject > 0) {
-        S.pendingMoveCoRunInject--;
-        if (S.pendingMoveCoRunInject === 0 && S.moveCoRunTrack >= 0) {
-            const ch = S.trackChannel[S.moveCoRunTrack] | 0;
-            if (ch >= 1 && ch <= 4) {
-                const coCC = 44 - ch;  /* ch 1 -> CC 43 (Track 1) ... ch 4 -> CC 40 (Track 4) */
-                /* Reliable landing: alternate a neighbor track-button with the
-                 * co-run track, ending on the co-run track (twice), so Move
-                 * definitively selects + shows the routed track. Each neighbor->co-run
-                 * transition forces a fresh selection; the doubled co-run tail covers
-                 * a missed/coalesced final press. Well-spaced (gap below) so Move
-                 * processes each as a distinct press. */
-                const nb = (coCC === 43) ? 42 : 43;  /* any track button != co-run */
-                S.moveCoRunPressQueue = [nb, coCC, nb, coCC];
-                S.moveCoRunPressGap = 0;
-            }
-        }
-    }
-    /* Drain the co-run track-button press sequence (Option B full-row repaint):
-     * one injected press every few ticks until the queue empties. Prefix each
-     * press with a defensive Shift-off (CC 49=0) — Move firmware's internal
-     * Shift state can be ambiguous when a tool entered co-run via Shift+Step
-     * (the physical Shift release was zeroed shim-side in non-co-run mode, so
-     * Move never saw it), and a plain track-button press with Shift "held"
-     * lands on Move's track-routing menu instead of the preset editor. */
-    if (S.moveCoRunPressQueue && S.moveCoRunPressQueue.length > 0 &&
-            typeof move_midi_inject_to_move === 'function') {
-        if (S.moveCoRunPressGap > 0) {
-            S.moveCoRunPressGap--;
-        } else {
-            const cc = S.moveCoRunPressQueue.shift();
-            move_midi_inject_to_move([0x0B, 0xB0, 49, 0]);    /* Shift off (defensive) */
-            move_midi_inject_to_move([0x0B, 0xB0, cc, 127]);
-            move_midi_inject_to_move([0x0B, 0xB0, cc, 0]);
-            S.moveCoRunPressGap = 5;
-        }
-    }
+    runMoveCoRunTickTasks(S, {
+        move_midi_inject_to_move: (typeof move_midi_inject_to_move === 'function') ? move_midi_inject_to_move : null
+    });
 
     /* Deferred targeted re-sync after undo/redo: re-read only the affected clip(s). */
     if (S.pendingUndoSync > 0) {
@@ -6009,82 +5977,20 @@ function _tickImpl() {
         S.allLanesDirResetTrack = -1;
         S.screenDirty = true;
     }
-    if (S.pendingDrumResync > 0) {
-        S.pendingDrumResync--;
-        if (S.pendingDrumResync === 0) {
-            syncDrumClipContent(S.pendingDrumResyncTrack);
-            syncDrumLanesMeta(S.pendingDrumResyncTrack);
-            syncDrumLaneSteps(S.pendingDrumResyncTrack, S.activeDrumLane[S.pendingDrumResyncTrack]);
-            forceRedraw();
-        }
-    }
-    if (S.pendingDrumLaneResync > 0) {
-        S.pendingDrumLaneResync--;
-        if (S.pendingDrumLaneResync === 0) {
-            const _drT = S.pendingDrumLaneResyncTrack;
-            const _drL = S.pendingDrumLaneResyncLane;
-            syncDrumLaneSteps(_drT, _drL);
-            /* Also refresh per-lane bank params (NOTE FX, DELAY, Repeat Groove)
-             * so post-reset and post-mutation pfx values reflect DSP. Without
-             * this, Lane Reset would leave NOTE FX/DELAY mirrors showing the
-             * pre-reset values until the next track switch. */
-            refreshDrumLaneBankParams(_drT, _drL);
-            forceRedraw();
-        }
-    }
-    if (S.pendingStepsReread > 0) {
-        S.pendingStepsReread--;
-        if (S.pendingStepsReread === 0) {
-            const prt  = S.pendingStepsRereadTrack;
-            const prac = S.pendingStepsRereadClip;
-            const bulk = host_module_get_param('t' + prt + '_c' + prac + '_steps');
-            if (bulk && bulk.length >= NUM_STEPS) {
-                for (let rs = 0; rs < NUM_STEPS; rs++)
-                    S.clipSteps[prt][prac][rs] = bulk[rs] === '1' ? 1 : (bulk[rs] === '2' ? 2 : 0);
-                S.clipNonEmpty[prt][prac] = clipHasContent(prt, prac);
-            }
-            const _plen = host_module_get_param('t' + prt + '_c' + prac + '_length');
-            if (_plen !== null && _plen !== undefined) S.clipLength[prt][prac] = parseInt(_plen, 10) || 16;
-            const _ptps = host_module_get_param('t' + prt + '_c' + prac + '_tps');
-            if (_ptps !== null && _ptps !== undefined) {
-                const _tv = parseInt(_ptps, 10);
-                S.clipTPS[prt][prac] = TPS_VALUES.indexOf(_tv) >= 0 ? _tv : 24;
-            }
-            if (prac === S.trackActiveClip[prt]) refreshPerClipBankParams(prt);
-            forceRedraw();
-        }
-    }
-    if (S.pendingSceneBakeResync > 0) {
-        S.pendingSceneBakeResync--;
-        if (S.pendingSceneBakeResync === 0) {
-            const sc = S.pendingSceneBakeClip;
-            for (let _t = 0; _t < NUM_TRACKS; _t++) {
-                if (S.trackPadMode[_t] === PAD_MODE_DRUM) {
-                    if (S.trackActiveClip[_t] === sc) {
-                        syncDrumClipContent(_t);
-                        syncDrumLanesMeta(_t);
-                        syncDrumLaneSteps(_t, S.activeDrumLane[_t]);
-                    }
-                } else {
-                    const bulk = host_module_get_param('t' + _t + '_c' + sc + '_steps');
-                    if (bulk && bulk.length >= NUM_STEPS) {
-                        for (let rs = 0; rs < NUM_STEPS; rs++)
-                            S.clipSteps[_t][sc][rs] = bulk[rs] === '1' ? 1 : (bulk[rs] === '2' ? 2 : 0);
-                        S.clipNonEmpty[_t][sc] = clipHasContent(_t, sc);
-                    }
-                    const _plen = host_module_get_param('t' + _t + '_c' + sc + '_length');
-                    if (_plen !== null && _plen !== undefined) S.clipLength[_t][sc] = parseInt(_plen, 10) || 16;
-                    const _ptps = host_module_get_param('t' + _t + '_c' + sc + '_tps');
-                    if (_ptps !== null && _ptps !== undefined) {
-                        const _tv = parseInt(_ptps, 10);
-                        S.clipTPS[_t][sc] = TPS_VALUES.indexOf(_tv) >= 0 ? _tv : 24;
-                    }
-                    if (sc === S.trackActiveClip[_t]) refreshPerClipBankParams(_t);
-                }
-            }
-            forceRedraw();
-        }
-    }
+    runDeferredContentResyncTasks(S, {
+        NUM_TRACKS,
+        NUM_STEPS,
+        PAD_MODE_DRUM,
+        TPS_VALUES,
+        host_module_get_param,
+        syncDrumClipContent,
+        syncDrumLanesMeta,
+        syncDrumLaneSteps,
+        refreshDrumLaneBankParams,
+        refreshPerClipBankParams,
+        clipHasContent,
+        forceRedraw
+    });
 
     /* pendingClearLength drain removed (Group B): Clip Clear now preserves
      * length and loop window so the deferred length=16 reset is no longer
@@ -6705,37 +6611,18 @@ function _tickImpl() {
         }
     }
 
-    /* Suspend save: fires last so no subsequent set_param can overwrite it.
-     * Quit/Shift+Back use the else-if branches below so the exit/hide call
-     * only runs on a tick AFTER the save set_param has reached DSP — same-tick
-     * exit would tear the module down before the buffer processes the save. */
-    if (S.pendingSuspendSave && typeof host_module_set_param === 'function') {
-        S.pendingSuspendSave = false;
-        updateNameIndex();
-        host_module_set_param('save', '1');
-    } else if (S.pendingExitAfterSave) {
-        S.pendingExitAfterSave = false;
-        removeFlagsWrap();
-        S.ledInitComplete = false;
-        invalidateLEDCache();
-        clearAllLEDs();
-        for (let _i = 0; _i < 4; _i++) setButtonLED(40 + _i, LED_OFF);
-        if (typeof host_exit_module === 'function') host_exit_module();
-    } else if (S.pendingHideAfterSave) {
-        S.pendingHideAfterSave = false;
-        removeFlagsWrap();
-        S.ledInitComplete = false;
-        invalidateLEDCache();
-        clearAllLEDs();
-        for (let _i = 0; _i < 4; _i++) setButtonLED(40 + _i, LED_OFF);
-        if (typeof host_hide_module === 'function') host_hide_module();
-    } else if (S.pendingSnapshotCopy) {
-        /* One tick after the 'save' above flushed live state to disk
-         * synchronously — copy it into the snapshot + update manifest. */
-        const _sc = S.pendingSnapshotCopy;
-        S.pendingSnapshotCopy = null;
-        commitSnapshot(S.currentSetUuid, _sc.id, _sc.label);
-    }
+    runEndOfTickPersistenceTasks(S, {
+        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        host_exit_module: (typeof host_exit_module === 'function') ? host_exit_module : null,
+        host_hide_module: (typeof host_hide_module === 'function') ? host_hide_module : null,
+        updateNameIndex,
+        removeFlagsWrap,
+        invalidateLEDCache,
+        clearAllLEDs,
+        setButtonLED,
+        commitSnapshot,
+        LED_OFF
+    });
 
     /* Orphan prune: clean up set_state/<uuid>/seq8-*.json for sets that no
      * longer exist on disk. Defer until any state_load + initial sync settles

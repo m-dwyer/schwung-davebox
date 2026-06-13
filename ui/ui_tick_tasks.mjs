@@ -1,0 +1,147 @@
+function rereadMelodicClip(S, deps, track, clip) {
+    const bulk = deps.host_module_get_param('t' + track + '_c' + clip + '_steps');
+    if (bulk && bulk.length >= deps.NUM_STEPS) {
+        for (let rs = 0; rs < deps.NUM_STEPS; rs++)
+            S.clipSteps[track][clip][rs] = bulk[rs] === '1' ? 1 : (bulk[rs] === '2' ? 2 : 0);
+        S.clipNonEmpty[track][clip] = deps.clipHasContent(track, clip);
+    }
+    const len = deps.host_module_get_param('t' + track + '_c' + clip + '_length');
+    if (len !== null && len !== undefined) S.clipLength[track][clip] = parseInt(len, 10) || 16;
+    const tps = deps.host_module_get_param('t' + track + '_c' + clip + '_tps');
+    if (tps !== null && tps !== undefined) {
+        const tv = parseInt(tps, 10);
+        S.clipTPS[track][clip] = deps.TPS_VALUES.indexOf(tv) >= 0 ? tv : 24;
+    }
+}
+
+export function runMoveCoRunTickTasks(S, deps) {
+    /* Deferred Move co-run entry inject — see enterMoveNativeCoRun(). Fire the
+     * track-button press now that the shim's co-run path is active, so Move's
+     * track + knob LED repaint passes through to hardware instead of being stripped. */
+    if (S.pendingMoveCoRunInject > 0) {
+        S.pendingMoveCoRunInject--;
+        if (S.pendingMoveCoRunInject === 0 && S.moveCoRunTrack >= 0) {
+            const ch = S.trackChannel[S.moveCoRunTrack] | 0;
+            if (ch >= 1 && ch <= 4) {
+                const coCC = 44 - ch;  /* ch 1 -> CC 43 (Track 1) ... ch 4 -> CC 40 (Track 4) */
+                /* Reliable landing: alternate a neighbor track-button with the
+                 * co-run track, ending on the co-run track (twice), so Move
+                 * definitively selects + shows the routed track. Each neighbor->co-run
+                 * transition forces a fresh selection; the doubled co-run tail covers
+                 * a missed/coalesced final press. Well-spaced (gap below) so Move
+                 * processes each as a distinct press. */
+                const nb = (coCC === 43) ? 42 : 43;  /* any track button != co-run */
+                S.moveCoRunPressQueue = [nb, coCC, nb, coCC];
+                S.moveCoRunPressGap = 0;
+            }
+        }
+    }
+    /* Drain the co-run track-button press sequence (Option B full-row repaint):
+     * one injected press every few ticks until the queue empties. Prefix each
+     * press with a defensive Shift-off (CC 49=0) — Move firmware's internal
+     * Shift state can be ambiguous when a tool entered co-run via Shift+Step
+     * (the physical Shift release was zeroed shim-side in non-co-run mode, so
+     * Move never saw it), and a plain track-button press with Shift "held"
+     * lands on Move's track-routing menu instead of the preset editor. */
+    if (S.moveCoRunPressQueue && S.moveCoRunPressQueue.length > 0 &&
+            typeof deps.move_midi_inject_to_move === 'function') {
+        if (S.moveCoRunPressGap > 0) {
+            S.moveCoRunPressGap--;
+        } else {
+            const cc = S.moveCoRunPressQueue.shift();
+            deps.move_midi_inject_to_move([0x0B, 0xB0, 49, 0]);    /* Shift off (defensive) */
+            deps.move_midi_inject_to_move([0x0B, 0xB0, cc, 127]);
+            deps.move_midi_inject_to_move([0x0B, 0xB0, cc, 0]);
+            S.moveCoRunPressGap = 5;
+        }
+    }
+}
+
+export function runDeferredContentResyncTasks(S, deps) {
+    if (S.pendingDrumResync > 0) {
+        S.pendingDrumResync--;
+        if (S.pendingDrumResync === 0) {
+            deps.syncDrumClipContent(S.pendingDrumResyncTrack);
+            deps.syncDrumLanesMeta(S.pendingDrumResyncTrack);
+            deps.syncDrumLaneSteps(S.pendingDrumResyncTrack, S.activeDrumLane[S.pendingDrumResyncTrack]);
+            deps.forceRedraw();
+        }
+    }
+    if (S.pendingDrumLaneResync > 0) {
+        S.pendingDrumLaneResync--;
+        if (S.pendingDrumLaneResync === 0) {
+            const drT = S.pendingDrumLaneResyncTrack;
+            const drL = S.pendingDrumLaneResyncLane;
+            deps.syncDrumLaneSteps(drT, drL);
+            /* Also refresh per-lane bank params (NOTE FX, DELAY, Repeat Groove)
+             * so post-reset and post-mutation pfx values reflect DSP. Without
+             * this, Lane Reset would leave NOTE FX/DELAY mirrors showing the
+             * pre-reset values until the next track switch. */
+            deps.refreshDrumLaneBankParams(drT, drL);
+            deps.forceRedraw();
+        }
+    }
+    if (S.pendingStepsReread > 0) {
+        S.pendingStepsReread--;
+        if (S.pendingStepsReread === 0) {
+            const prt  = S.pendingStepsRereadTrack;
+            const prac = S.pendingStepsRereadClip;
+            rereadMelodicClip(S, deps, prt, prac);
+            if (prac === S.trackActiveClip[prt]) deps.refreshPerClipBankParams(prt);
+            deps.forceRedraw();
+        }
+    }
+    if (S.pendingSceneBakeResync > 0) {
+        S.pendingSceneBakeResync--;
+        if (S.pendingSceneBakeResync === 0) {
+            const sc = S.pendingSceneBakeClip;
+            for (let t = 0; t < deps.NUM_TRACKS; t++) {
+                if (S.trackPadMode[t] === deps.PAD_MODE_DRUM) {
+                    if (S.trackActiveClip[t] === sc) {
+                        deps.syncDrumClipContent(t);
+                        deps.syncDrumLanesMeta(t);
+                        deps.syncDrumLaneSteps(t, S.activeDrumLane[t]);
+                    }
+                } else {
+                    rereadMelodicClip(S, deps, t, sc);
+                    if (sc === S.trackActiveClip[t]) deps.refreshPerClipBankParams(t);
+                }
+            }
+            deps.forceRedraw();
+        }
+    }
+}
+
+export function runEndOfTickPersistenceTasks(S, deps) {
+    /* Suspend save: fires last so no subsequent set_param can overwrite it.
+     * Quit/Shift+Back use the else-if branches below so the exit/hide call
+     * only runs on a tick AFTER the save set_param has reached DSP — same-tick
+     * exit would tear the module down before the buffer processes the save. */
+    if (S.pendingSuspendSave && typeof deps.host_module_set_param === 'function') {
+        S.pendingSuspendSave = false;
+        deps.updateNameIndex();
+        deps.host_module_set_param('save', '1');
+    } else if (S.pendingExitAfterSave) {
+        S.pendingExitAfterSave = false;
+        deps.removeFlagsWrap();
+        S.ledInitComplete = false;
+        deps.invalidateLEDCache();
+        deps.clearAllLEDs();
+        for (let i = 0; i < 4; i++) deps.setButtonLED(40 + i, deps.LED_OFF);
+        if (typeof deps.host_exit_module === 'function') deps.host_exit_module();
+    } else if (S.pendingHideAfterSave) {
+        S.pendingHideAfterSave = false;
+        deps.removeFlagsWrap();
+        S.ledInitComplete = false;
+        deps.invalidateLEDCache();
+        deps.clearAllLEDs();
+        for (let i = 0; i < 4; i++) deps.setButtonLED(40 + i, deps.LED_OFF);
+        if (typeof deps.host_hide_module === 'function') deps.host_hide_module();
+    } else if (S.pendingSnapshotCopy) {
+        /* One tick after the 'save' above flushed live state to disk
+         * synchronously — copy it into the snapshot + update manifest. */
+        const sc = S.pendingSnapshotCopy;
+        S.pendingSnapshotCopy = null;
+        deps.commitSnapshot(S.currentSetUuid, sc.id, sc.label);
+    }
+}
