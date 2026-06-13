@@ -1,4 +1,4 @@
-import { S } from '/data/UserData/schwung/modules/tools/overture/ui_state.mjs';
+import { S } from './ui_state.mjs';
 
 export const EDIT_SOUND_PREFLIGHT_TICKS = 24;
 

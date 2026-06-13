@@ -1,9 +1,9 @@
-import { S } from '/data/UserData/schwung/modules/tools/overture/ui_state.mjs';
+import { S } from './ui_state.mjs';
 import {
     EDIT_SOUND_PREFLIGHT_TICKS,
     describeEditSoundForTrack,
     schSlotsForTrack
-} from '/data/UserData/schwung/modules/tools/overture/ui_routes.mjs';
+} from './ui_routes.mjs';
 
 function queueEditSoundEntry(t, route, slot) {
     S.pendingEditSoundEntry = {

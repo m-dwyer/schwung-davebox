@@ -100,6 +100,9 @@ for fname in ORDER:
             elif module_path.startswith(LOCAL_PREFIX):
                 # Drop — code is concatenated directly
                 pass
+            elif module_path.startswith('./') and module_path.endswith('.mjs'):
+                # Drop relative Overture-local imports — code is concatenated directly
+                pass
             else:
                 body.append(stmt)
         else:

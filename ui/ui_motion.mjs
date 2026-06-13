@@ -1,7 +1,7 @@
-import { S } from '/data/UserData/schwung/modules/tools/overture/ui_state.mjs';
-import { BANKS, PAD_MODE_DRUM, SCENE_LETTERS } from '/data/UserData/schwung/modules/tools/overture/ui_constants.mjs';
-import { effectiveClip } from '/data/UserData/schwung/modules/tools/overture/ui_leds.mjs';
-import { routeScopeShortLabel } from '/data/UserData/schwung/modules/tools/overture/ui_routes.mjs';
+import { S } from './ui_state.mjs';
+import { BANKS, PAD_MODE_DRUM, SCENE_LETTERS } from './ui_constants.mjs';
+import { effectiveClip } from './ui_leds.mjs';
+import { routeScopeShortLabel } from './ui_routes.mjs';
 
 export const PARAM_PEEK_DETAIL_TICKS = 47;               /* ~500ms at 94Hz */
 

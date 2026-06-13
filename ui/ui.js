@@ -77,32 +77,32 @@ import {
     POLL_INTERVAL, TAP_TEMPO_FLASH_TICKS, TAP_TEMPO_RESET_MS,
     PARAM_LED_BANKS, STATE_VERSION,
     CC_GRADIENT_BASE, CC_GRADIENT_LEVELS, CC_GRADIENT_SCALARS
-} from '/data/UserData/schwung/modules/tools/overture/ui_constants.mjs';
+} from './ui_constants.mjs';
 
-import { S, CC_ASSIGN_DEFAULTS, PERF_FACTORY_PRESETS } from '/data/UserData/schwung/modules/tools/overture/ui_state.mjs';
+import { S, CC_ASSIGN_DEFAULTS, PERF_FACTORY_PRESETS } from './ui_state.mjs';
 import { saveState, writeSidecar, doClearSession, showActionPopup, uuidToStatePath, uuidToUiStatePath, readActiveSet, loadNameIndex, saveNameIndex, copyStateFiles, findInheritCandidates,
-    SNAPSHOT_CAP, snapshotLabel, loadSnapshotManifest, commitSnapshot, applySnapshotToLive, dropSnapshots } from '/data/UserData/schwung/modules/tools/overture/ui_persistence.mjs';
-import { drawGlobalMenu } from '/data/UserData/schwung/modules/tools/overture/ui_dialogs.mjs';
-import { trackClipHasContent, sceneAllQueued, updateSceneMapLEDs } from '/data/UserData/schwung/modules/tools/overture/ui_scene.mjs';
-import { effectiveClip, updateStepLEDs, updateSessionLEDs, updateTrackLEDs, flashAtRate, drawPositionBar, invalidateLEDCache, paintCoRunSideButtons } from '/data/UserData/schwung/modules/tools/overture/ui_leds.mjs';
-import { SPLASH_FRAMES, SPLASH_COUNT, SPLASH_W, SPLASH_H, pickSplashIdx } from '/data/UserData/schwung/modules/tools/overture/ui_splash.mjs';
-import { requestExport, confirmExportStart, pollPendingExport } from '/data/UserData/schwung/modules/tools/overture/ui_export.mjs';
+    SNAPSHOT_CAP, snapshotLabel, loadSnapshotManifest, commitSnapshot, applySnapshotToLive, dropSnapshots } from './ui_persistence.mjs';
+import { drawGlobalMenu } from './ui_dialogs.mjs';
+import { trackClipHasContent, sceneAllQueued, updateSceneMapLEDs } from './ui_scene.mjs';
+import { effectiveClip, updateStepLEDs, updateSessionLEDs, updateTrackLEDs, flashAtRate, drawPositionBar, invalidateLEDCache, paintCoRunSideButtons } from './ui_leds.mjs';
+import { SPLASH_FRAMES, SPLASH_COUNT, SPLASH_W, SPLASH_H, pickSplashIdx } from './ui_splash.mjs';
+import { requestExport, confirmExportStart, pollPendingExport } from './ui_export.mjs';
 import {
     canEditSoundRoute,
     schSlotForTrack,
     routeCheckExpectedLabel,
     routeCheckNeedsWarning
-} from '/data/UserData/schwung/modules/tools/overture/ui_routes.mjs';
+} from './ui_routes.mjs';
 import {
     advancePendingEditSoundEntry,
     refreshSchwungCoRunSlotMask,
     requestEditSoundForTrack
-} from '/data/UserData/schwung/modules/tools/overture/ui_sound_edit.mjs';
+} from './ui_sound_edit.mjs';
 import {
     PARAM_PEEK_DETAIL_TICKS,
     autoLaneLabel,
     paramPeekInfo
-} from '/data/UserData/schwung/modules/tools/overture/ui_motion.mjs';
+} from './ui_motion.mjs';
 
 /* ------------------------------------------------------------------ */
 /* Parameter bank definitions                                           */
