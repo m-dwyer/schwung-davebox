@@ -87,6 +87,20 @@ import { trackClipHasContent, sceneAllQueued, updateSceneMapLEDs } from '/data/U
 import { effectiveClip, updateStepLEDs, updateSessionLEDs, updateTrackLEDs, flashAtRate, drawPositionBar, invalidateLEDCache, paintCoRunSideButtons } from '/data/UserData/schwung/modules/tools/overture/ui_leds.mjs';
 import { SPLASH_FRAMES, SPLASH_COUNT, SPLASH_W, SPLASH_H, pickSplashIdx } from '/data/UserData/schwung/modules/tools/overture/ui_splash.mjs';
 import { requestExport, confirmExportStart, pollPendingExport } from '/data/UserData/schwung/modules/tools/overture/ui_export.mjs';
+import {
+    EDIT_SOUND_PREFLIGHT_TICKS,
+    canEditSoundRoute,
+    describeEditSoundForTrack,
+    schSlotsForTrack,
+    schSlotForTrack,
+    routeCheckExpectedLabel,
+    routeCheckNeedsWarning
+} from '/data/UserData/schwung/modules/tools/overture/ui_routes.mjs';
+import {
+    PARAM_PEEK_DETAIL_TICKS,
+    autoLaneLabel,
+    paramPeekInfo
+} from '/data/UserData/schwung/modules/tools/overture/ui_motion.mjs';
 
 /* ------------------------------------------------------------------ */
 /* Parameter bank definitions                                           */
@@ -324,7 +338,7 @@ function buildGlobalMenuItems() {
         /* One user-facing sound-edit command. Route-specific dispatch stays in
          * editSoundForTrack() so Move-native and Schwung chain-edit co-run keep
          * their separate internals while the menu exposes one gesture. */
-        ...((S.trackRoute[S.activeTrack] === 0 || S.trackRoute[S.activeTrack] === 1) ? [
+        ...(canEditSoundRoute(S.trackRoute[S.activeTrack]) ? [
             createAction('Edit Sound...', function() {
                 editSoundForTrack(S.activeTrack);
             })
@@ -603,7 +617,6 @@ const BANK_DISPLAY_TICKS = 94;  /* ~1000ms at 94Hz device tick rate (was 392 = ~
 const STRETCH_BLOCKED_TICKS = 294;  /* ~1500ms at 196Hz */
 const NO_NOTE_FLASH_TICKS = 118;     /* ~600ms at 196Hz */
 const KNOB_TURN_HIGHLIGHT_TICKS = 120;            /* ~600ms at 196Hz — highlight after turn without touch */
-const PARAM_PEEK_DETAIL_TICKS = 47;               /* ~500ms at 94Hz */
 
 /* S.bankParams[track][bankIdx][knobIdx] = integer value (JS-authoritative).
  * Initialized from BANKS defaults; refreshed from DSP on bank select. */
@@ -642,48 +655,6 @@ function setPaletteEntryRGB(idx, r, g, b) {
 
 function reapplyPalette() { move_midi_internal_send(_CC_REAPPLY_PKT); }
 
-/* Resolve the Schwung chain slot index for a Overture track's MIDI channel.
- * shadow_get_slots() returns {channel, name} per slot where channel is 1-16
- * (matching trackChannel) or 0 for "All". Returns -1 if no match. */
-/* First (lowest-index) Schwung slot that receives a track's MIDI channel, or -1.
- * Thin wrapper over schSlotsForTrack so the match logic lives in one place. */
-function schSlotForTrack(t) {
-    const m = schSlotsForTrack(t);
-    if (m === 0) return -1;
-    let i = 0;
-    while (!(m & (1 << i))) i++;
-    return i;
-}
-
-/* Bitmask (bits 0-3) of ALL Schwung slots that receive a track's MIDI channel —
- * i.e. every slot whose receive channel matches trackChannel[t] or is "All" (0).
- * Multiple slots on the same channel are layered (all play the track), so all of
- * them get a bit. 0 = no slot receives this track. Lowest set bit = the slot the
- * co-run editor opens to; the whole mask is blinked on the side buttons. */
-function schSlotsForTrack(t) {
-    if (typeof shadow_get_slots !== 'function') return 0;
-    const ch = S.trackChannel[t];
-    const slots = shadow_get_slots();
-    if (!slots) return 0;
-    let mask = 0;
-    for (let i = 0; i < slots.length && i < 4; i++) {
-        if (slots[i].channel === ch || slots[i].channel === 0) mask |= (1 << i);
-    }
-    return mask;
-}
-
-const EDIT_SOUND_PREFLIGHT_TICKS = 24;
-
-function editSoundSlotLabel(slot) {
-    return 'Slot' + ((slot | 0) + 1);
-}
-
-function editSoundPreflightLine(t, route, slot) {
-    const ch = S.trackChannel[t] | 0;
-    if (route === 1) return 'T' + (t + 1) + ' Move Ch' + ch;
-    return 'T' + (t + 1) + ' Schwung ' + editSoundSlotLabel(slot);
-}
-
 function queueEditSoundEntry(t, route, slot) {
     S.pendingEditSoundEntry = {
         track: t | 0,
@@ -699,194 +670,21 @@ function clearPendingEditSoundEntry() {
 }
 
 function editSoundForTrack(t) {
-    const route = S.trackRoute[t] | 0;
     clearPendingEditSoundEntry();
     S.globalMenuOpen = false;
     S.lastSentMenuEditValue = null;
-
-    if (typeof shadow_corun_begin !== 'function') {
-        showActionPopup('CO-RUN', 'UNAVAILABLE');
-        return;
-    }
-
-    if (route === 1) {
-        if (typeof move_midi_inject_to_move !== 'function') {
-            showActionPopup('CO-RUN', 'UNAVAILABLE');
-            return;
-        }
-        const ch = S.trackChannel[t] | 0;
-        if (ch < 1 || ch > 4) {
-            showActionPopup('MOVE CH>4', 'Ch' + ch);
-            queueEditSoundEntry(t, route, -1);
-            return;
-        }
-        showActionPopup('EDIT SOUND', editSoundPreflightLine(t, route, -1));
-        queueEditSoundEntry(t, route, -1);
-        return;
-    }
-
-    if (route === 0) {
-        const mask = schSlotsForTrack(t);
-        if (mask === 0) {
-            showActionPopup('NO SLOT', 'Ch' + (S.trackChannel[t] | 0));
-            queueEditSoundEntry(t, route, 0);
-            return;
-        }
-        let slot = 0;
-        while (slot < 4 && !(mask & (1 << slot))) slot++;
-        S._coRunChanSlots = mask;
-        showActionPopup('EDIT SOUND', editSoundPreflightLine(t, route, slot));
-        queueEditSoundEntry(t, route, slot);
-        return;
-    }
-
-    showActionPopup('CO-RUN', 'UNAVAILABLE');
-}
-
-/* Format CC number as a 4-char display label: CC7→"CC7 ", CC74→"CC74", C100→"C100" */
-function fmtCCLabel(cc) {
-    const n = (cc | 0);
-    return n >= 100 ? 'C' + n : 'CC' + n;
+    const desc = describeEditSoundForTrack(t, {
+        hasCoRun: typeof shadow_corun_begin === 'function',
+        hasMoveInject: typeof move_midi_inject_to_move === 'function'
+    });
+    if (desc.slotMask) S._coRunChanSlots = desc.slotMask;
+    showActionPopup(desc.title, desc.body);
+    if (desc.queue) queueEditSoundEntry(desc.queue.track, desc.queue.route, desc.queue.slot);
 }
 
 function truncText(s, maxLen) {
     s = String(s || '');
     return s.length > maxLen ? s.substring(0, Math.max(0, maxLen - 1)) + '.' : s;
-}
-
-function routeScopeLabel(t) {
-    const route = S.trackRoute[t] | 0;
-    const ch = S.trackChannel[t] | 0;
-    if (route === 1) return 'T' + (t + 1) + ' Move Ch' + ch;
-    if (route === 2) return 'T' + (t + 1) + ' External Ch' + ch;
-    const slot = schSlotForTrack(t);
-    return 'T' + (t + 1) + ' Schwung ' + (slot >= 0 ? editSoundSlotLabel(slot) : 'Ch' + ch);
-}
-
-function routeScopeShortLabel(t) {
-    const route = S.trackRoute[t] | 0;
-    const ch = S.trackChannel[t] | 0;
-    if (route === 1) return 'Move Ch' + ch;
-    if (route === 2) return 'Ext Ch' + ch;
-    const slot = schSlotForTrack(t);
-    return 'Schw ' + (slot >= 0 ? 'S' + (slot + 1) : 'Ch' + ch);
-}
-
-function ccCommonName(cc) {
-    switch (cc | 0) {
-    case 1:  return 'Mod Wheel';
-    case 7:  return 'Volume';
-    case 10: return 'Pan';
-    case 11: return 'Expression';
-    case 64: return 'Sustain';
-    case 74: return 'Filter';
-    case 91: return 'Reverb';
-    case 93: return 'Chorus';
-    default: return '';
-    }
-}
-
-function tpsDisplay(tps) {
-    if (tps === 12) return '1/32';
-    if (tps === 24) return '1/16';
-    if (tps === 48) return '1/8';
-    if (tps === 96) return '1/4';
-    if (tps === 192) return '1/2';
-    if (tps === 384) return '1bar';
-    return String(tps);
-}
-
-function autoLaneLabel(t, k, includeLane) {
-    const prefix = includeLane ? ('L' + (k + 1) + ' ') : '';
-    const typ = S.trackCCType[t][k] | 0;
-    const assign = S.trackCCAssign[t][k] | 0;
-    if (typ === 1) return prefix + 'AT';
-    if (typ === 2) return prefix + 'Sch' + assign;
-    if (assign < 0) return prefix + '--';
-    return prefix + fmtCCLabel(assign);
-}
-
-function autoLaneTargetLabel(t, k) {
-    const typ = S.trackCCType[t][k] | 0;
-    const assign = S.trackCCAssign[t][k] | 0;
-    if (typ === 1) return 'Aftertouch';
-    if (typ === 2) {
-        const name = S.schLabel[t][k];
-        return name ? ('Sch K' + assign + ' ' + name) : ('Schwung knob ' + assign);
-    }
-    if (assign < 0) return 'No target assigned';
-    if ((S.trackRoute[t] | 0) === 1) return 'Move target';
-    const name = ccCommonName(assign);
-    return name ? (fmtCCLabel(assign) + ' ' + name) : fmtCCLabel(assign);
-}
-
-function autoLaneValueLabel(t, ac, k) {
-    const rawV = S.playing ? S.trackCCLiveVal[t][k] : S.clipCCVal[t][ac][k];
-    return (rawV >= 0 && rawV <= 127) ? ('Value ' + rawV) : 'No value set';
-}
-
-function paramPeekInfo() {
-    const t = S.activeTrack;
-    const bank = S.activeBank;
-    const k = S.knobTouched;
-    const ac = effectiveClip(t);
-    const clipLabel = SCENE_LETTERS[ac] || String(ac + 1);
-    if (bank === 6 && S.trackPadMode[t] === PAD_MODE_DRUM) {
-        return {
-            header: 'AUTO T' + (t + 1) + ' Drum',
-            target: 'Melodic AUTO only',
-            value: 'Use DRUM/NOTE banks',
-            detail: 'Drum track',
-            route: 'Route: ' + routeScopeShortLabel(t)
-        };
-    }
-    if (bank === 6 && S.trackPadMode[t] !== PAD_MODE_DRUM) {
-        const heldTicks = S.knobTouchStartTick >= 0 ? (S.tickCount - S.knobTouchStartTick) : 0;
-        if (heldTicks >= PARAM_PEEK_DETAIL_TICKS) {
-            const clipTps = S.clipTPS[t][ac] || 24;
-            const loopLen = S.ccLaneLength[t][ac][k] || S.clipLength[t][ac];
-            const zoomTps = S.ccLaneTps[t][ac][k] || clipTps;
-            const resTps = S.ccLaneResTps[t][ac][k] || zoomTps;
-            return {
-                header: autoLaneTargetLabel(t, k),
-                target: 'Lane ' + (k + 1) + ' / Clip ' + clipLabel,
-                value: 'Route: ' + routeScopeShortLabel(t),
-                detail: 'Loop ' + loopLen + ' steps',
-                route: 'Res ' + tpsDisplay(resTps) + ' Zoom ' + tpsDisplay(zoomTps)
-            };
-        }
-        return {
-            header: 'AUTO T' + (t + 1) + ' Clip ' + clipLabel,
-            target: autoLaneTargetLabel(t, k),
-            value: autoLaneValueLabel(t, ac, k),
-            detail: 'Clip ' + clipLabel + ', Lane ' + (k + 1),
-            route: 'Route: ' + routeScopeShortLabel(t)
-        };
-    }
-    const pm = (BANKS[bank] && BANKS[bank].knobs) ? BANKS[bank].knobs[k] : null;
-    const bankName = BANKS[bank] ? BANKS[bank].name : 'BANK';
-    if (!pm || !pm.full) {
-        return {
-            header: bankName + ' T' + (t + 1),
-            target: 'No target assigned',
-            value: 'Value --',
-            detail: 'Knob ' + (k + 1),
-            route: 'Route: ' + routeScopeShortLabel(t)
-        };
-    }
-    const val = S.bankParams[t][bank][k];
-    const scope = pm.scope === 'clip' ? ('Clip ' + clipLabel)
-               : pm.scope === 'track' ? ('Track T' + (t + 1))
-               : pm.scope === 'action' ? 'Action'
-               : pm.scope === 'seqfollow' ? ('Clip ' + clipLabel)
-               : pm.scope;
-    return {
-        header: bankName + ' T' + (t + 1),
-        target: pm.full,
-        value: 'Value ' + (pm.fmt ? pm.fmt(val) : String(val)),
-        detail: scope,
-        route: 'Route: ' + routeScopeShortLabel(t)
-    };
 }
 
 function drawParamPeek() {
@@ -1769,15 +1567,8 @@ function ensureGlobalMenuFresh() {
     S.globalMenuBuiltForTrack = S.activeTrack;
 }
 
-function routeCheckExpectedLabel(t) {
-    return t < 4 ? ('T' + (t + 1) + ' Move Ch' + (t + 1))
-                 : ('T' + (t + 1) + ' Schwung Ch' + (t + 1));
-}
-
 function routeCheckWarnForTrack(t) {
-    const expectedRoute = t < 4 ? 1 : 0;
-    const expectedCh = t + 1;
-    if (S.trackRoute[t] !== expectedRoute || S.trackChannel[t] !== expectedCh)
+    if (routeCheckNeedsWarning(t))
         showActionPopup('ROUTE CHECK', routeCheckExpectedLabel(t));
 }
 
