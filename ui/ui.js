@@ -101,6 +101,8 @@ import {
 import {
     PARAM_PEEK_DETAIL_TICKS,
     autoLaneLabel,
+    motionIdleModel,
+    motionOverviewModel,
     paramPeekInfo
 } from './ui_motion.mjs';
 
@@ -4230,60 +4232,39 @@ function drawUI() {
             !S.loopHeld && S.knobTouched < 0 && !inTimeout) {
         var _gt = S.activeTrack;
         var _gac = effectiveClip(_gt);
-        var _gLane = S.ccActiveLane[_gt];
-        var _gLbl = autoLaneLabel(_gt, _gLane, true);
-        var _gParam = S.trackCCType[_gt][_gLane] === 2
-                    ? (S.schLabel[_gt][_gLane] || '') : '';
-        var _gEffLen = S.ccLaneLength[_gt][_gac][_gLane] || S.clipLength[_gt][_gac];
-        var _gDispTps = S.ccLaneTps[_gt][_gac][_gLane] || (S.clipTPS[_gt][_gac] || 24);
-        var _gLTps = S.ccLaneResTps[_gt][_gac][_gLane] || _gDispTps;
-        var _gResN = _gLTps === 12 ? '1/32' : _gLTps === 48 ? '1/8'
-                   : _gLTps === 96 ? '1/4' : _gLTps === 384 ? '1bar' : '1/16';
-        drawBankHeadingInverted(BANKS[6].name);
-        {
-            var _ccHas = (S.trackCCAutoBits[_gt][_gac] !== 0) ||
-                         S.clipCCVal[_gt][_gac].some(function(v) { return v >= 0; });
-            var _atHas = !!S.clipAtHas[_gt][_gac];
-            var _schHas = S.trackCCType[_gt].some(function(tp, k) {
-                return tp === 2 && (((S.trackCCAutoBits[_gt][_gac] >> k) & 1) || S.clipCCVal[_gt][_gac][k] >= 0);
-            });
-            var _bx = 60;
-            var _badge = function(txt) {
-                var w = txt.length * 6 + 3;
-                fill_rect(_bx, 1, w, 7, 1);
-                print(_bx + 1, 1, txt, 0);
-                _bx += w + 2;
-            };
-            if (_schHas) _badge('Sch');
-            if (_atHas) _badge('AT');
-            if (_ccHas) _badge('CC');
+        var _gm = motionIdleModel(_gt, _gac);
+        var _gLane = _gm.lane;
+        var _gEffLen = _gm.effectiveLength;
+        drawBankHeadingInverted(_gm.heading);
+        var _bx = 60;
+        for (var _gb = 0; _gb < _gm.badges.length; _gb++) {
+            var _bt = _gm.badges[_gb];
+            var _bw = _bt.length * 6 + 3;
+            fill_rect(_bx, 1, _bw, 7, 1);
+            print(_bx + 1, 1, _bt, 0);
+            _bx += _bw + 2;
         }
         /* Lane info rows */
-        var _gVal = S.playing ? S.trackCCLiveVal[_gt][_gLane] : S.clipCCVal[_gt][_gac][_gLane];
-        var _gValStr = (_gVal >= 0 && _gVal <= 127) ? String(_gVal) : '--';
-        var _gLine1L = 'K' + (_gLane + 1) + ' ' + _gLbl + ':';
+        var _gValStr = _gm.value;
+        var _gLine1L = 'K' + (_gLane + 1) + ' ' + _gm.laneLabel + ':';
         print(4, 10, _gLine1L, 1);
         var _gValX = 4 + _gLine1L.length * 6;
         print(_gValX, 10, _gValStr, 1);
         fill_rect(_gValX, 19, _gValStr.length * 6, 1, 1);
-        if (_gParam) {
-            var _gPTrunc = _gParam.length > 12 ? _gParam.substring(0, 12) : _gParam;
-            print(128 - _gPTrunc.length * 6 - 1, 10, _gPTrunc, 1);
+        if (_gm.paramText) {
+            print(128 - _gm.paramText.length * 6 - 1, 10, _gm.paramText, 1);
         }
-        var _gZoomTps = S.ccLaneTps[_gt][_gac][_gLane] || (S.clipTPS[_gt][_gac] || 24);
-        var _gZoomN = _gZoomTps === 12 ? '1/32' : _gZoomTps === 48 ? '1/8'
-                    : _gZoomTps === 96 ? '1/4' : _gZoomTps === 384 ? '1bar' : '1/16';
-        var _gResStr = 'Res: ' + _gResN;
-        var _gZoomStr = 'Zoom: ' + _gZoomN;
+        var _gResStr = _gm.resText;
+        var _gZoomStr = _gm.zoomText;
         print(4, 21, _gResStr, 1);
         print(128 - _gZoomStr.length * 6 - 4, 21, _gZoomStr, 1);
         /* Automation graph: 128px wide, just above progress bar */
         var _gBarY = 60, _gBarH = 3;
         var _gH = 24, _gY = _gBarY - _gH - 3;
-        var _gPages = Math.ceil(_gEffLen / 16);
+        var _gPages = _gm.graphPages;
         var _gCTps = S.clipTPS[_gt][_gac] || 24;
         var _gTotalSteps = _gEffLen;
-        var _gKey = 'g_' + _gt + '_' + _gac + '_' + _gLane;
+        var _gKey = _gm.graphKey;
         if (_gKey !== S.ccGraphOvKey || (S.tickCount % POLL_INTERVAL) === 0) {
             S.ccGraphOvData = [];
             for (var _gp = 0; _gp < _gPages; _gp++) {
@@ -4532,54 +4513,39 @@ function drawUI() {
          * playhead or "—". Active lane cell is always highlighted. */
         const t  = S.activeTrack;
         const ac = effectiveClip(t);
-        drawBankHeadingInverted(S.altMode ? 'ASSIGN' : BANKS[6].name);
+        const motionModel = motionOverviewModel(t, ac);
+        drawBankHeadingInverted(motionModel.heading);
         /* Automation-type indicators: inverted badge (white bg, black text) per
          * type that has data in the focused clip; nothing if the type is empty. */
-        {
-            const ccHas = (S.trackCCAutoBits[t][ac] !== 0) ||
-                          S.clipCCVal[t][ac].some(function(v) { return v >= 0; });
-            const atHas = !!S.clipAtHas[t][ac];
-            const schHas = S.trackCCType[t].some(function(tp, k) {
-                return tp === 2 && (((S.trackCCAutoBits[t][ac] >> k) & 1) || S.clipCCVal[t][ac][k] >= 0);
-            });
-            let bx = 60;
-            const _badge = function(txt) {
-                const w = txt.length * 6 + 3;
-                fill_rect(bx, 1, w, 7, 1);
-                print(bx + 1, 1, txt, 0);
-                bx += w + 2;
-            };
-            if (schHas) _badge('Sch');
-            if (atHas) _badge('AT');
-            if (ccHas) _badge('CC');
+        let bx = 60;
+        for (let bi = 0; bi < motionModel.badges.length; bi++) {
+            const txt = motionModel.badges[bi];
+            const w = txt.length * 6 + 3;
+            fill_rect(bx, 1, w, 7, 1);
+            print(bx + 1, 1, txt, 0);
+            bx += w + 2;
         }
         for (let k = 0; k < 8; k++) {
             const colX = 4 + (k % 4) * 30;
             const rowY = k < 4 ? 12 : 36;
+            const lane = motionModel.lanes[k];
             /* In ASSIGN (altMode): highlight ONLY the label half of every cell so it
              * is visually clear that turning the knob retargets the CC/AT, not the
              * value. In normal mode, the touched/active lane gets the full-cell
              * inversion as before. */
-            const touchedHi = (S.knobTouched === k) || (S.ccActiveLane[t] === k);
-            const lbl = autoLaneLabel(t, k, false);
-            const rawV = S.playing ? S.trackCCLiveVal[t][k] : S.clipCCVal[t][ac][k];
-            const val  = (rawV >= 0 && rawV <= 127) ? String(rawV) : '--';
             if (S.altMode) {
                 fill_rect(colX, rowY, 24, 12, 1);                /* label row only */
-                if (touchedHi) fill_rect(colX, rowY + 12, 24, 12, 1);  /* value row only if touched */
-                print(colX, rowY,      col4(lbl), 0);
-                print(colX, rowY + 12, col4(val), touchedHi ? 0 : 1);
+                if (lane.valueInverted) fill_rect(colX, rowY + 12, 24, 12, 1);  /* value row only if touched */
+                print(colX, rowY,      col4(lane.label), 0);
+                print(colX, rowY + 12, col4(lane.value), lane.valueInverted ? 0 : 1);
             } else {
-                if (touchedHi) fill_rect(colX, rowY, 24, 24, 1);
-                print(colX, rowY,      col4(lbl), touchedHi ? 0 : 1);
-                print(colX, rowY + 12, col4(val), touchedHi ? 0 : 1);
+                if (lane.touched) fill_rect(colX, rowY, 24, 24, 1);
+                print(colX, rowY,      col4(lane.label), lane.touched ? 0 : 1);
+                print(colX, rowY + 12, col4(lane.value), lane.touched ? 0 : 1);
             }
         }
         /* Bottom line: show full param name when a Sch knob is touched. */
-        if (S.knobTouched >= 0 && S.trackCCType[t][S.knobTouched] === 2) {
-            const _pn = S.schLabel[t][S.knobTouched];
-            if (_pn) print(0, 56, _pn, 1);
-        }
+        if (motionModel.footer) print(0, 56, motionModel.footer, 1);
         } else if (S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM && bank === 1) {
         /* Melodic NOTE FX: K1=Oct, K2=Ofs, K3=Vel, K4=Qnt, K5=Len, K6=>Gate
          * (widened cell for 5-char label), K7=blocked, K8=Rnd. */

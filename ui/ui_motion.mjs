@@ -64,6 +64,74 @@ export function autoLaneValueLabel(t, ac, k) {
     return (rawV >= 0 && rawV <= 127) ? ('Value ' + rawV) : 'No value set';
 }
 
+export function motionBadges(t, ac) {
+    const ccHas = (S.trackCCAutoBits[t][ac] !== 0) ||
+                  S.clipCCVal[t][ac].some(function(v) { return v >= 0; });
+    const atHas = !!S.clipAtHas[t][ac];
+    const schHas = S.trackCCType[t].some(function(tp, k) {
+        return tp === 2 && (((S.trackCCAutoBits[t][ac] >> k) & 1) || S.clipCCVal[t][ac][k] >= 0);
+    });
+    const badges = [];
+    if (schHas) badges.push('Sch');
+    if (atHas) badges.push('AT');
+    if (ccHas) badges.push('CC');
+    return badges;
+}
+
+export function motionLaneValue(t, ac, k) {
+    const rawV = S.playing ? S.trackCCLiveVal[t][k] : S.clipCCVal[t][ac][k];
+    return (rawV >= 0 && rawV <= 127) ? String(rawV) : '--';
+}
+
+export function motionOverviewModel(t, ac) {
+    const lanes = [];
+    for (let k = 0; k < 8; k++) {
+        const touched = (S.knobTouched === k) || (S.ccActiveLane[t] === k);
+        lanes.push({
+            lane: k,
+            label: autoLaneLabel(t, k, false),
+            value: motionLaneValue(t, ac, k),
+            touched: touched,
+            labelInverted: S.altMode ? true : touched,
+            valueInverted: touched
+        });
+    }
+    let footer = '';
+    if (S.knobTouched >= 0 && S.trackCCType[t][S.knobTouched] === 2) {
+        footer = S.schLabel[t][S.knobTouched] || '';
+    }
+    return {
+        heading: S.altMode ? 'ASSIGN' : BANKS[6].name,
+        badges: motionBadges(t, ac),
+        lanes: lanes,
+        footer: footer
+    };
+}
+
+export function motionIdleModel(t, ac) {
+    const lane = S.ccActiveLane[t];
+    const effLen = S.ccLaneLength[t][ac][lane] || S.clipLength[t][ac];
+    const dispTps = S.ccLaneTps[t][ac][lane] || (S.clipTPS[t][ac] || 24);
+    const resTps = S.ccLaneResTps[t][ac][lane] || dispTps;
+    const param = S.trackCCType[t][lane] === 2 ? (S.schLabel[t][lane] || '') : '';
+    const paramText = param.length > 12 ? param.substring(0, 12) : param;
+    return {
+        heading: BANKS[6].name,
+        badges: motionBadges(t, ac),
+        lane: lane,
+        laneLabel: autoLaneLabel(t, lane, true),
+        value: motionLaneValue(t, ac, lane),
+        valueUnderline: true,
+        param: param,
+        paramText: paramText,
+        resText: 'Res: ' + tpsDisplay(resTps),
+        zoomText: 'Zoom: ' + tpsDisplay(dispTps),
+        effectiveLength: effLen,
+        graphKey: 'g_' + t + '_' + ac + '_' + lane,
+        graphPages: Math.ceil(effLen / 16)
+    };
+}
+
 export function paramPeekInfo() {
     const t = S.activeTrack;
     const bank = S.activeBank;
