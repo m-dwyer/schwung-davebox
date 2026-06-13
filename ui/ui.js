@@ -106,6 +106,7 @@ import {
     paramPeekInfo
 } from './ui_motion.mjs';
 import {
+    runDefaultSetParamDrain,
     runDeferredContentResyncTasks,
     runEndOfTickPersistenceTasks,
     runMoveCoRunTickTasks
@@ -5880,15 +5881,9 @@ function _tickImpl() {
         host_module_set_param('state_load', S.currentSetUuid || '');
     }
 
-    /* Drain first-run default set_params one per tick, after state is fully settled.
-     * clearDrainHold defers the drain past the on_midi-context buffer where
-     * a clearClip caller fired synchronous set_params (see clearClip comment). */
-    if (S.clearDrainHold > 0) S.clearDrainHold--;
-    else if (S.pendingDefaultSetParams.length > 0 && !S.pendingSetLoad && S.pendingDspSync === 0
-            && typeof host_module_set_param === 'function') {
-        const _dp = S.pendingDefaultSetParams.shift();
-        host_module_set_param(_dp.key, _dp.val);
-    }
+    runDefaultSetParamDrain(S, {
+        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null
+    });
 
     /* Poll every 100 ticks (~0.5s): detect DSP hot-reload via instance nonce. */
     if ((S.tickCount % 100) === 0 && typeof host_module_get_param === 'function' &&

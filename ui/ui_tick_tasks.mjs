@@ -14,6 +14,19 @@ function rereadMelodicClip(S, deps, track, clip) {
     }
 }
 
+export function runDefaultSetParamDrain(S, deps) {
+    /* Drain first-run default set_params one per tick, after state is fully settled.
+     * clearDrainHold defers the drain past the on_midi-context buffer where
+     * a clearClip caller fired synchronous set_params (see clearClip comment). */
+    if (S.clearDrainHold > 0) {
+        S.clearDrainHold--;
+    } else if (S.pendingDefaultSetParams.length > 0 && !S.pendingSetLoad && S.pendingDspSync === 0
+            && typeof deps.host_module_set_param === 'function') {
+        const dp = S.pendingDefaultSetParams.shift();
+        deps.host_module_set_param(dp.key, dp.val);
+    }
+}
+
 export function runMoveCoRunTickTasks(S, deps) {
     /* Deferred Move co-run entry inject — see enterMoveNativeCoRun(). Fire the
      * track-button press now that the shim's co-run path is active, so Move's
