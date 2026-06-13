@@ -5,6 +5,7 @@ import {
 } from '/data/UserData/schwung/shared/menu_layout.mjs';
 import { formatItemValue } from '/data/UserData/schwung/shared/menu_items.mjs';
 import { SNAPSHOT_CAP } from './ui_persistence.mjs';
+import { routeCheckSlots, routeCheckViewModel } from './ui_route_check.mjs';
 
 function pixelPrintMcu(x, y, text, scale, color) {
     const charW = 5 * scale + scale;
@@ -178,72 +179,19 @@ function drawExportDoneDialog() {
     print(okX + 10, btnY + 2, 'OK', 0);
 }
 
-function routeCheckSlots() {
-    if (typeof shadow_get_slots !== 'function') return null;
-    const slots = shadow_get_slots();
-    return Array.isArray(slots) ? slots : null;
-}
-
-function slotIsThru(slot) {
-    if (!slot) return false;
-    if (slot.thru === true || slot.is_thru === true) return true;
-    if (slot.forward_channel === -2 || slot.channel === -2) return true;
-    const type = String(slot.type || slot.mode || slot.name || '').toLowerCase();
-    return type.indexOf('thru') >= 0;
-}
-
-function routeCheckSchwungStatus(ch, slots) {
-    if (!slots) return 'CHECK';
-    let first = -1;
-    let thru = false;
-    for (let i = 0; i < slots.length && i < 4; i++) {
-        const slot = slots[i] || {};
-        if (slotIsThru(slot)) {
-            if (slot.channel === ch || slot.channel === 0 ||
-                    slot.channel === -2 || slot.forward_channel === -2) thru = true;
-            continue;
-        }
-        if (slot.channel === ch || slot.channel === 0) {
-            first = i;
-            break;
-        }
-    }
-    if (first >= 0) return 'OK S' + (first + 1);
-    return thru ? 'THRU!' : 'NO SLOT';
-}
-
-function routeCheckStatus(t, slots) {
-    const expectedRoute = t < 4 ? 1 : 0;
-    const expectedCh = t + 1;
-    const actualRoute = S.trackRoute[t] | 0;
-    const actualCh = S.trackChannel[t] | 0;
-    if (actualRoute !== expectedRoute) return 'ROUTE!';
-    if (expectedRoute === 1) {
-        if (actualCh !== expectedCh) return 'CH' + actualCh + '!';
-        return 'MANUAL';
-    }
-    return routeCheckSchwungStatus(actualCh, slots);
-}
-
 function drawRouteCheck() {
     clear_screen();
-    const selected = Math.max(0, Math.min(7, S.routeCheckSelected | 0));
-    const start = selected < 4 ? 0 : 4;
-    drawMenuHeader('ROUTE CHECK', (start + 1) + '-' + (start + 4) + '/8');
-    const slots = routeCheckSlots();
-    for (let row = 0; row < 4; row++) {
-        const t = start + row;
+    const model = routeCheckViewModel(S.routeCheckSelected, routeCheckSlots());
+    drawMenuHeader(model.title, model.range);
+    for (let row = 0; row < model.rows.length; row++) {
+        const routeRow = model.rows[row];
         const y = 15 + row * 11;
-        const n = t + 1;
-        const move = t < 4;
-        const route = move ? ('Move Ch' + n) : ('Schw Ch' + (S.trackChannel[t] | 0));
-        const status = routeCheckStatus(t, slots);
-        const active = t === selected;
+        const active = routeRow.active;
         if (active) fill_rect(0, y - 1, 128, 10, 1);
-        print(2, y, 'T' + n + ' ' + route, active ? 0 : 1);
-        print(86, y, status, active ? 0 : 1);
+        print(2, y, routeRow.text, active ? 0 : 1);
+        print(86, y, routeRow.status, active ? 0 : 1);
     }
-    print(2, 59, 'Jog scroll  Back/Menu', 1);
+    print(2, 59, model.footer, 1);
 }
 
 export function drawGlobalMenu() {

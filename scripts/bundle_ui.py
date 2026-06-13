@@ -18,6 +18,7 @@ ORDER = [
     'ui/ui_state.mjs',
     'ui/ui_scene.mjs',
     'ui/ui_persistence.mjs',
+    'ui/ui_route_check.mjs',
     'ui/ui_dialogs.mjs',
     'ui/ui_leds.mjs',
     'ui/ui_routes.mjs',
