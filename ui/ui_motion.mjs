@@ -1,5 +1,5 @@
 import { S } from './ui_state.mjs';
-import { BANKS, PAD_MODE_DRUM, SCENE_LETTERS } from './ui_constants.mjs';
+import { BANKS, PAD_MODE_DRUM, SCENE_LETTERS, fmtLen, fmtPct, fmtSign } from './ui_constants.mjs';
 import { effectiveClip } from './ui_leds.mjs';
 import { routeScopeShortLabel } from './ui_routes.mjs';
 
@@ -169,6 +169,27 @@ export function paramPeekInfo() {
             detail: 'Clip ' + clipLabel + ', Lane ' + (k + 1),
             route: 'Route: ' + routeScopeShortLabel(t)
         };
+    }
+    if (bank === 1 && S.trackPadMode[t] === PAD_MODE_DRUM) {
+        const lane = S.activeDrumLane[t] | 0;
+        const drumNoteTargets = [
+            { target: 'Lane Octave', value: 'Note ' + (S.drumLaneNote[t][lane] | 0), detail: 'Lane ' + (lane + 1) + ', octave jumps' },
+            { target: 'Lane Note', value: 'Note ' + (S.drumLaneNote[t][lane] | 0), detail: 'Lane ' + (lane + 1) + ', semitone' },
+            { target: 'Velocity Offset', value: fmtSign(S.bankParams[t][1][1] | 0), detail: 'Lane ' + (lane + 1) },
+            { target: 'Quantize', value: fmtPct(S.drumLaneQnt[t] | 0), detail: 'Lane ' + (lane + 1) },
+            { target: 'Note Length', value: fmtLen(S.drumLaneLenMode[t][lane] | 0), detail: 'Lane ' + (lane + 1) },
+            { target: 'Gate Time', value: fmtPct(S.bankParams[t][1][0] | 0), detail: 'Lane ' + (lane + 1) },
+        ];
+        const info = drumNoteTargets[k];
+        if (info) {
+            return {
+                header: 'NOTE FX T' + (t + 1) + ' Drum',
+                target: info.target,
+                value: 'Value ' + info.value,
+                detail: info.detail,
+                route: 'Route: ' + routeScopeShortLabel(t)
+            };
+        }
     }
     const pm = (BANKS[bank] && BANKS[bank].knobs) ? BANKS[bank].knobs[k] : null;
     const bankName = BANKS[bank] ? BANKS[bank].name : 'BANK';
