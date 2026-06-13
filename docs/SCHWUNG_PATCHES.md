@@ -1,8 +1,22 @@
-# Schwung Patches
+# Historical Schwung Patch Notes
 
-Local patches applied to `~/schwung/` that must be re-applied after any Schwung upgrade.
+Co-run is no longer carried as an Overture-only Schwung patch. Overture's
+integrator repo pins upstream `charlesvestal/schwung` `v0.9.18` (`0221f3ff`),
+which exposes `shadow_corun_begin`, `shadow_corun_end`, and
+`shadow_corun_state`.
 
-Current base: **`v0.9.16`** (`2e15e357`, upstream `charlesvestal/schwung`; 2026-05-29), branch `main` on the `legsmechanical/schwung` fork. The fork is `v0.9.16` + 3 post-release upstream fixes + 8 co-run commits. The local patch is **co-run-only** — chain-edit + Move-native co-run, incl. the selective LED filter + track-button strip + co-run LED handoff + chain-edit knob exposure (knob turn+touch) + teardown fix. As of 2026-05-22 the co-run input split is **generalized** — a tool-declared manifest (`corun_keep_mask` + the shared `corun_group_for_event` map + `shadow_corun_begin/end` API) replaces the old hard-coded nav-CC lists; dAVEBOx's split is the zero-config default (`keep_mask==0`). This form is the basis for upstream PR #94 (`notes/corun-upstream-pr-draft.md`). PR #92 + #93 shipped in v0.9.16 and are no longer carried locally. `shadow_control_t` reserved bytes carry `midi_indicator_enabled` (upstream) + `corun_chain_edit_slot` + `corun_move_native_track`, `reserved[3]`.
+The notes below are retained as archive material for non-co-run host work that
+may still be useful upstream, not as required Overture install steps.
+
+Archived co-run bridge base: **`v0.9.16`** (`2e15e357`, upstream
+`charlesvestal/schwung`; 2026-05-29), branch `main` on the
+`legsmechanical/schwung` fork. That fork was `v0.9.16` + 3 post-release
+upstream fixes + 8 co-run commits. The local patch was **co-run-only** —
+chain-edit + Move-native co-run, incl. the selective LED filter + track-button
+strip + co-run LED handoff + chain-edit knob exposure (knob turn+touch) +
+teardown fix. As of 2026-05-22 the co-run input split was generalized around
+`corun_keep_mask`, `corun_group_for_event`, and `shadow_corun_begin/end`. PR #92
+and #93 shipped in v0.9.16 and are no longer carried locally.
 
 **2026-06-03 — two non-co-run general fixes also added to fork/main** (`fc8db9bb`, `b090edf0`, docs `673f166c`; pushed). Both are **pre-existing bugs in upstream `v0.9.16`** (not dAVEBOx-specific) and are good upstream-PR candidates: (1) **master-FX preset buffers** — `save_master_preset`/`update_master_preset` extracted each FX slot into `char fxN[512]`, so large modules (e.g. spectra) truncated → malformed preset JSON → empty chain on load; enlarged to 8192 (`final_json`→40960, under the 64KB round-trip). (2) **build hygiene** — the host target's `needs_rebuild` list omitted `shadow_constants.h`, so an SHM-layout change rebuilt the shim/modules but **not the host**, leaving mismatched binaries (silent param corruption that mimics feature bugs); host now depends on all `src/host/*.h`, and deploys should use a clean build (`clean.sh && build.sh`). Standalone patch files: `~/schwung-master-fx-patches/` (`git am`-applyable). NB: `scripts/build.sh` is **not** under `src/`, so the build fix is *not* captured by the `git diff <base>..main -- src/` regen of `davebox-local.patch` — it lives only as a fork/main commit.
 
@@ -12,29 +26,37 @@ Current base: **`v0.9.16`** (`2e15e357`, upstream `charlesvestal/schwung`; 2026-
 
 > The fork is based on tagged release `v0.9.16` plus 3 post-release upstream commits (`55a2468f` HEAD). Co-run commits live on `fork/main` and were merged to local `main` on 2026-05-29. Pre-rebase safety branch on the fork: `backup/pre-origin-rebase-20260522` (= `5dda2d7f`).
 
-## Why this is split into two repos
+## Why this was split into two repos
 
-dAVEBOx ships from `legsmechanical/schwung-davebox` `main` to anyone running stock Schwung — public releases need to install cleanly on `charlesvestal/schwung` without expecting patches. But some dAVEBOx features (currently: chain-edit co-run via `Edit Slot...`) require Schwung-side surgery that isn't a candidate for upstream as-is.
+dAVEBOx shipped from `legsmechanical/schwung-davebox` `main` to anyone running
+stock Schwung, so public releases needed to install cleanly on
+`charlesvestal/schwung` without expecting patches. Co-run used to require
+Schwung-side surgery; Overture now relies on upstream Schwung for that host
+capability.
 
-**Pattern:** keep all dAVEBOx code on `main`, capability-gate any feature that needs patched-Schwung APIs at the entry point (typically the menu item that triggers it). On stock Schwung the gate resolves false → entry doesn't render → the feature is invisible and all downstream code stays dormant. On a Move running the patched `legsmechanical/schwung` shim, the gate resolves true and the feature lights up automatically.
+**Current pattern:** keep Overture code capability-gated at the entry point. On
+older Schwung builds without co-run, the gate resolves false and the UI reports
+that co-run is unavailable. On upstream Schwung `v0.9.18+`, the feature lights
+up automatically.
 
-Concrete example (from `buildGlobalMenuItems()` in `ui/ui.js`):
+Concrete example:
 
 ```js
-...(typeof shadow_set_corun_chain_edit === 'function' ? [
-    createAction('Edit Slot...', function() {
-        openSchwungSlotEditor(S.activeTrack);
-    })
-] : []),
+if (typeof shadow_corun_begin !== 'function') {
+    showActionPopup('CO-RUN', 'UNAVAILABLE');
+    return;
+}
 ```
 
-All downstream calls (`shadow_set_corun_chain_edit`, `shadow_get_corun_chain_edit`) are defensively guarded with `typeof ... === 'function'` checks, and runtime state like `S.schwungCoRunSlot` defaults to `-1` so the LED-suppression / drawUI-early-return / Back-exit hooks all stay false-y on stock Schwung.
+Runtime state like `S.schwungCoRunSlot` defaults to `-1` so LED suppression,
+drawUI early returns, and Back-exit hooks stay false on hosts without co-run.
 
 **Result:** one repo, one main branch, one release flow. Co-run lives in the codebase as a feature that simply doesn't surface unless the host supports it.
 
 ## Maintenance workflow
 
-Day-to-day dAVEBOx development is normal — work on `main`, commit, release via `scripts/cut_release.sh`. The patched-Schwung side has its own cadence:
+Day-to-day Overture tool development is normal. If a future Overture change
+needs host work again, the patched-Schwung side has its own cadence:
 
 1. **When upstream Schwung tags a new release** (e.g. `v0.9.14`):
    - Fetch and check out the new tag in `~/schwung`.
@@ -92,7 +114,11 @@ ssh root@move.local "mv /tmp/shadow_ui /data/UserData/schwung/shadow/shadow_ui \
 ```
 Then restart Move. All deploy paths are under `/data/UserData/schwung/` (data partition); NEVER touch `/usr/lib/schwung-shim.so` or `/usr/lib/schwung/shadow/*` (symlinks recreated on every boot by `schwung-heal`).
 
-**Common gotcha:** deploying only the shim after a co-run change makes the menu items silently disappear — the capability-gate checks `typeof shadow_set_corun_chain_edit === 'function'` look at the running `shadow_ui` binary, not the shim. If `Edit Slot...` / `Edit Synth...` are missing after a rebase deploy, you forgot the shadow_ui step.
+**Common gotcha:** deploying only the shim after a host API change makes the
+tool-side capability gate lie — checks such as
+`typeof shadow_corun_begin === 'function'` look at the running `shadow_ui`
+binary, not the shim. If Edit Sound reports `CO-RUN UNAVAILABLE` after a host
+deploy, verify that `shadow_ui` was rebuilt and installed too.
 
 ## Patch table
 
@@ -135,16 +161,18 @@ Lets the user navigate Schwung's chain editor for a slot (add/remove modules, ch
 
 **`src/schwung_shim.c`** — initializes `corun_chain_edit_slot = -1` on boot.
 
-**`src/shadow/shadow_ui.c`** — two new JS bindings:
-- `shadow_set_corun_chain_edit(slot)` — enable co-run for `slot` (or `-1` to disable). Tool side calls this on Edit-Slot entry; chain editor's Menu intercept calls it with `-1` to exit.
-- `shadow_get_corun_chain_edit()` — read current state. Tool side polls this to detect external clears (Menu).
+**`src/shadow/shadow_ui.c`** — JS bindings:
+- `shadow_corun_begin(target, id, keep_mask)` — enable co-run for a target.
+- `shadow_corun_end()` — disable co-run.
+- `shadow_corun_state()` — read current state. Tool side polls this to detect
+  external clears.
 
 **`src/shadow/shadow_ui.js`** — the load-bearing change. Five pieces:
 
 1. **Top of `tick()`**: poll SHM for the co-run slot. On `-1 → N` transition, initialize chain-editor state for that slot (selectedSlot, selectedChainComponent, loadChainConfigFromSlot) without changing the outer `view` (which must stay `VIEWS.OVERTAKE_MODULE` so the tool keeps ticking).
 2. **`runCoRunChainEdit(fn)` helper**: temporarily swap the outer `view` to `coRunView` so dispatch functions (`handleJog`, `handleSelect`, `handleBack`, draw fns) land on the chain-edit branch. Captures any view-changes back into `coRunView` so deeper navigation (PATCHES → COMPONENT_EDIT → KNOB_EDITOR etc.) sticks across frames.
 3. **`dispatchCoRunDraw()` helper**: mirrors the main draw switch's chain-edit subtree (CHAIN_EDIT → drawChainEdit, PATCHES → drawPatches, COMPONENT_PARAMS, COMPONENT_SELECT, CHAIN_SETTINGS, COMPONENT_EDIT, HIERARCHY_EDITOR, KNOB_*, LFO_*, STORE_PICKER_*, FILEPATH_BROWSER). Called from the OVERTAKE_MODULE tick branch after the tool tick.
-4. **Per-CC input split** in `onMidiMessageInternal`'s OVERTAKE_MODULE branch: CCs 3 (jog click), 14 (jog turn), 40–43 (track buttons), 49 (Shift), 50 (Menu), and 51 (Back) are intercepted before the tool sees them. Jog/click route to `handleJog`/`handleSelect` (with Shift+Click → `handleShiftSelect` mirrored from the non-overtake handler). Track buttons switch the editing slot. Shift updates `hostShiftHeld` and is swallowed. Menu clears the co-run flag. Back navigates up within the editor or is eaten at the CHAIN_EDIT top level.
+4. **Per-CC input split** in `onMidiMessageInternal`'s OVERTAKE_MODULE branch: CCs 3 (jog click), 14 (jog turn), 40–43 (track buttons), 49 (Shift), 50 (Menu), and 51 (Back) are intercepted before the tool sees them. Jog/click route to `handleJog`/`handleSelect` (with Shift+Click → `handleShiftSelect` mirrored from the non-overtake handler). Track buttons switch the editing slot. Shift updates `hostShiftHeld` and is swallowed. The framework calls `shadow_corun_end()` on its exit gesture. Back navigates up within the editor or is eaten at the CHAIN_EDIT top level.
 5. **Param-shim swap (`runToolCallback`)**: when chain-editor entry calls `setupModuleParamShims` (either via `enterHierarchyEditor` or `loadModuleUi`), `globalThis.host_module_get_param` / `host_module_set_param` get overwritten to route at the slot DSP. This *would* silently misroute every active-tool IPC. Fix: cache the real host APIs on first shim install, and wrap every tool callback (tick, onMidiMessageInternal, knob/jog delta flushes) with a swap-and-restore so the tool always talks to its own DSP. The chain editor's own draws keep the shimmed APIs.
 
 Two gates also short-circuit problematic native paths during co-run:
@@ -154,12 +182,15 @@ Two gates also short-circuit problematic native paths during co-run:
 ### Tool-side contract (the dAVEBOx half)
 
 A tool that opts into co-run is expected to:
-- Call `shadow_set_corun_chain_edit(slot)` on entry, `shadow_set_corun_chain_edit(-1)` on exit.
+- Call `shadow_corun_begin(target, id, keep_mask)` on entry and
+  `shadow_corun_end()` on exit.
 - Skip its own OLED drawing while co-run is active (early-return in its draw path). Drawing primitives are shared with the chain editor; the chain editor calls `clear_screen()` at the start of each draw so anything the tool drew gets wiped, but skipping saves the wasted work and prevents visible flicker.
-- Re-render normally when co-run clears (the tool polls `shadow_get_corun_chain_edit()` and reacts to external clears, e.g. from Menu).
+- Re-render normally when co-run clears (the tool polls `shadow_corun_state()`
+  and reacts to external clears).
 - Accept that Shift, track buttons (CC 40–43), jog, jog-click, and Back are unavailable to the tool while co-run is active.
 
-dAVEBOx implements this contract via `S.schwungCoRunSlot`, the `Edit Slot...` track-menu action, and a `pollDSP` reconciliation step.
+dAVEBOx/Overture implements this contract via `S.schwungCoRunSlot`, the Edit
+Sound action, and a `pollDSP` reconciliation step.
 
 ### Why this isn't suitable for upstream
 
