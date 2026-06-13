@@ -88,14 +88,16 @@ import { effectiveClip, updateStepLEDs, updateSessionLEDs, updateTrackLEDs, flas
 import { SPLASH_FRAMES, SPLASH_COUNT, SPLASH_W, SPLASH_H, pickSplashIdx } from '/data/UserData/schwung/modules/tools/overture/ui_splash.mjs';
 import { requestExport, confirmExportStart, pollPendingExport } from '/data/UserData/schwung/modules/tools/overture/ui_export.mjs';
 import {
-    EDIT_SOUND_PREFLIGHT_TICKS,
     canEditSoundRoute,
-    describeEditSoundForTrack,
-    schSlotsForTrack,
     schSlotForTrack,
     routeCheckExpectedLabel,
     routeCheckNeedsWarning
 } from '/data/UserData/schwung/modules/tools/overture/ui_routes.mjs';
+import {
+    advancePendingEditSoundEntry,
+    refreshSchwungCoRunSlotMask,
+    requestEditSoundForTrack
+} from '/data/UserData/schwung/modules/tools/overture/ui_sound_edit.mjs';
 import {
     PARAM_PEEK_DETAIL_TICKS,
     autoLaneLabel,
@@ -655,31 +657,12 @@ function setPaletteEntryRGB(idx, r, g, b) {
 
 function reapplyPalette() { move_midi_internal_send(_CC_REAPPLY_PKT); }
 
-function queueEditSoundEntry(t, route, slot) {
-    S.pendingEditSoundEntry = {
-        track: t | 0,
-        route: route | 0,
-        slot: slot | 0,
-        delay: EDIT_SOUND_PREFLIGHT_TICKS
-    };
-    S.screenDirty = true;
-}
-
-function clearPendingEditSoundEntry() {
-    S.pendingEditSoundEntry = null;
-}
-
 function editSoundForTrack(t) {
-    clearPendingEditSoundEntry();
-    S.globalMenuOpen = false;
-    S.lastSentMenuEditValue = null;
-    const desc = describeEditSoundForTrack(t, {
+    const popup = requestEditSoundForTrack(t, {
         hasCoRun: typeof shadow_corun_begin === 'function',
         hasMoveInject: typeof move_midi_inject_to_move === 'function'
     });
-    if (desc.slotMask) S._coRunChanSlots = desc.slotMask;
-    showActionPopup(desc.title, desc.body);
-    if (desc.queue) queueEditSoundEntry(desc.queue.track, desc.queue.route, desc.queue.slot);
+    showActionPopup(popup.title, popup.body);
 }
 
 function truncText(s, maxLen) {
@@ -6267,20 +6250,15 @@ function _tickImpl() {
          * side-button blink (shadow_get_slots is a cheap shared-memory read;
          * gate to the poll cadence to match the LED force cadence). */
         if (S.schwungCoRunSlot >= 0 && (S.tickCount % POLL_INTERVAL) === 0) {
-            S._coRunChanSlots = schSlotsForTrack(S.activeTrack);
+            refreshSchwungCoRunSlotMask(S.activeTrack);
         }
 
-        if (S.pendingEditSoundEntry) {
-            const _e = S.pendingEditSoundEntry;
-            if (_e.track !== S.activeTrack || _e.route !== (S.trackRoute[_e.track] | 0)) {
-                clearPendingEditSoundEntry();
-            } else if (--_e.delay <= 0) {
-                clearPendingEditSoundEntry();
-                if (_e.route === 1) enterMoveNativeCoRun(_e.track);
-                else if (_e.route === 0) {
-                    S._coRunChanSlots = schSlotsForTrack(_e.track);
-                    enterSchwungCoRun(_e.track, _e.slot);
-                }
+        const _editSoundAction = advancePendingEditSoundEntry(S.activeTrack);
+        if (_editSoundAction) {
+            if (_editSoundAction.kind === 'move') {
+                enterMoveNativeCoRun(_editSoundAction.track);
+            } else if (_editSoundAction.kind === 'schwung') {
+                enterSchwungCoRun(_editSoundAction.track, _editSoundAction.slot);
             }
         }
 
