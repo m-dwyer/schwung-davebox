@@ -351,6 +351,10 @@ Drum repeat workflows:
 - Moved the Rpt2 rate-pad assignment into `handleDrumRepeat2RatePadPress()`,
   preserving active-lane rate mirror updates, stock-vs-patched Schwung
   `tN_drum_repeat2_rate` gating, DSP payload shape, and screen-dirty behavior.
+- Moved Rpt1/Rpt2 drum-repeat pad aftertouch into
+  `handleDrumRepeatPadAftertouch()` and `handleDrumRepeat2LaneAftertouch()`,
+  preserving held-pad velocity mirror updates, held-lane filtering, and
+  `tN_drum_repeat_vel` / `tN_drum_repeat2_vel` payloads.
 
 Verification:
 

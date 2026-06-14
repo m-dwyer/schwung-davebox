@@ -50,6 +50,15 @@ export function handleDrumRepeatRatePadRelease(S, deps, track, padIdx, lane) {
     return true;
 }
 
+export function handleDrumRepeatPadAftertouch(S, deps, track, padIdx, pressure) {
+    if (S.drumRepeatHeldPad[track] !== padIdx || pressure <= 0) return false;
+
+    S.drumRepeatHeldPadVel[track] = pressure;
+    if (typeof deps.host_module_set_param === 'function')
+        deps.host_module_set_param('t' + track + '_drum_repeat_vel', String(pressure));
+    return true;
+}
+
 export function handleDrumRepeatGatePad(S, deps, track, lane, step) {
     if (step < 0 || step >= 8) return false;
 
@@ -126,6 +135,14 @@ export function handleDrumRepeat2LanePadRelease(S, deps, track, lane) {
             deps.host_module_set_param('t' + track + '_drum_repeat2_lane_off', String(lane));
     }
     S.screenDirty = true;
+    return true;
+}
+
+export function handleDrumRepeat2LaneAftertouch(S, deps, track, lane, pressure) {
+    if (pressure <= 0 || !S.drumRepeat2HeldLanes[track].has(lane)) return false;
+
+    if (typeof deps.host_module_set_param === 'function')
+        deps.host_module_set_param('t' + track + '_drum_repeat2_vel', lane + ' ' + pressure);
     return true;
 }
 

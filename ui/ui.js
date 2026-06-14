@@ -128,7 +128,9 @@ import {
     handleDrumRepeat2LanePadRelease,
     handleDrumRepeat2RatePadPress,
     handleDrumRepeat2RightGridPadRelease,
+    handleDrumRepeat2LaneAftertouch,
     handleDrumRepeatGatePad,
+    handleDrumRepeatPadAftertouch,
     handleDrumRepeatRatePadPress,
     handleDrumRepeatRatePadRelease
 } from './ui_drum_repeat_workflows.mjs';
@@ -11110,17 +11112,14 @@ function _onPadAftertouch(d1, d2) {
 
     if (S.trackPadMode[t] === PAD_MODE_DRUM && S.drumPerformMode[t] === 1 &&
             S.drumRepeatHeldPad[t] === padIdx && d2 > 0) {
-        S.drumRepeatHeldPadVel[t] = d2;
-        if (typeof host_module_set_param === 'function')
-            host_module_set_param('t' + t + '_drum_repeat_vel', String(d2));
+        handleDrumRepeatPadAftertouch(S, createDrumRepeatWorkflowDeps(), t, padIdx, d2);
     }
     if (S.trackPadMode[t] === PAD_MODE_DRUM && S.drumPerformMode[t] === 2 && d2 > 0) {
         const col2 = padIdx % 8;
         if (col2 < 4) {
             const lane = drumPadToLane(padIdx);
             if (lane >= 0 && S.drumRepeat2HeldLanes[t].has(lane)) {
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + t + '_drum_repeat2_vel', lane + ' ' + d2);
+                handleDrumRepeat2LaneAftertouch(S, createDrumRepeatWorkflowDeps(), t, lane, d2);
             }
         }
     }
