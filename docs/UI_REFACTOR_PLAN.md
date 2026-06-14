@@ -314,6 +314,9 @@ Next module:
   while the in-line drum-mode branch keeps lane-bank refresh and
   `LANE CLEARED`.
 - Added `ui_drum_lane_workflows.mjs` to `scripts/bundle_ui.py`.
+- Moved Mute+drum-lane and Shift+Mute+drum-lane behavior into
+  `handleDrumLaneMuteSolo()`, preserving modifier consumption, mutually
+  exclusive mute/solo mirrors, DSP write ordering, and redraw.
 
 Verification:
 

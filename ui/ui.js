@@ -119,7 +119,8 @@ import {
     resolveDrumPadTarget
 } from './ui_pad_surface.mjs';
 import {
-    handleDeleteDrumLaneClear
+    handleDeleteDrumLaneClear,
+    handleDrumLaneMuteSolo
 } from './ui_drum_lane_workflows.mjs';
 import {
     runDefaultSetParamDrain,
@@ -9693,37 +9694,7 @@ function _onPadPressTrackView(status, d1, d2) {
                 }
                 /* Other S.copySrc kinds or cross-track: swallow */
             } else if (lane >= 0 && lane < DRUM_LANES && S.muteHeld) {
-                /* Mute+pad: toggle lane mute; Shift+Mute+pad: toggle lane solo */
-                S.muteUsedAsModifier = true;
-                const bit = 1 << lane;
-                if (S.shiftHeld) {
-                    const wasOn = !!(S.drumLaneSolo[t] & bit);
-                    if (wasOn) { S.drumLaneSolo[t] &= ~bit; }
-                    else {
-                        S.drumLaneSolo[t] |= bit;
-                        if (S.drumLaneMute[t] & bit) {
-                            S.drumLaneMute[t] &= ~bit;
-                            if (typeof host_module_set_param === 'function')
-                                host_module_set_param('t' + t + '_l' + lane + '_mute', '0');
-                        }
-                    }
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_l' + lane + '_solo', wasOn ? '0' : '1');
-                } else {
-                    const wasOn = !!(S.drumLaneMute[t] & bit);
-                    if (wasOn) { S.drumLaneMute[t] &= ~bit; }
-                    else {
-                        S.drumLaneMute[t] |= bit;
-                        if (S.drumLaneSolo[t] & bit) {
-                            S.drumLaneSolo[t] &= ~bit;
-                            if (typeof host_module_set_param === 'function')
-                                host_module_set_param('t' + t + '_l' + lane + '_solo', '0');
-                        }
-                    }
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_l' + lane + '_mute', wasOn ? '0' : '1');
-                }
-                forceRedraw();
+                handleDrumLaneMuteSolo(S, createDrumLaneWorkflowDeps(), t, lane);
             } else if (lane >= 0 && lane < DRUM_LANES) {
                 if (S.deleteHeld) {
                     handleDeleteDrumLaneClear(S, createDrumLaneWorkflowDeps(), t, lane, {

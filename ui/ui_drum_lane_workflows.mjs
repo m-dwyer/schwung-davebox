@@ -33,3 +33,43 @@ export function handleDeleteDrumLaneClear(S, deps, track, lane, options = {}) {
     deps.forceRedraw();
     return true;
 }
+
+export function handleDrumLaneMuteSolo(S, deps, track, lane) {
+    if (lane < 0 || lane >= deps.DRUM_LANES) return false;
+
+    S.muteUsedAsModifier = true;
+    const bit = 1 << lane;
+
+    if (S.shiftHeld) {
+        const wasOn = !!(S.drumLaneSolo[track] & bit);
+        if (wasOn) {
+            S.drumLaneSolo[track] &= ~bit;
+        } else {
+            S.drumLaneSolo[track] |= bit;
+            if (S.drumLaneMute[track] & bit) {
+                S.drumLaneMute[track] &= ~bit;
+                if (typeof deps.host_module_set_param === 'function')
+                    deps.host_module_set_param('t' + track + '_l' + lane + '_mute', '0');
+            }
+        }
+        if (typeof deps.host_module_set_param === 'function')
+            deps.host_module_set_param('t' + track + '_l' + lane + '_solo', wasOn ? '0' : '1');
+    } else {
+        const wasOn = !!(S.drumLaneMute[track] & bit);
+        if (wasOn) {
+            S.drumLaneMute[track] &= ~bit;
+        } else {
+            S.drumLaneMute[track] |= bit;
+            if (S.drumLaneSolo[track] & bit) {
+                S.drumLaneSolo[track] &= ~bit;
+                if (typeof deps.host_module_set_param === 'function')
+                    deps.host_module_set_param('t' + track + '_l' + lane + '_solo', '0');
+            }
+        }
+        if (typeof deps.host_module_set_param === 'function')
+            deps.host_module_set_param('t' + track + '_l' + lane + '_mute', wasOn ? '0' : '1');
+    }
+
+    deps.forceRedraw();
+    return true;
+}
