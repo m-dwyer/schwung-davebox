@@ -55,3 +55,21 @@ export function handleDrumRepeat2LanePadPress(S, deps, track, lane, padIdx, rawV
     deps.forceRedraw();
     return true;
 }
+
+export function handleDrumRepeat2LanePadRelease(S, deps, track, lane) {
+    if (lane < 0 || lane >= deps.DRUM_LANES) return false;
+    if (!S.drumRepeat2HeldLanes[track].has(lane)) return false;
+
+    S.drumRepeat2HeldLanes[track].delete(lane);
+    if (!S.drumRepeat2LatchedLanes[track].has(lane)) {
+        if (typeof deps.host_module_set_param === 'function')
+            deps.host_module_set_param('t' + track + '_drum_repeat2_lane_off', String(lane));
+    }
+    S.screenDirty = true;
+    return true;
+}
+
+export function handleDrumRepeat2RightGridPadRelease(S) {
+    S.screenDirty = true;
+    return true;
+}

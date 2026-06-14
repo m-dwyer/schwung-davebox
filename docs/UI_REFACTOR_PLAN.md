@@ -338,6 +338,10 @@ Drum repeat workflows:
   held/latched lane Set updates, patched-Schwung lane-on/off gating,
   Loop-held latch coalescing behavior, `padPitch` suppression, and redraw
   ordering.
+- Moved Rpt2 lane-pad release and right-grid release swallow behavior into
+  `handleDrumRepeat2LanePadRelease()` and
+  `handleDrumRepeat2RightGridPadRelease()`, preserving held-lane cleanup,
+  non-latched lane-off, latched-lane continuation, and screen-dirty behavior.
 - Added `ui_drum_repeat_workflows.mjs` to `scripts/bundle_ui.py`.
 
 Verification:

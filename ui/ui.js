@@ -125,6 +125,8 @@ import {
 } from './ui_drum_lane_workflows.mjs';
 import {
     handleDrumRepeat2LanePadPress,
+    handleDrumRepeat2LanePadRelease,
+    handleDrumRepeat2RightGridPadRelease,
     handleDrumRepeatGatePad
 } from './ui_drum_repeat_workflows.mjs';
 import {
@@ -10877,20 +10879,13 @@ function _onPadRelease(status, d1, d2) {
         if (S.trackPadMode[t] === PAD_MODE_DRUM && S.drumPerformMode[t] === 2 &&
                 (padIdx % 8) < 4) {
             const lane = drumPadToLane(padIdx);
-            if (lane >= 0 && lane < DRUM_LANES && S.drumRepeat2HeldLanes[t].has(lane)) {
-                S.drumRepeat2HeldLanes[t].delete(lane);
-                if (!S.drumRepeat2LatchedLanes[t].has(lane)) {
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_drum_repeat2_lane_off', String(lane));
-                }
-                S.screenDirty = true;
-            }
+            handleDrumRepeat2LanePadRelease(S, createDrumRepeatWorkflowDeps(), t, lane);
             return;
         }
         /* Rpt2 mode: swallow all right-grid releases */
         if (S.trackPadMode[t] === PAD_MODE_DRUM && S.drumPerformMode[t] === 2 &&
                 (padIdx % 8) >= 4) {
-            S.screenDirty = true;
+            handleDrumRepeat2RightGridPadRelease(S);
             return;
         }
         const pitch = padPitch[padIdx] >= 0 ? padPitch[padIdx] : S.padNoteMap[padIdx];
