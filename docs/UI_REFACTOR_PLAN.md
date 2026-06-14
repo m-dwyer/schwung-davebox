@@ -248,6 +248,8 @@ Candidate 3:
 - Updated `computePadNoteMap()` to delegate to the pad surface module while
   preserving the existing local caller interface.
 - Added `ui_pad_surface.mjs` to `scripts/bundle_ui.py`.
+- Moved live-note queue creation and enqueue helpers into `ui_pad_surface.mjs`,
+  while leaving the tick-time drain in `ui_tick_tasks.mjs`.
 
 Verification:
 

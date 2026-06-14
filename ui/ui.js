@@ -107,7 +107,10 @@ import {
 } from './ui_motion.mjs';
 import {
     SCALE_INTERVALS,
-    applyPadNoteMap
+    applyPadNoteMap,
+    createLiveNoteQueues,
+    queueLiveNoteOff,
+    queueLiveNoteOn
 } from './ui_pad_surface.mjs';
 import {
     runDefaultSetParamDrain,
@@ -715,7 +718,7 @@ const NOTE_SESSION_HOLD_TICKS = 40;  /* ~200ms at 196Hz */
 
 /* Real-time recording state */
 
-const pendingLiveNotes = Array.from({length: NUM_TRACKS}, () => []);  /* buffered live notes flushed each tick */
+const pendingLiveNotes = createLiveNoteQueues(NUM_TRACKS);  /* buffered live notes flushed each tick */
 const pendingDrumNoteOffs = Array.from({length: NUM_TRACKS}, () => []);  /* drum tap note-offs deferred 1 tick to avoid coalescing with note-on */
 const _drumRecNoteOns  = [];  /* { track, laneNote, vel } — queued drum recording note-ons */
 const _drumRecNoteOffs = [];  /* { track, laneNote } — queued drum recording note-offs */
@@ -3218,13 +3221,6 @@ function applyBankParam(t, bankIdx, knobIdx, val) {
  * from any number of onMidiMessage calls; tick() drains once per audio
  * buffer into one set_param per track. Cost: up to ~10 ms (one tick) of
  * live-monitor latency. Benefit: chord-press survives intact. */
-function queueLiveNoteOn(t, pitch, vel) {
-    pendingLiveNotes[t].push({ isOff: false, pitch, vel });
-}
-function queueLiveNoteOff(t, pitch) {
-    pendingLiveNotes[t].push({ isOff: true, pitch });
-}
-
 function liveSendNote(t, type, pitch, vel, rawVel) {
     const ch    = (S.trackChannel[t] - 1) & 0x0F;
     const route = S.trackRoute[t];
@@ -3247,9 +3243,9 @@ function liveSendNote(t, type, pitch, vel, rawVel) {
         if (type === 0x90 || type === 0x80) {
             const isOff = (type === 0x80) || (type === 0x90 && vel === 0);
             if (isOff) {
-                queueLiveNoteOff(t, pitch);
+                queueLiveNoteOff(pendingLiveNotes, t, pitch);
             } else {
-                queueLiveNoteOn(t, pitch, vel);
+                queueLiveNoteOn(pendingLiveNotes, t, pitch, vel);
             }
         } else {
             const cin = (status >> 4) & 0x0F;
@@ -3272,9 +3268,9 @@ function liveSendNote(t, type, pitch, vel, rawVel) {
             const activelyRecording = S.recordArmed && !S.recordCountingIn && S.recordArmedTrack === t;
             const isOff = (type === 0x80) || (type === 0x90 && vel === 0);
             if (isOff) {
-                queueLiveNoteOff(t, pitch);
+                queueLiveNoteOff(pendingLiveNotes, t, pitch);
             } else if (!activelyRecording) {
-                queueLiveNoteOn(t, pitch, vel);
+                queueLiveNoteOn(pendingLiveNotes, t, pitch, vel);
             }
         }
     } else {
@@ -3289,9 +3285,9 @@ function liveSendNote(t, type, pitch, vel, rawVel) {
         if (type === 0x90 || type === 0x80) {
             const isOff = type === 0x80 || vel === 0;
             if (isOff) {
-                queueLiveNoteOff(t, pitch);
+                queueLiveNoteOff(pendingLiveNotes, t, pitch);
             } else {
-                queueLiveNoteOn(t, pitch, vel);
+                queueLiveNoteOn(pendingLiveNotes, t, pitch, vel);
             }
         } else {
             if (typeof shadow_send_midi_to_dsp === 'function') shadow_send_midi_to_dsp([status, pitch, vel]);
@@ -8174,7 +8170,7 @@ function _onCC_transport(d1, d2) {
             computePadNoteMap();  /* PHASE-1: drum page change shifts lane mapping; re-push */
             forceRedraw();
         } else {
-        for (const p of S.liveActiveNotes) queueLiveNoteOff(S.activeTrack, p);
+        for (const p of S.liveActiveNotes) queueLiveNoteOff(pendingLiveNotes, S.activeTrack, p);
         S.liveActiveNotes.clear();
         S.trackOctave[S.activeTrack] = Math.min(4, S.trackOctave[S.activeTrack] + 1);
         computePadNoteMap();  /* PHASE-1: re-bake octave offset into DSP padmap */
@@ -8190,7 +8186,7 @@ function _onCC_transport(d1, d2) {
             computePadNoteMap();  /* PHASE-1: drum page change shifts lane mapping; re-push */
             forceRedraw();
         } else {
-        for (const p of S.liveActiveNotes) queueLiveNoteOff(S.activeTrack, p);
+        for (const p of S.liveActiveNotes) queueLiveNoteOff(pendingLiveNotes, S.activeTrack, p);
         S.liveActiveNotes.clear();
         S.trackOctave[S.activeTrack] = Math.max(-4, S.trackOctave[S.activeTrack] - 1);
         computePadNoteMap();  /* PHASE-1: re-bake octave offset into DSP padmap */

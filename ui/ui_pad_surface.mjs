@@ -15,6 +15,18 @@ export const SCALE_INTERVALS = [
     [0, 2, 3, 5, 6, 8, 9, 11],     /* 13 Diminished      */
 ];
 
+export function createLiveNoteQueues(numTracks) {
+    return Array.from({length: numTracks}, () => []);
+}
+
+export function queueLiveNoteOn(queues, track, pitch, vel) {
+    queues[track].push({ isOff: false, pitch, vel });
+}
+
+export function queueLiveNoteOff(queues, track, pitch) {
+    queues[track].push({ isOff: true, pitch });
+}
+
 export function updatePadNoteMap(S, deps) {
     const t = S.activeTrack;
     if (S.trackPadMode[t] === deps.PAD_MODE_DRUM) {
