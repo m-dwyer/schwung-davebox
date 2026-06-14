@@ -305,6 +305,8 @@ Candidate 3:
 
 Next module:
 
+### Drum lane workflows complete
+
 - Added focused workflow coverage in
   `web/tests/integration/drum-lane-workflows.test.ts`.
 - Added `ui/ui_drum_lane_workflows.mjs` for destructive drum lane workflows.
@@ -321,6 +323,17 @@ Next module:
   `handleDrumLaneCopyPaste()`, preserving source arming, same-track paste,
   cut-to-copy source conversion, incompatible-source swallow semantics, LED
   invalidation, popup text, lane selection, and bank refresh ordering.
+
+Drum repeat workflows:
+
+- Added focused repeat workflow coverage in
+  `web/tests/integration/drum-repeat-workflows.test.ts`.
+- Added `ui/ui_drum_repeat_workflows.mjs` for drum repeat pad workflows.
+- Moved the shared Rpt1/Rpt2 gate-pad workflow into
+  `handleDrumRepeatGatePad()`, preserving Delete+gate defaults reset,
+  Loop+gate cycle-fill behavior, tap gate toggles, DSP write payloads, and
+  redraw ordering.
+- Added `ui_drum_repeat_workflows.mjs` to `scripts/bundle_ui.py`.
 
 Verification:
 

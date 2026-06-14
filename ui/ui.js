@@ -124,6 +124,9 @@ import {
     handleDrumLaneMuteSolo
 } from './ui_drum_lane_workflows.mjs';
 import {
+    handleDrumRepeatGatePad
+} from './ui_drum_repeat_workflows.mjs';
+import {
     runDefaultSetParamDrain,
     runDeferredContentResyncTasks,
     runDeferredDrumNoteOffDrain,
@@ -2072,6 +2075,13 @@ function createDrumLaneWorkflowDeps() {
         cutDrumLane,
         invalidateLEDCache,
         showActionPopup,
+        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        forceRedraw
+    };
+}
+
+function createDrumRepeatWorkflowDeps() {
+    return {
         host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
         forceRedraw
     };
@@ -9545,27 +9555,7 @@ function _onPadPressTrackView(status, d1, d2) {
                 /* Gate mask pad (right side, top 2 rows) */
                 const lane = S.activeDrumLane[t];
                 const step = (row - 2) * 4 + (col - 4);
-                if (S.deleteHeld) {
-                    /* Delete + gate pad: reset vel_scale and nudge for this step */
-                    S.drumRepeatVelScale[t][lane][step] = 100;
-                    S.drumRepeatNudge[t][lane][step]    = 0;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_l' + lane + '_repeat_defaults', String(step));
-                } else if (S.loopHeld) {
-                    /* Loop + gate pad: set gate cycle length and fill mask to steps 0..step */
-                    const gLen = step + 1;
-                    const fillMask = (1 << gLen) - 1;
-                    S.drumRepeatGate[t][lane] = fillMask;
-                    S.drumRepeatGateLen[t][lane] = gLen;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_l' + lane + '_repeat_gate_and_len', fillMask + ' ' + gLen);
-                } else {
-                    /* Tap: toggle gate bit */
-                    S.drumRepeatGate[t][lane] = (S.drumRepeatGate[t][lane] ^ (1 << step)) & 0xFF;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_l' + lane + '_repeat_gate_toggle', String(step));
-                }
-                forceRedraw();
+                handleDrumRepeatGatePad(S, createDrumRepeatWorkflowDeps(), t, lane, step);
                 return;
             }
         }
@@ -9591,25 +9581,7 @@ function _onPadPressTrackView(status, d1, d2) {
                 /* Gate mask: same as Rpt mode */
                 const lane = S.activeDrumLane[t];
                 const step = (row - 2) * 4 + (col - 4);
-                if (S.deleteHeld) {
-                    S.drumRepeatVelScale[t][lane][step] = 100;
-                    S.drumRepeatNudge[t][lane][step]    = 0;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_l' + lane + '_repeat_defaults', String(step));
-                } else if (S.loopHeld) {
-                    /* Loop + gate pad: set gate cycle length and fill mask to steps 0..step */
-                    const gLen = step + 1;
-                    const fillMask = (1 << gLen) - 1;
-                    S.drumRepeatGate[t][lane] = fillMask;
-                    S.drumRepeatGateLen[t][lane] = gLen;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_l' + lane + '_repeat_gate_and_len', fillMask + ' ' + gLen);
-                } else {
-                    S.drumRepeatGate[t][lane] = (S.drumRepeatGate[t][lane] ^ (1 << step)) & 0xFF;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_l' + lane + '_repeat_gate_toggle', String(step));
-                }
-                forceRedraw();
+                handleDrumRepeatGatePad(S, createDrumRepeatWorkflowDeps(), t, lane, step);
                 return;
             } else if (col < 4 && !S.deleteHeld) {
                 /* Lane pad: add/unlatch multi-lane repeat.

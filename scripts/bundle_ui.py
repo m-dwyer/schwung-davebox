@@ -26,6 +26,7 @@ ORDER = [
     'ui/ui_motion.mjs',
     'ui/ui_pad_surface.mjs',
     'ui/ui_drum_lane_workflows.mjs',
+    'ui/ui_drum_repeat_workflows.mjs',
     'ui/ui_tick_tasks.mjs',
     'ui/ui_splash.mjs',
     'ui/ui_export.mjs',
