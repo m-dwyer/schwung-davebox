@@ -244,6 +244,8 @@ Candidate 1:
 - Moved external MIDI route queue draining into `ui_tick_tasks.mjs` as
   `runExternalRouteQueueDrain()`, preserving the patched-Schwung async-send
   bypass.
+- Moved scheduled metro note-off injection into `ui_tick_tasks.mjs` as
+  `runMetroNoteOffTask()`.
 
 Candidate 3:
 

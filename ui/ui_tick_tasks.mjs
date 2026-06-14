@@ -66,6 +66,13 @@ export function runExternalRouteQueueDrain(S, deps) {
     }
 }
 
+export function runMetroNoteOffTask(S, deps) {
+    if (S.metroNoteOffTick < 0 || S.tickCount < S.metroNoteOffTick) return;
+    S.metroNoteOffTick = -1;
+    if (typeof deps.move_midi_inject_to_move === 'function')
+        deps.move_midi_inject_to_move([0x09, 0x80, 108, 0]);
+}
+
 export function runDefaultSetParamDrain(S, deps) {
     /* Drain first-run default set_params one per tick, after state is fully settled.
      * clearDrainHold defers the drain past the on_midi-context buffer where

@@ -119,6 +119,7 @@ import {
     runEndOfTickPersistenceTasks,
     runExternalRouteQueueDrain,
     runLiveNoteDrain,
+    runMetroNoteOffTask,
     runMoveCoRunTickTasks
 } from './ui_tick_tasks.mjs';
 
@@ -5582,12 +5583,9 @@ function _tickImpl() {
     }
     S._wasSuspended = isSuspended;
 
-    /* Metro note-off */
-    if (S.metroNoteOffTick >= 0 && S.tickCount >= S.metroNoteOffTick) {
-        S.metroNoteOffTick = -1;
-        if (typeof move_midi_inject_to_move === 'function')
-            move_midi_inject_to_move([0x09, 0x80, 108, 0]);
-    }
+    runMetroNoteOffTask(S, {
+        move_midi_inject_to_move: (typeof move_midi_inject_to_move === 'function') ? move_midi_inject_to_move : null
+    });
 
     /* Flush live note batches; one set_param per track so no coalescing.
      * Defer for 1 tick after any step button event so the step set_param clears its audio
