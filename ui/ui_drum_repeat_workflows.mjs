@@ -108,6 +108,14 @@ export function handleDrumRepeat2LanePadPress(S, deps, track, lane, padIdx, rawV
     return true;
 }
 
+export function handleDrumRepeat2RatePadPress(S, deps, track, lane, rateIdx) {
+    S.drumRepeat2RatePerLane[track][lane] = rateIdx;
+    if (typeof deps.host_module_set_param === 'function' && !S.dspInboundEnabled)
+        deps.host_module_set_param('t' + track + '_drum_repeat2_rate', lane + ' ' + rateIdx);
+    S.screenDirty = true;
+    return true;
+}
+
 export function handleDrumRepeat2LanePadRelease(S, deps, track, lane) {
     if (lane < 0 || lane >= deps.DRUM_LANES) return false;
     if (!S.drumRepeat2HeldLanes[track].has(lane)) return false;

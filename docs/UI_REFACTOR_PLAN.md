@@ -348,6 +348,9 @@ Drum repeat workflows:
   start gating, `drum_repeat_latched` write ordering, Loop-held latch,
   re-tap-to-unlatch, held-pad stack push/pop, release-side stack resume, queued
   inactive release removal, and right-grid release swallowing.
+- Moved the Rpt2 rate-pad assignment into `handleDrumRepeat2RatePadPress()`,
+  preserving active-lane rate mirror updates, stock-vs-patched Schwung
+  `tN_drum_repeat2_rate` gating, DSP payload shape, and screen-dirty behavior.
 
 Verification:
 

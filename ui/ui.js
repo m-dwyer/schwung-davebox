@@ -126,6 +126,7 @@ import {
 import {
     handleDrumRepeat2LanePadPress,
     handleDrumRepeat2LanePadRelease,
+    handleDrumRepeat2RatePadPress,
     handleDrumRepeat2RightGridPadRelease,
     handleDrumRepeatGatePad,
     handleDrumRepeatRatePadPress,
@@ -9535,10 +9536,7 @@ function _onPadPressTrackView(status, d1, d2) {
                  * thread; firing the set_param here would be redundant. */
                 const rateIdx = row * 4 + (col - 4);
                 const lane = S.activeDrumLane[t];
-                S.drumRepeat2RatePerLane[t][lane] = rateIdx;
-                if (typeof host_module_set_param === 'function' && !S.dspInboundEnabled)
-                    host_module_set_param('t' + t + '_drum_repeat2_rate', lane + ' ' + rateIdx);
-                S.screenDirty = true;
+                handleDrumRepeat2RatePadPress(S, createDrumRepeatWorkflowDeps(), t, lane, rateIdx);
                 return;
             } else if (col >= 4 && row >= 2) {
                 /* Gate mask: same as Rpt mode */
