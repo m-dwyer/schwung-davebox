@@ -355,6 +355,11 @@ Drum repeat workflows:
   `handleDrumRepeatPadAftertouch()` and `handleDrumRepeat2LaneAftertouch()`,
   preserving held-pad velocity mirror updates, held-lane filtering, and
   `tN_drum_repeat_vel` / `tN_drum_repeat2_vel` payloads.
+- Moved Track View Loop button drum-repeat latch/unlatch behavior into
+  `prepareDrumRepeatLoopPress()`, `latchHeldDrumRepeatsOnLoopPress()`, and
+  `handleDrumRepeatLoopTapRelease()`, preserving tap-unlatch eligibility,
+  Rpt2 held-lanes-to-latched promotion through `tN_drum_repeat2_latch_held`,
+  Rpt1 pending-default latch writes, and Rpt1/Rpt2 pending-default stop ordering.
 
 Verification:
 

@@ -150,3 +150,59 @@ export function handleDrumRepeat2RightGridPadRelease(S) {
     S.screenDirty = true;
     return true;
 }
+
+export function prepareDrumRepeatLoopPress(S, track, isDrumTrack, liveActiveNoteCount) {
+    S.loopTapUnlatchTrack = -1;
+
+    const rpt1FreshHold = S.drumRepeatHeldPad[track] >= 0 && !S.drumRepeatLatched[track];
+    const rpt2FreshHold = S.drumRepeat2HeldLanes[track].size > 0;
+    if (isDrumTrack && !rpt1FreshHold && !rpt2FreshHold && liveActiveNoteCount === 0)
+        S.loopTapUnlatchTrack = track;
+}
+
+export function latchHeldDrumRepeatsOnLoopPress(S, deps, track) {
+    const mode = S.drumPerformMode ? S.drumPerformMode[track] : (S.drumRepeat2HeldLanes[track].size > 0 ? 2 : 1);
+
+    if (mode === 2) {
+        S.rpt2LoopPadUsed = false;
+        if (S.drumRepeat2HeldLanes[track].size > 0) {
+            for (const lane of S.drumRepeat2HeldLanes[track]) {
+                S.drumRepeat2LatchedLanes[track].add(lane);
+            }
+            /* One atomic DSP push for all currently-held lanes. A per-lane loop
+             * here would coalesce under one key; the DSP handler ORs active and
+             * pending lanes into the latched bitmask. */
+            if (typeof deps.host_module_set_param === 'function')
+                deps.host_module_set_param('t' + track + '_drum_repeat2_latch_held', '1');
+            S.rpt2LoopPadUsed = true;
+        }
+    } else if (S.drumRepeatHeldPad[track] >= 0) {
+        S.drumRepeatLatched[track] = true;
+        if (typeof deps.host_module_set_param === 'function')
+            S.pendingDefaultSetParams.push({ key: 't' + track + '_drum_repeat_latched', val: '1' });
+    }
+}
+
+export function handleDrumRepeatLoopTapRelease(S, loopTapTicks) {
+    if (S.loopTapUnlatchTrack < 0) return false;
+
+    const track = S.loopTapUnlatchTrack;
+    const isTap = (S.tickCount - S.loopPressTick) < loopTapTicks;
+    S.loopTapUnlatchTrack = -1;
+    if (!isTap) return false;
+
+    let handled = false;
+    if (S.drumRepeatLatched[track]) {
+        S.drumRepeatLatched[track] = false;
+        S.drumRepeatHeldPad[track] = -1;
+        S.drumRepeatHeldPadsStack[track].length = 0;
+        S.pendingDefaultSetParams.push({ key: 't' + track + '_drum_repeat_stop', val: '1' });
+        handled = true;
+    }
+    if (S.drumRepeat2LatchedLanes[track].size > 0) {
+        S.drumRepeat2LatchedLanes[track].clear();
+        S.pendingDefaultSetParams.push({ key: 't' + track + '_drum_repeat2_stop', val: '1' });
+        handled = true;
+    }
+    return handled;
+}

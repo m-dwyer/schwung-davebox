@@ -132,7 +132,10 @@ import {
     handleDrumRepeatGatePad,
     handleDrumRepeatPadAftertouch,
     handleDrumRepeatRatePadPress,
-    handleDrumRepeatRatePadRelease
+    handleDrumRepeatRatePadRelease,
+    prepareDrumRepeatLoopPress,
+    latchHeldDrumRepeatsOnLoopPress,
+    handleDrumRepeatLoopTapRelease
 } from './ui_drum_repeat_workflows.mjs';
 import {
     runDefaultSetParamDrain,
@@ -7603,14 +7606,7 @@ function _onCC_buttons(d1, d2) {
              * reference once latched, so we must allow that case (latched +
              * no fresh press = the unlatch gesture we want). Rpt2 uses two
              * separate sets (held vs latched) so its check is simpler. */
-            S.loopTapUnlatchTrack = -1;
-            const _rpt1FreshHold = S.drumRepeatHeldPad[_lrt] >= 0 && !S.drumRepeatLatched[_lrt];
-            const _rpt2FreshHold = S.drumRepeat2HeldLanes[_lrt].size > 0;
-            if (S.trackPadMode[_lrt] === PAD_MODE_DRUM &&
-                !_rpt1FreshHold && !_rpt2FreshHold &&
-                S.liveActiveNotes.size === 0) {
-                S.loopTapUnlatchTrack = _lrt;
-            }
+            prepareDrumRepeatLoopPress(S, _lrt, S.trackPadMode[_lrt] === PAD_MODE_DRUM, S.liveActiveNotes.size);
             /* Delete+Loop on auto bank: reset active lane's loop/res/zoom to clip defaults */
             if (S.deleteHeld && S.activeBank === 6 && S.trackPadMode[_lrt] !== PAD_MODE_DRUM) {
                 var _rac = effectiveClip(_lrt);
@@ -7664,30 +7660,7 @@ function _onCC_buttons(d1, d2) {
                     host_module_set_param('t' + _lrt + '_tarp_clear_latched', '1');
                 S.tarpHeldNotes[_lrt].clear();
             }
-            if (S.drumPerformMode[_lrt] === 2) {
-                S.rpt2LoopPadUsed = false;
-                if (S.drumRepeat2HeldLanes[_lrt].size > 0) {
-                    for (const _ll of S.drumRepeat2HeldLanes[_lrt]) {
-                        S.drumRepeat2LatchedLanes[_lrt].add(_ll);
-                    }
-                    /* Phase 1 / Bundle 2C-Rpt2: one atomic DSP push for all
-                     * currently-held lanes. A per-lane loop here would coalesce
-                     * (same set_param key, different values) — only the last
-                     * lane would land. The DSP handler ORs active|pending into
-                     * the latched bitmask. */
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + _lrt + '_drum_repeat2_latch_held', '1');
-                    S.rpt2LoopPadUsed = true;
-                }
-            } else if (S.drumRepeatHeldPad[_lrt] >= 0) {
-                S.drumRepeatLatched[_lrt] = true;
-                /* Phase 1 / Bundle 2C-Rpt1: also push DSP-side latched bit
-                 * for parity (used by audio-thread unlatch-tap detection in
-                 * drum_pad_event). Rpt1's release handler is still JS-driven
-                 * so this isn't strictly required, but keeps DSP in sync. */
-                if (typeof host_module_set_param === 'function')
-                    S.pendingDefaultSetParams.push({ key: 't' + _lrt + '_drum_repeat_latched', val: '1' });
-            }
+            latchHeldDrumRepeatsOnLoopPress(S, { host_module_set_param }, _lrt);
             S.heldStepBtn        = -1;
             S.heldStep           = -1;
             S.heldStepNotes      = [];
@@ -7707,21 +7680,7 @@ function _onCC_buttons(d1, d2) {
             /* Tap-loop-alone: unlatch all latched repeats on active drum track.
              * Eligibility was snapshotted at press (no pads/lanes held + drum
              * track). A long hold disqualifies (treated like a gesture timeout). */
-            if (S.loopTapUnlatchTrack >= 0 &&
-                (S.tickCount - S.loopPressTick) < LOOP_TAP_TICKS) {
-                const _ut = S.loopTapUnlatchTrack;
-                if (S.drumRepeatLatched[_ut]) {
-                    S.drumRepeatLatched[_ut] = false;
-                    S.drumRepeatHeldPad[_ut] = -1;
-                    S.drumRepeatHeldPadsStack[_ut].length = 0;
-                    S.pendingDefaultSetParams.push({ key: 't' + _ut + '_drum_repeat_stop', val: '1' });
-                }
-                if (S.drumRepeat2LatchedLanes[_ut].size > 0) {
-                    S.drumRepeat2LatchedLanes[_ut].clear();
-                    S.pendingDefaultSetParams.push({ key: 't' + _ut + '_drum_repeat2_stop', val: '1' });
-                }
-            }
-            S.loopTapUnlatchTrack = -1;
+            handleDrumRepeatLoopTapRelease(S, LOOP_TAP_TICKS);
         }
         forceRedraw();
     }
