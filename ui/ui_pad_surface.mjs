@@ -93,6 +93,59 @@ export function handleDrumVelocityPadPress(S, deps, track, padIdx, target) {
     return true;
 }
 
+export function handleDrumLanePadPress(S, deps, track, padIdx, rawVelocity, target) {
+    if (!target || target.kind !== 'lane') return false;
+
+    const lane = target.lane;
+    deps.setActiveDrumLane(track, lane);
+    deps.syncDrumLaneSteps(track, lane);
+    deps.refreshDrumLaneBankParams(track, lane);
+
+    if (S.moveCoRunTrack >= 0) {
+        deps.padPitch[padIdx] = 0xFF;
+        deps.forceRedraw();
+        return true;
+    }
+
+    const vel = deps.effectiveVelocity(rawVelocity);
+    const laneNote = S.drumLaneNote[track][lane];
+    deps.liveSendNote(track, 0x90, laneNote, vel);
+    deps.padPitch[padIdx] = laneNote;
+    deps.padPressTick[padIdx] = S.tickCount;
+    S.liveActiveNotes.add(laneNote);
+
+    if (S.recordArmed && !S.recordCountingIn && track === S.recordArmedTrack) {
+        const tvo = S.trackVelOverride[track];
+        const recVel = tvo > 0 ? tvo : vel;
+        deps.drumRecNoteOns.push({ track: track, laneNote: laneNote, vel: recVel });
+        S.pendingDrumLaneResync      = 3;
+        S.pendingDrumLaneResyncTrack = track;
+        S.pendingDrumLaneResyncLane  = lane;
+    }
+
+    if (S.recordArmed && S.recordCountingIn && track === S.recordArmedTrack) {
+        const tvo = S.trackVelOverride[track];
+        const recVel = tvo > 0 ? tvo : vel;
+        S.pendingPrerollNote = {
+            track: track,
+            lane: lane,
+            laneNote: laneNote,
+            vel: recVel,
+            isDrum: true,
+            pressedAtTick: S.tickCount,
+            countInStart: S.countInStartTick
+        };
+    }
+
+    if (S.drumPerformMode[track] === 1 && (S.drumRepeatHeldPad[track] >= 0 || S.drumRepeatLatched[track])) {
+        if (typeof deps.host_module_set_param === 'function' && !S.dspInboundEnabled)
+            deps.host_module_set_param('t' + track + '_drum_repeat_lane', String(lane));
+    }
+
+    deps.forceRedraw();
+    return true;
+}
+
 export function updatePadNoteMap(S, deps) {
     const t = S.activeTrack;
     if (S.trackPadMode[t] === deps.PAD_MODE_DRUM) {

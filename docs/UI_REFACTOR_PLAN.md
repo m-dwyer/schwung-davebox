@@ -269,6 +269,8 @@ Candidate 3:
 - Moved drum velocity-pad press behavior into `ui_pad_surface.mjs` as
   `handleDrumVelocityPadPress()`, covering live preview, held-step velocity
   writes, and armed-recording resync scheduling.
+- Moved normal drum lane-pad press behavior into `ui_pad_surface.mjs` as
+  `handleDrumLanePadPress()`, keeping Copy/Mute/Delete workflows in `ui.js`.
 
 Verification:
 

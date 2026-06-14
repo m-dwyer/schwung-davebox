@@ -111,6 +111,7 @@ import {
     createLiveNoteQueues,
     drumPadToLane as padSurfaceDrumPadToLane,
     drumVelZoneToVelocity,
+    handleDrumLanePadPress,
     handleDrumVelocityPadPress,
     queueLiveNoteOff,
     queueLiveNoteOn,
@@ -9733,51 +9734,18 @@ function _onPadPressTrackView(status, d1, d2) {
                     showActionPopup('LANE CLEARED');
                     forceRedraw();
                 } else {
-                    /* Lane pad: select lane, sync its steps and bank params */
-                    setActiveDrumLane(t, lane);
-                    syncDrumLaneSteps(t, lane);
-                    refreshDrumLaneBankParams(t, lane);
-                    if (S.moveCoRunTrack >= 0) {
-                        padPitch[padIdx] = 0xFF;
-                        forceRedraw();
-                    } else {
-                    /* Preview lane note at actual pad velocity */
-                    const vel = effectiveVelocity(d2);
-                    const laneNote = S.drumLaneNote[t][lane];
-                    liveSendNote(t, 0x90, laneNote, vel);
-                    padPitch[padIdx] = laneNote;
-                    padPressTick[padIdx] = S.tickCount;
-                    S.liveActiveNotes.add(laneNote);
-                    /* Record step hit if armed */
-                    if (S.recordArmed && !S.recordCountingIn && t === S.recordArmedTrack) {
-                        const tvo = S.trackVelOverride[t];
-                        const recVel = tvo > 0 ? tvo : vel;
-                        _drumRecNoteOns.push({ track: t, laneNote: laneNote, vel: recVel });
-                        /* Monitor: DSP drum_record_note_on inline-fires live_note_on for
-                         * ROUTE_MOVE; explicit queueLiveNoteOn here would coalesce. */
-                        S.pendingDrumLaneResync      = 3;
-                        S.pendingDrumLaneResyncTrack = t;
-                        S.pendingDrumLaneResyncLane  = lane;
-                    }
-                    /* Pre-roll capture: any press during count-in → deferred to step 0 after transport starts */
-                    if (S.recordArmed && S.recordCountingIn && t === S.recordArmedTrack) {
-                        const tvo = S.trackVelOverride[t];
-                        const recVel = tvo > 0 ? tvo : vel;
-                        S.pendingPrerollNote = { track: t, lane: lane, laneNote: laneNote,
-                                                 vel: recVel, isDrum: true,
-                                                 pressedAtTick: S.tickCount, countInStart: S.countInStartTick };
-                    }
-                    /* Phase 1 / Bundle 2C-Rpt1+Rpt2: lane-swap-while-holding-a-rate-pad.
-                     * On patched Schwung drum_pad_event has called
-                     * drum_repeat_lane_internal on the audio thread (folded
-                     * into Bundle 2C-Rpt2 once drum_lane_page mirror was
-                     * available). Set_param push kept as the stock fallback. */
-                    if (S.drumPerformMode[t] === 1 && (S.drumRepeatHeldPad[t] >= 0 || S.drumRepeatLatched[t])) {
-                        if (typeof host_module_set_param === 'function' && !S.dspInboundEnabled)
-                            host_module_set_param('t' + t + '_drum_repeat_lane', String(lane));
-                    }
-                    forceRedraw();
-                    }
+                    handleDrumLanePadPress(S, {
+                        setActiveDrumLane,
+                        syncDrumLaneSteps,
+                        refreshDrumLaneBankParams,
+                        effectiveVelocity,
+                        liveSendNote,
+                        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+                        forceRedraw,
+                        padPitch,
+                        padPressTick,
+                        drumRecNoteOns: _drumRecNoteOns
+                    }, t, padIdx, d2, drumPadTarget);
                 }
             }
         } else if (S.heldStep >= 0 && !S.shiftHeld) {
