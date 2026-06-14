@@ -364,9 +364,17 @@ Drum repeat workflows:
   `handleDeleteLoopDrumRepeatStop()`, preserving the unconditional drum-track
   gesture swallow/redraw, immediate Rpt1/Rpt2 stop writes, Rpt1 held-pad stack
   cleanup, and Rpt2 latched-lane mirror clearing.
+- Added `ui/ui_latch_workflows.mjs` for the universal latch sweep shared by
+  transport stop and Delete+Play, instead of expanding the drum-repeat workflow
+  interface to cover TARP.
+- Moved `unlatchAllTracks()` into the latch workflow module, preserving Rpt1
+  stop mirror cleanup, Rpt2 per-lane unlatch queueing, TARP latch clearing, and
+  per-track pendingDefaultSetParams ordering for one-per-tick drain behavior.
+- Added focused coverage in `web/tests/integration/latch-workflows.test.ts`.
 
 Verification:
 
+- `pnpm test:node tests/integration/latch-workflows.test.ts`
 - `pnpm test:node tests/integration/drum-repeat-workflows.test.ts`
 - `pnpm test:node tests/integration`
 - `python3 scripts/bundle_ui.py`

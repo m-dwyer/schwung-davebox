@@ -139,6 +139,9 @@ import {
     handleDeleteLoopDrumRepeatStop
 } from './ui_drum_repeat_workflows.mjs';
 import {
+    unlatchAllTracks
+} from './ui_latch_workflows.mjs';
+import {
     runDefaultSetParamDrain,
     runDeferredContentResyncTasks,
     runDeferredDrumNoteOffDrain,
@@ -2707,7 +2710,7 @@ function pollDSP() {
          * latched chords/lanes don't drone with transport dead. Shared
          * helper queues the per-track set_params one-per-tick via
          * pendingDefaultSetParams to avoid same-buffer coalescing. */
-        unlatchAllTracks();
+        unlatchAllTracks(S, NUM_TRACKS);
     }
     S.playingPrev = S.playing;
 
@@ -7677,33 +7680,6 @@ function _onCC_buttons(d1, d2) {
 
 }
 
-/* Universal unlatch sweep — clears Rpt1, Rpt2 latched lanes, and TARP latch
- * chip on every track. Called from both branches of the Delete+Play
- * handler so the gesture leaves UI mirrors and audio in agreement
- * regardless of transport state. DSP-side, tN_tarp_latch=0 invokes
- * tarp_drop_latched()→tarp_silence() to clear held-buffer entries and
- * cancel any sounding TARP note. */
-function unlatchAllTracks() {
-    for (let t = 0; t < NUM_TRACKS; t++) {
-        if (S.drumRepeatLatched[t]) {
-            S.drumRepeatLatched[t] = false;
-            S.drumRepeatHeldPad[t] = -1;
-            S.drumRepeatHeldPadsStack[t].length = 0;
-            S.pendingDefaultSetParams.push({ key: 't' + t + '_drum_repeat_stop', val: '1' });
-        }
-        if (S.drumRepeat2LatchedLanes[t].size > 0) {
-            S.drumRepeat2LatchedLanes[t].forEach(function(lane) {
-                S.pendingDefaultSetParams.push({ key: 't' + t + '_drum_repeat2_lane_off', val: String(lane) });
-            });
-            S.drumRepeat2LatchedLanes[t].clear();
-        }
-        if (S.bankParams[t] && S.bankParams[t][5] && S.bankParams[t][5][7]) {
-            S.bankParams[t][5][7] = 0;
-            S.pendingDefaultSetParams.push({ key: 't' + t + '_tarp_latch', val: '0' });
-        }
-    }
-}
-
 function _onCC_transport(d1, d2) {
     /* Back: close global menu if open; otherwise (with Shift) hide module.
      * Back during co-run never reaches us because Overture opts out of the
@@ -7814,11 +7790,11 @@ function _onCC_transport(d1, d2) {
                         S.trackQueuedClip[t]   = -1;
                     }
                     /* Mirror the playing-branch sweep so LEDs/UI stay in sync with audio panic. */
-                    unlatchAllTracks();
+                    unlatchAllTracks(S, NUM_TRACKS);
                 } else {
                     host_module_set_param('transport', 'deactivate_all');
                     /* Unlatch Rpt1/Rpt2/TARP across all tracks — queued one-per-tick via pendingDefaultSetParams to avoid coalescing */
-                    unlatchAllTracks();
+                    unlatchAllTracks(S, NUM_TRACKS);
                 }
             }
         } else if (S.muteHeld) {
