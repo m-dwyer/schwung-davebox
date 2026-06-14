@@ -225,6 +225,32 @@ Schwung compatibility.
 - For deployed validation, follow `CLAUDE.md`: install JS changes and restart the
   Move stack before reporting behavior done.
 
+## Current Pad Surface Interface
+
+As of 2026-06-15, `ui/ui_pad_surface.mjs` is the module for pad-surface
+performance input and padmap state. Its interface currently owns:
+
+- melodic and drum pad-map construction, including DSP padmap payload creation;
+- live-note queue construction and enqueue helpers;
+- drum pad geometry, velocity-zone conversion, and pad target classification;
+- drum lane selection as a surface operation: select active lane, sync steps,
+  and refresh lane bank params;
+- non-destructive drum performance input: velocity-pad preview, normal lane-pad
+  preview/record/pre-roll behavior, and Capture+lane silent selection.
+
+Do not keep adding unrelated pad behavior to this module. These concerns should
+stay outside the pad surface interface for now:
+
+- destructive drum lane workflows: Delete+lane clear, Copy/Cut/Paste lane,
+  Mute/Solo lane;
+- modal/menu/snapshot/session workflows;
+- rendering, LED policy, and view priority;
+- full tick ordering and DSP mirror drains.
+
+Next likely module: `ui_drum_lane_workflows.mjs` for destructive or workflow-like
+drum lane actions. Its first phases should cover Copy/Cut/Paste lane,
+Mute/Solo lane, and Delete+lane clear separately, each with focused tests.
+
 ## Progress Log
 
 ### 2026-06-15
