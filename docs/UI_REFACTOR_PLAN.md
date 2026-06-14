@@ -343,6 +343,11 @@ Drum repeat workflows:
   `handleDrumRepeat2RightGridPadRelease()`, preserving held-lane cleanup,
   non-latched lane-off, latched-lane continuation, and screen-dirty behavior.
 - Added `ui_drum_repeat_workflows.mjs` to `scripts/bundle_ui.py`.
+- Moved the Rpt1 rate-pad lifecycle into `handleDrumRepeatRatePadPress()` and
+  `handleDrumRepeatRatePadRelease()`, preserving stock-vs-patched Schwung
+  start gating, `drum_repeat_latched` write ordering, Loop-held latch,
+  re-tap-to-unlatch, held-pad stack push/pop, release-side stack resume, queued
+  inactive release removal, and right-grid release swallowing.
 
 Verification:
 

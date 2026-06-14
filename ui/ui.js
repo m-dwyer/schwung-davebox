@@ -127,7 +127,9 @@ import {
     handleDrumRepeat2LanePadPress,
     handleDrumRepeat2LanePadRelease,
     handleDrumRepeat2RightGridPadRelease,
-    handleDrumRepeatGatePad
+    handleDrumRepeatGatePad,
+    handleDrumRepeatRatePadPress,
+    handleDrumRepeatRatePadRelease
 } from './ui_drum_repeat_workflows.mjs';
 import {
     runDefaultSetParamDrain,
@@ -9510,54 +9512,7 @@ function _onPadPressTrackView(status, d1, d2) {
                 const rateIdx = row * 4 + (col - 4);
                 const lane    = S.activeDrumLane[t];
                 const vel     = d2;
-                if (S.drumRepeatLatched[t] && S.drumRepeatHeldPad[t] === padIdx) {
-                    /* Same latched pad pressed again: unlatch and stop.
-                     * Phase 1 / Bundle 2C-Rpt1: on patched Schwung, DSP
-                     * drum_pad_event detects the same gesture synchronously
-                     * on the audio thread (reads tr->drum_repeat_latched
-                     * mirror) and calls drum_repeat_stop_internal — closes
-                     * the JS-tick race that would otherwise fire one extra
-                     * repeat at fast rates. The set_param below stays as
-                     * idempotent backstop + stock-Schwung path. */
-                    S.drumRepeatLatched[t]  = false;
-                    S.drumRepeatHeldPad[t]  = -1;
-                    S.drumRepeatHeldPadsStack[t].length = 0;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_drum_repeat_stop', '1');
-                } else {
-                    /* New rate or held: push previous held pad so release can resume it */
-                    if (S.drumRepeatHeldPad[t] >= 0 && !S.drumRepeatLatched[t]) {
-                        const _pp = S.drumRepeatHeldPad[t];
-                        const _pr = Math.floor(_pp / 8) * 4 + (_pp % 8) - 4;
-                        S.drumRepeatHeldPadsStack[t].push({ padIdx: _pp, rateIdx: _pr, vel: S.drumRepeatHeldPadVel[t] });
-                    }
-                    S.drumRepeatHeldPad[t]    = padIdx;
-                    S.drumRepeatHeldPadVel[t] = vel;
-                    S.drumRepeatLatched[t]    = S.loopHeld;
-                    if (typeof host_module_set_param === 'function') {
-                        /* Phase 1 / Bundle 2C-Rpt1: on patched Schwung the
-                         * audio-thread drum_pad_event has already called
-                         * drum_repeat_start_internal for this press. Firing
-                         * the set_param here too would re-prime phase=0
-                         * after the first hit has already played, producing
-                         * an audible double-trigger. Gate to stock-only.
-                         * The release-side stack-resume drum_repeat_start
-                         * push (elsewhere in this file) is NOT gated — DSP
-                         * doesn't classify release events, so JS owns that
-                         * path on both stock and patched. */
-                        if (!S.dspInboundEnabled)
-                            host_module_set_param('t' + t + '_drum_repeat_start', lane + ' ' + rateIdx + ' ' + vel);
-                        /* Latched flag — JS is authoritative DSP-side after
-                         * the 2C-Rpt2 fix removed the defensive clear in
-                         * drum_repeat_start_internal. Push BOTH 0 and 1 so
-                         * a rate-switch-while-latched-without-Loop (JS sets
-                         * drumRepeatLatched=false) correctly clears the bit.
-                         * Lets drum_pad_event detect re-tap-to-unlatch on
-                         * the audio thread with zero JS-tick race. */
-                        host_module_set_param('t' + t + '_drum_repeat_latched', S.loopHeld ? '1' : '0');
-                    }
-                }
-                S.screenDirty = true;
+                handleDrumRepeatRatePadPress(S, createDrumRepeatWorkflowDeps(), t, padIdx, rateIdx, lane, vel);
                 return;
             } else if (col >= 4 && row >= 2) {
                 /* Gate mask pad (right side, top 2 rows) */
@@ -10853,26 +10808,7 @@ function _onPadRelease(status, d1, d2) {
         /* Repeat mode: swallow all right-grid (col 4-7) releases; stop or resume prior rate */
         if (S.trackPadMode[t] === PAD_MODE_DRUM && S.drumPerformMode[t] === 1 &&
                 (padIdx % 8) >= 4) {
-            if (S.drumRepeatHeldPad[t] === padIdx && !S.drumRepeatLatched[t]) {
-                const _prev = S.drumRepeatHeldPadsStack[t].length > 0
-                    ? S.drumRepeatHeldPadsStack[t].pop() : null;
-                if (_prev) {
-                    /* Resume the previously held rate pad */
-                    S.drumRepeatHeldPad[t] = _prev.padIdx;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_drum_repeat_start',
-                            S.activeDrumLane[t] + ' ' + _prev.rateIdx + ' ' + _prev.vel);
-                } else {
-                    S.drumRepeatHeldPad[t] = -1;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_drum_repeat_stop', '1');
-                }
-            } else if (S.drumRepeatHeldPad[t] !== padIdx) {
-                /* A queued-but-not-yet-active pad released — remove from stack */
-                const _si = S.drumRepeatHeldPadsStack[t].findIndex(e => e.padIdx === padIdx);
-                if (_si >= 0) S.drumRepeatHeldPadsStack[t].splice(_si, 1);
-            }
-            S.screenDirty = true;
+            handleDrumRepeatRatePadRelease(S, createDrumRepeatWorkflowDeps(), t, padIdx, S.activeDrumLane[t]);
             return;
         }
         /* Rpt2 mode: lane pad release — stop only if not latched */

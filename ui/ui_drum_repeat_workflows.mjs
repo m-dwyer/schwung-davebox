@@ -1,3 +1,55 @@
+export function handleDrumRepeatRatePadPress(S, deps, track, padIdx, rateIdx, lane, velocity) {
+    if (S.drumRepeatLatched[track] && S.drumRepeatHeldPad[track] === padIdx) {
+        S.drumRepeatLatched[track]  = false;
+        S.drumRepeatHeldPad[track]  = -1;
+        S.drumRepeatHeldPadsStack[track].length = 0;
+        if (typeof deps.host_module_set_param === 'function')
+            deps.host_module_set_param('t' + track + '_drum_repeat_stop', '1');
+    } else {
+        if (S.drumRepeatHeldPad[track] >= 0 && !S.drumRepeatLatched[track]) {
+            const prevPad = S.drumRepeatHeldPad[track];
+            const prevRate = Math.floor(prevPad / 8) * 4 + (prevPad % 8) - 4;
+            S.drumRepeatHeldPadsStack[track].push({
+                padIdx: prevPad,
+                rateIdx: prevRate,
+                vel: S.drumRepeatHeldPadVel[track]
+            });
+        }
+        S.drumRepeatHeldPad[track]    = padIdx;
+        S.drumRepeatHeldPadVel[track] = velocity;
+        S.drumRepeatLatched[track]    = S.loopHeld;
+        if (typeof deps.host_module_set_param === 'function') {
+            if (!S.dspInboundEnabled)
+                deps.host_module_set_param('t' + track + '_drum_repeat_start', lane + ' ' + rateIdx + ' ' + velocity);
+            deps.host_module_set_param('t' + track + '_drum_repeat_latched', S.loopHeld ? '1' : '0');
+        }
+    }
+    S.screenDirty = true;
+    return true;
+}
+
+export function handleDrumRepeatRatePadRelease(S, deps, track, padIdx, lane) {
+    if (S.drumRepeatHeldPad[track] === padIdx && !S.drumRepeatLatched[track]) {
+        const prev = S.drumRepeatHeldPadsStack[track].length > 0
+            ? S.drumRepeatHeldPadsStack[track].pop() : null;
+        if (prev) {
+            S.drumRepeatHeldPad[track] = prev.padIdx;
+            if (typeof deps.host_module_set_param === 'function')
+                deps.host_module_set_param('t' + track + '_drum_repeat_start',
+                    lane + ' ' + prev.rateIdx + ' ' + prev.vel);
+        } else {
+            S.drumRepeatHeldPad[track] = -1;
+            if (typeof deps.host_module_set_param === 'function')
+                deps.host_module_set_param('t' + track + '_drum_repeat_stop', '1');
+        }
+    } else if (S.drumRepeatHeldPad[track] !== padIdx) {
+        const stackIdx = S.drumRepeatHeldPadsStack[track].findIndex(function(e) { return e.padIdx === padIdx; });
+        if (stackIdx >= 0) S.drumRepeatHeldPadsStack[track].splice(stackIdx, 1);
+    }
+    S.screenDirty = true;
+    return true;
+}
+
 export function handleDrumRepeatGatePad(S, deps, track, lane, step) {
     if (step < 0 || step >= 8) return false;
 
