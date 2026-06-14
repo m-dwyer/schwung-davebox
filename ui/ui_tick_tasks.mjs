@@ -51,6 +51,21 @@ export function runDeferredDrumNoteOffDrain(deps) {
     }
 }
 
+export function runExternalRouteQueueDrain(S, deps) {
+    if (S.extSendAsyncEnabled || typeof deps.host_module_get_param !== 'function') return;
+    const eq = deps.host_module_get_param('ext_queue');
+    if (!eq || eq.length === 0) return;
+    const msgs = eq.split(';');
+    for (let mi = 0; mi < msgs.length; mi++) {
+        const p = msgs[mi].split(' ');
+        if (p.length < 3) continue;
+        const s = parseInt(p[0], 10), d1 = parseInt(p[1], 10), d2 = parseInt(p[2], 10);
+        const cin = (s >> 4) & 0x0F;
+        if (typeof deps.move_midi_external_send === 'function')
+            deps.move_midi_external_send([cin, s, d1, d2]);
+    }
+}
+
 export function runDefaultSetParamDrain(S, deps) {
     /* Drain first-run default set_params one per tick, after state is fully settled.
      * clearDrainHold defers the drain past the on_midi-context buffer where

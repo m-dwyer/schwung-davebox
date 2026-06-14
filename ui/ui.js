@@ -117,6 +117,7 @@ import {
     runDeferredContentResyncTasks,
     runDeferredDrumNoteOffDrain,
     runEndOfTickPersistenceTasks,
+    runExternalRouteQueueDrain,
     runLiveNoteDrain,
     runMoveCoRunTickTasks
 } from './ui_tick_tasks.mjs';
@@ -5616,20 +5617,10 @@ function _tickImpl() {
      * directly and the shim's ovext_worker thread drains its own ring off the
      * audio thread, so ext_queue stays empty. Remove the gate (and the whole
      * block) when patches upstreamed. */
-    if (!S.extSendAsyncEnabled && typeof host_module_get_param === 'function') {
-        const eq = host_module_get_param('ext_queue');
-        if (eq && eq.length > 0) {
-            const msgs = eq.split(';');
-            for (let mi = 0; mi < msgs.length; mi++) {
-                const p = msgs[mi].split(' ');
-                if (p.length < 3) continue;
-                const s = parseInt(p[0], 10), d1 = parseInt(p[1], 10), d2 = parseInt(p[2], 10);
-                const cin = (s >> 4) & 0x0F;
-                if (typeof move_midi_external_send === 'function')
-                    move_midi_external_send([cin, s, d1, d2]);
-            }
-        }
-    }
+    runExternalRouteQueueDrain(S, {
+        host_module_get_param: (typeof host_module_get_param === 'function') ? host_module_get_param : null,
+        move_midi_external_send: (typeof move_midi_external_send === 'function') ? move_midi_external_send : null
+    });
 
     /* Clear CC step-edit active flag once the step is released */
     if (S.ccStepEditActive && S.heldStep < 0)

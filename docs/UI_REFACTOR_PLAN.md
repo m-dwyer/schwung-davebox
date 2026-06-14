@@ -241,6 +241,9 @@ Candidate 1:
   tick-loop drain.
 - Moved deferred drum tap note-off draining into `ui_tick_tasks.mjs` as
   `runDeferredDrumNoteOffDrain()`.
+- Moved external MIDI route queue draining into `ui_tick_tasks.mjs` as
+  `runExternalRouteQueueDrain()`, preserving the patched-Schwung async-send
+  bypass.
 
 Candidate 3:
 
