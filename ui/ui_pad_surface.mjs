@@ -45,6 +45,20 @@ export function drumVelZoneToVelocity(zone) {
     return Math.round((zone + 1) * 127 / 16);
 }
 
+export function resolveDrumPadTarget(padIdx, lanePage, drumLanes) {
+    const velZone = drumPadToVelZone(padIdx);
+    if (velZone >= 0) {
+        return {
+            kind: 'velocity',
+            zone: velZone,
+            velocity: drumVelZoneToVelocity(velZone)
+        };
+    }
+    const lane = drumPadToLane(padIdx, lanePage);
+    if (lane >= 0 && lane < drumLanes) return { kind: 'lane', lane };
+    return { kind: 'none' };
+}
+
 export function updatePadNoteMap(S, deps) {
     const t = S.activeTrack;
     if (S.trackPadMode[t] === deps.PAD_MODE_DRUM) {

@@ -110,10 +110,10 @@ import {
     applyPadNoteMap,
     createLiveNoteQueues,
     drumPadToLane as padSurfaceDrumPadToLane,
-    drumPadToVelZone,
     drumVelZoneToVelocity,
     queueLiveNoteOff,
-    queueLiveNoteOn
+    queueLiveNoteOn,
+    resolveDrumPadTarget
 } from './ui_pad_surface.mjs';
 import {
     runDefaultSetParamDrain,
@@ -9646,14 +9646,15 @@ function _onPadPressTrackView(status, d1, d2) {
         /* Drum mode pad handling */
         if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && (!S.shiftHeld || S.muteHeld || S.copyHeld)) {
             const t = S.activeTrack;
-            const lane = drumPadToLane(padIdx);
-            const velZone = drumPadToVelZone(padIdx);
+            const drumPadTarget = resolveDrumPadTarget(padIdx, S.drumLanePage[t], DRUM_LANES);
+            const lane = drumPadTarget.kind === 'lane' ? drumPadTarget.lane : -1;
+            const velZone = drumPadTarget.kind === 'velocity' ? drumPadTarget.zone : -1;
             if (velZone >= 0) {
                 /* Velocity pad: which pad determines the zone; zone determines velocity.
                  * Pad pressure is ignored — zone vel used for monitoring, step-edit, recording. */
                 S.drumLastVelZone[t] = velZone;
                 S.drumVelZoneArmed[t] = true;
-                const zoneVel  = drumVelZoneToVelocity(velZone);
+                const zoneVel  = drumPadTarget.velocity;
                 const lane_vp  = S.activeDrumLane[t];
                 const laneNote = S.drumLaneNote[t][lane_vp];
                 liveSendNote(t, 0x90, laneNote, zoneVel, true);

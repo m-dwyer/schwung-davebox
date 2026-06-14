@@ -263,6 +263,9 @@ Candidate 3:
   `drumPadToLane()` and `drumPadToVelZone()`.
 - Moved drum velocity-zone conversion into `ui_pad_surface.mjs` as
   `drumVelZoneToVelocity()`.
+- Added `resolveDrumPadTarget()` to `ui_pad_surface.mjs` so drum pad callers can
+  classify lane, velocity-zone, and invalid lane-page targets through one
+  interface.
 
 Verification:
 
