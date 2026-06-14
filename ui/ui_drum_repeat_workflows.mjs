@@ -146,6 +146,23 @@ export function handleDrumRepeat2LaneAftertouch(S, deps, track, lane, pressure) 
     return true;
 }
 
+export function handleDeleteLoopDrumRepeatStop(S, deps, track) {
+    if (S.drumPerformMode[track] === 1 && S.drumRepeatLatched[track]) {
+        S.drumRepeatLatched[track] = false;
+        S.drumRepeatHeldPad[track] = -1;
+        S.drumRepeatHeldPadsStack[track].length = 0;
+        if (typeof deps.host_module_set_param === 'function')
+            deps.host_module_set_param('t' + track + '_drum_repeat_stop', '1');
+    } else if (S.drumPerformMode[track] === 2 && S.drumRepeat2LatchedLanes[track].size > 0) {
+        if (typeof deps.host_module_set_param === 'function')
+            deps.host_module_set_param('t' + track + '_drum_repeat2_stop', '1');
+        S.drumRepeat2LatchedLanes[track].clear();
+    }
+
+    deps.forceRedraw();
+    return true;
+}
+
 export function handleDrumRepeat2RightGridPadRelease(S) {
     S.screenDirty = true;
     return true;

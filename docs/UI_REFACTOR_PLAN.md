@@ -360,8 +360,13 @@ Drum repeat workflows:
   `handleDrumRepeatLoopTapRelease()`, preserving tap-unlatch eligibility,
   Rpt2 held-lanes-to-latched promotion through `tN_drum_repeat2_latch_held`,
   Rpt1 pending-default latch writes, and Rpt1/Rpt2 pending-default stop ordering.
+- Moved Track View Delete+Loop active drum-repeat stop into
+  `handleDeleteLoopDrumRepeatStop()`, preserving the unconditional drum-track
+  gesture swallow/redraw, immediate Rpt1/Rpt2 stop writes, Rpt1 held-pad stack
+  cleanup, and Rpt2 latched-lane mirror clearing.
 
 Verification:
 
+- `pnpm test:node tests/integration/drum-repeat-workflows.test.ts`
 - `pnpm test:node tests/integration`
 - `python3 scripts/bundle_ui.py`

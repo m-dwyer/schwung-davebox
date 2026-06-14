@@ -135,7 +135,8 @@ import {
     handleDrumRepeatRatePadRelease,
     prepareDrumRepeatLoopPress,
     latchHeldDrumRepeatsOnLoopPress,
-    handleDrumRepeatLoopTapRelease
+    handleDrumRepeatLoopTapRelease,
+    handleDeleteLoopDrumRepeatStop
 } from './ui_drum_repeat_workflows.mjs';
 import {
     runDefaultSetParamDrain,
@@ -7623,18 +7624,7 @@ function _onCC_buttons(d1, d2) {
             }
             /* Delete+Loop: unconditionally stop active drum repeat latch */
             if (S.deleteHeld && S.trackPadMode[_lrt] === PAD_MODE_DRUM) {
-                if (S.drumPerformMode[_lrt] === 1 && S.drumRepeatLatched[_lrt]) {
-                    S.drumRepeatLatched[_lrt] = false;
-                    S.drumRepeatHeldPad[_lrt] = -1;
-                    S.drumRepeatHeldPadsStack[_lrt].length = 0;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + _lrt + '_drum_repeat_stop', '1');
-                } else if (S.drumPerformMode[_lrt] === 2 && S.drumRepeat2LatchedLanes[_lrt].size > 0) {
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + _lrt + '_drum_repeat2_stop', '1');
-                    S.drumRepeat2LatchedLanes[_lrt].clear();
-                }
-                forceRedraw();
+                handleDeleteLoopDrumRepeatStop(S, createDrumRepeatWorkflowDeps(), _lrt);
                 return;
             }
             /* TARP latch shortcut: Loop press while holding a pad on a melodic track */
