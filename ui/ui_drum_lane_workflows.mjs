@@ -73,3 +73,39 @@ export function handleDrumLaneMuteSolo(S, deps, track, lane) {
     deps.forceRedraw();
     return true;
 }
+
+export function handleDrumLaneCopyPaste(S, deps, track, lane) {
+    if (lane < 0 || lane >= deps.DRUM_LANES) return false;
+
+    if (!S.copySrc) {
+        S.copySrc = S.shiftHeld
+            ? { kind: 'cut_drum_lane', track: track, lane: lane }
+            : { kind: 'drum_lane',     track: track, lane: lane };
+        deps.invalidateLEDCache();
+        deps.showActionPopup(S.shiftHeld ? 'CUT' : 'COPIED');
+        return true;
+    }
+
+    if (S.copySrc.kind === 'drum_lane' && S.copySrc.track === track) {
+        deps.copyDrumLane(track, S.copySrc.lane, lane);
+        deps.setActiveDrumLane(track, lane);
+        deps.refreshDrumLaneBankParams(track, lane);
+        deps.invalidateLEDCache();
+        deps.forceRedraw();
+        deps.showActionPopup('PASTED');
+        return true;
+    }
+
+    if (S.copySrc.kind === 'cut_drum_lane' && S.copySrc.track === track) {
+        deps.cutDrumLane(track, S.copySrc.lane, lane);
+        S.copySrc = { kind: 'drum_lane', track: track, lane: lane };
+        deps.setActiveDrumLane(track, lane);
+        deps.refreshDrumLaneBankParams(track, lane);
+        deps.invalidateLEDCache();
+        deps.forceRedraw();
+        deps.showActionPopup('PASTED');
+        return true;
+    }
+
+    return true;
+}

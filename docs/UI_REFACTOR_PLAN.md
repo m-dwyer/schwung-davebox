@@ -317,6 +317,10 @@ Next module:
 - Moved Mute+drum-lane and Shift+Mute+drum-lane behavior into
   `handleDrumLaneMuteSolo()`, preserving modifier consumption, mutually
   exclusive mute/solo mirrors, DSP write ordering, and redraw.
+- Moved Copy/Cut/Paste drum-lane behavior into
+  `handleDrumLaneCopyPaste()`, preserving source arming, same-track paste,
+  cut-to-copy source conversion, incompatible-source swallow semantics, LED
+  invalidation, popup text, lane selection, and bank refresh ordering.
 
 Verification:
 

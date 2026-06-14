@@ -120,6 +120,7 @@ import {
 } from './ui_pad_surface.mjs';
 import {
     handleDeleteDrumLaneClear,
+    handleDrumLaneCopyPaste,
     handleDrumLaneMuteSolo
 } from './ui_drum_lane_workflows.mjs';
 import {
@@ -2067,6 +2068,9 @@ function createDrumLaneWorkflowDeps() {
         DRUM_LANES,
         setActiveDrumLane,
         refreshDrumLaneBankParams,
+        copyDrumLane,
+        cutDrumLane,
+        invalidateLEDCache,
         showActionPopup,
         host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
         forceRedraw
@@ -9669,30 +9673,7 @@ function _onPadPressTrackView(status, d1, d2) {
             if (velZone >= 0) {
                 handleDrumVelocityPadPress(S, createDrumPadPressDeps(), t, padIdx, drumPadTarget);
             } else if (lane >= 0 && lane < DRUM_LANES && S.copyHeld && !S.muteHeld) {
-                /* Copy+lane pad: drum lane copy/cut gesture (same track, active clip) */
-                if (!S.copySrc) {
-                    S.copySrc = S.shiftHeld
-                        ? { kind: 'cut_drum_lane', track: t, lane: lane }
-                        : { kind: 'drum_lane',     track: t, lane: lane };
-                    invalidateLEDCache();
-                    showActionPopup(S.shiftHeld ? 'CUT' : 'COPIED');
-                } else if (S.copySrc.kind === 'drum_lane' && S.copySrc.track === t) {
-                    copyDrumLane(t, S.copySrc.lane, lane);
-                    setActiveDrumLane(t, lane);
-                    refreshDrumLaneBankParams(t, lane);
-                    invalidateLEDCache();
-                    forceRedraw();
-                    showActionPopup('PASTED');
-                } else if (S.copySrc.kind === 'cut_drum_lane' && S.copySrc.track === t) {
-                    cutDrumLane(t, S.copySrc.lane, lane);
-                    S.copySrc = { kind: 'drum_lane', track: t, lane: lane };
-                    setActiveDrumLane(t, lane);
-                    refreshDrumLaneBankParams(t, lane);
-                    invalidateLEDCache();
-                    forceRedraw();
-                    showActionPopup('PASTED');
-                }
-                /* Other S.copySrc kinds or cross-track: swallow */
+                handleDrumLaneCopyPaste(S, createDrumLaneWorkflowDeps(), t, lane);
             } else if (lane >= 0 && lane < DRUM_LANES && S.muteHeld) {
                 handleDrumLaneMuteSolo(S, createDrumLaneWorkflowDeps(), t, lane);
             } else if (lane >= 0 && lane < DRUM_LANES) {
