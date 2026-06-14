@@ -43,6 +43,14 @@ export function runLiveNoteDrain(S, deps) {
     }
 }
 
+export function runDeferredDrumNoteOffDrain(deps) {
+    for (let t = 0; t < deps.NUM_TRACKS; t++) {
+        if (deps.pendingDrumNoteOffs[t].length === 0) continue;
+        const offs = deps.pendingDrumNoteOffs[t].splice(0);
+        for (const pitch of offs) deps.liveSendNote(t, 0x80, pitch, 0);
+    }
+}
+
 export function runDefaultSetParamDrain(S, deps) {
     /* Drain first-run default set_params one per tick, after state is fully settled.
      * clearDrainHold defers the drain past the on_midi-context buffer where

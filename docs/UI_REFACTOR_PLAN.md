@@ -239,6 +239,8 @@ Candidate 1:
   `runLiveNoteDrain()`.
 - Removed the older simple `_drainLiveNotes()` path from `ui.js`, leaving one
   tick-loop drain.
+- Moved deferred drum tap note-off draining into `ui_tick_tasks.mjs` as
+  `runDeferredDrumNoteOffDrain()`.
 
 Candidate 3:
 

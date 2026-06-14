@@ -115,6 +115,7 @@ import {
 import {
     runDefaultSetParamDrain,
     runDeferredContentResyncTasks,
+    runDeferredDrumNoteOffDrain,
     runEndOfTickPersistenceTasks,
     runLiveNoteDrain,
     runMoveCoRunTickTasks
@@ -5604,12 +5605,11 @@ function _tickImpl() {
         pendingLiveNotes
     });
 
-    /* Drain deferred drum tap note-offs */
-    for (let _t = 0; _t < NUM_TRACKS; _t++) {
-        if (pendingDrumNoteOffs[_t].length === 0) continue;
-        const offs = pendingDrumNoteOffs[_t].splice(0);
-        for (const pitch of offs) liveSendNote(_t, 0x80, pitch, 0);
-    }
+    runDeferredDrumNoteOffDrain({
+        NUM_TRACKS,
+        pendingDrumNoteOffs,
+        liveSendNote
+    });
 
     /* Drain ROUTE_EXTERNAL queue: DSP enqueues sequenced notes; JS sends via USB-A.
      * PHASE-2: skipped on patched Schwung — DSP calls g_host->midi_send_external
