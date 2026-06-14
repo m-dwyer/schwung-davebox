@@ -303,6 +303,18 @@ Candidate 3:
   and moved Capture+drum-lane silent selection into `ui_pad_surface.mjs` as
   `handleCaptureDrumLanePress()`.
 
+Next module:
+
+- Added focused workflow coverage in
+  `web/tests/integration/drum-lane-workflows.test.ts`.
+- Added `ui/ui_drum_lane_workflows.mjs` for destructive drum lane workflows.
+- Moved Delete+drum-lane clear mirror/DSP behavior into
+  `handleDeleteDrumLaneClear()`, preserving both legacy call-site variants:
+  the early Delete+lane shortcut keeps undo marking and `LANE`/`CLEARED`,
+  while the in-line drum-mode branch keeps lane-bank refresh and
+  `LANE CLEARED`.
+- Added `ui_drum_lane_workflows.mjs` to `scripts/bundle_ui.py`.
+
 Verification:
 
 - `pnpm test:node tests/integration`

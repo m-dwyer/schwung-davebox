@@ -119,6 +119,9 @@ import {
     resolveDrumPadTarget
 } from './ui_pad_surface.mjs';
 import {
+    handleDeleteDrumLaneClear
+} from './ui_drum_lane_workflows.mjs';
+import {
     runDefaultSetParamDrain,
     runDeferredContentResyncTasks,
     runDeferredDrumNoteOffDrain,
@@ -2055,6 +2058,17 @@ function createDrumPadPressDeps() {
         padPitch,
         padPressTick,
         drumRecNoteOns: _drumRecNoteOns
+    };
+}
+
+function createDrumLaneWorkflowDeps() {
+    return {
+        DRUM_LANES,
+        setActiveDrumLane,
+        refreshDrumLaneBankParams,
+        showActionPopup,
+        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        forceRedraw
     };
 }
 
@@ -9456,21 +9470,10 @@ function _onPadPressTrackView(status, d1, d2) {
         if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && !S.shiftHeld && S.deleteHeld) {
             const t    = S.activeTrack;
             const lane = drumPadToLane(padIdx);
-            if (lane >= 0 && lane < DRUM_LANES) {
-                S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + t + '_l' + lane + '_clear', '1');
-                setActiveDrumLane(t, lane);
-                for (let s = 0; s < 256; s++) S.drumLaneSteps[t][lane][s] = '0';
-                S.drumLaneHasNotes[t][lane] = false;
-                const ac = S.trackActiveClip[t];
-                S.drumClipNonEmpty[t][ac] = false;
-                for (let ol = 0; ol < DRUM_LANES; ol++) {
-                    if (S.drumLaneHasNotes[t][ol]) { S.drumClipNonEmpty[t][ac] = true; break; }
-                }
-                showActionPopup('LANE', 'CLEARED');
-                forceRedraw();
-            }
+            handleDeleteDrumLaneClear(S, createDrumLaneWorkflowDeps(), t, lane, {
+                markUndo: true,
+                popupArgs: ['LANE', 'CLEARED']
+            });
             return;
         }
         /* Drum Repeat mode pad handling (intercepts left 4 cols when S.drumPerformMode===1) */
@@ -9723,20 +9726,10 @@ function _onPadPressTrackView(status, d1, d2) {
                 forceRedraw();
             } else if (lane >= 0 && lane < DRUM_LANES) {
                 if (S.deleteHeld) {
-                    /* Delete + lane pad: clear all steps in this lane */
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_l' + lane + '_clear', '1');
-                    setActiveDrumLane(t, lane);
-                    for (let s = 0; s < 256; s++) S.drumLaneSteps[t][lane][s] = '0';
-                    S.drumLaneHasNotes[t][lane] = false;
-                    const ac = S.trackActiveClip[t];
-                    S.drumClipNonEmpty[t][ac] = false;
-                    for (let ol = 0; ol < DRUM_LANES; ol++) {
-                        if (S.drumLaneHasNotes[t][ol]) { S.drumClipNonEmpty[t][ac] = true; break; }
-                    }
-                    refreshDrumLaneBankParams(t, lane);
-                    showActionPopup('LANE CLEARED');
-                    forceRedraw();
+                    handleDeleteDrumLaneClear(S, createDrumLaneWorkflowDeps(), t, lane, {
+                        refreshBankParams: true,
+                        popupArgs: ['LANE CLEARED']
+                    });
                 } else {
                     handleDrumLanePadPress(S, createDrumPadPressDeps(), t, padIdx, d2, drumPadTarget);
                 }
