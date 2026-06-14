@@ -2041,6 +2041,22 @@ function drumPadToLane(padIdx) {
     return padSurfaceDrumPadToLane(padIdx, S.drumLanePage[S.activeTrack]);
 }
 
+function createDrumPadPressDeps() {
+    return {
+        setActiveDrumLane,
+        syncDrumLaneSteps,
+        refreshDrumLaneBankParams,
+        effectiveVelocity,
+        liveSendNote,
+        stepEntryVelocity,
+        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        forceRedraw,
+        padPitch,
+        padPressTick,
+        drumRecNoteOns: _drumRecNoteOns
+    };
+}
+
 /* Bundle 2A: single setter for S.activeDrumLane that also pushes the
  * value to DSP via tN_active_drum_lane so on_midi.drum_pad_event can
  * fire vel-pad preview at the active lane's note. Replaces every direct
@@ -9652,14 +9668,7 @@ function _onPadPressTrackView(status, d1, d2) {
             const lane = drumPadTarget.kind === 'lane' ? drumPadTarget.lane : -1;
             const velZone = drumPadTarget.kind === 'velocity' ? drumPadTarget.zone : -1;
             if (velZone >= 0) {
-                handleDrumVelocityPadPress(S, {
-                    liveSendNote,
-                    stepEntryVelocity,
-                    host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
-                    padPitch,
-                    padPressTick,
-                    drumRecNoteOns: _drumRecNoteOns
-                }, t, padIdx, drumPadTarget);
+                handleDrumVelocityPadPress(S, createDrumPadPressDeps(), t, padIdx, drumPadTarget);
             } else if (lane >= 0 && lane < DRUM_LANES && S.copyHeld && !S.muteHeld) {
                 /* Copy+lane pad: drum lane copy/cut gesture (same track, active clip) */
                 if (!S.copySrc) {
@@ -9734,18 +9743,7 @@ function _onPadPressTrackView(status, d1, d2) {
                     showActionPopup('LANE CLEARED');
                     forceRedraw();
                 } else {
-                    handleDrumLanePadPress(S, {
-                        setActiveDrumLane,
-                        syncDrumLaneSteps,
-                        refreshDrumLaneBankParams,
-                        effectiveVelocity,
-                        liveSendNote,
-                        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
-                        forceRedraw,
-                        padPitch,
-                        padPressTick,
-                        drumRecNoteOns: _drumRecNoteOns
-                    }, t, padIdx, d2, drumPadTarget);
+                    handleDrumLanePadPress(S, createDrumPadPressDeps(), t, padIdx, d2, drumPadTarget);
                 }
             }
         } else if (S.heldStep >= 0 && !S.shiftHeld) {
