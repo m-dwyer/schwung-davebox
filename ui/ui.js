@@ -111,6 +111,7 @@ import {
     createLiveNoteQueues,
     drumPadToLane as padSurfaceDrumPadToLane,
     drumPadToVelZone,
+    drumVelZoneToVelocity,
     queueLiveNoteOff,
     queueLiveNoteOn
 } from './ui_pad_surface.mjs';
@@ -2080,11 +2081,6 @@ function setDrumLanePage(t, page) {
     arrLp[t] = page;
     if (typeof host_module_set_param === 'function')
         host_module_set_param('t' + t + '_drum_lane_page', String(page));
-}
-
-/** Map velocity zone 0-15 to a MIDI velocity (8…127). */
-function drumVelZoneToVelocity(zone) {
-    return Math.round((zone + 1) * 127 / 16);
 }
 
 /** Sync S.drumClipNonEmpty[t] for all clips — called on track switch and state load. */

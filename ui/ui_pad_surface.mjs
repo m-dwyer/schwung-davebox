@@ -41,6 +41,10 @@ export function drumPadToVelZone(padIdx) {
     return row * 4 + (col - 4);
 }
 
+export function drumVelZoneToVelocity(zone) {
+    return Math.round((zone + 1) * 127 / 16);
+}
+
 export function updatePadNoteMap(S, deps) {
     const t = S.activeTrack;
     if (S.trackPadMode[t] === deps.PAD_MODE_DRUM) {

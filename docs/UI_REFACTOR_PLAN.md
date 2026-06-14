@@ -261,6 +261,8 @@ Candidate 3:
   while leaving the tick-time drain in `ui_tick_tasks.mjs`.
 - Moved drum pad geometry helpers into `ui_pad_surface.mjs` as
   `drumPadToLane()` and `drumPadToVelZone()`.
+- Moved drum velocity-zone conversion into `ui_pad_surface.mjs` as
+  `drumVelZoneToVelocity()`.
 
 Verification:
 
