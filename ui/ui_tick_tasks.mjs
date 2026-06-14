@@ -14,6 +14,35 @@ function rereadMelodicClip(S, deps, track, clip) {
     }
 }
 
+export function runLiveNoteDrain(S, deps) {
+    /* Flush live note batches; one set_param per track so no coalescing.
+     * Defer for 1 tick after any step button event so the step set_param clears
+     * its audio block before live_notes fires. */
+    if (S.tickCount <= S.stepOpTick + 1) return;
+    if (typeof deps.host_module_set_param !== 'function') return;
+    for (let t = 0; t < deps.NUM_TRACKS; t++) {
+        if (deps.pendingLiveNotes[t].length === 0) continue;
+        const evts = deps.pendingLiveNotes[t];
+        deps.pendingLiveNotes[t] = [];
+        const offPitches = new Set();
+        const onPitches  = new Set();
+        for (const e of evts) (e.isOff ? offPitches : onPitches).add(e.pitch);
+        const collide = new Set();
+        for (const p of offPitches) if (onPitches.has(p)) collide.add(p);
+        const parts = [];
+        if (collide.size === 0) {
+            for (const e of evts) if (e.isOff)  parts.push('off ' + e.pitch);
+            for (const e of evts) if (!e.isOff) parts.push('on '  + e.pitch + ' ' + e.vel);
+        } else {
+            for (const e of evts) if (e.isOff  && !collide.has(e.pitch)) parts.push('off ' + e.pitch);
+            for (const e of evts) if (!e.isOff && !collide.has(e.pitch)) parts.push('on '  + e.pitch + ' ' + e.vel);
+            for (const e of evts) if (collide.has(e.pitch))
+                parts.push(e.isOff ? ('off ' + e.pitch) : ('on ' + e.pitch + ' ' + e.vel));
+        }
+        deps.host_module_set_param('t' + t + '_live_notes', parts.join(' '));
+    }
+}
+
 export function runDefaultSetParamDrain(S, deps) {
     /* Drain first-run default set_params one per tick, after state is fully settled.
      * clearDrainHold defers the drain past the on_midi-context buffer where

@@ -106,9 +106,14 @@ import {
     paramPeekInfo
 } from './ui_motion.mjs';
 import {
+    SCALE_INTERVALS,
+    applyPadNoteMap
+} from './ui_pad_surface.mjs';
+import {
     runDefaultSetParamDrain,
     runDeferredContentResyncTasks,
     runEndOfTickPersistenceTasks,
+    runLiveNoteDrain,
     runMoveCoRunTickTasks
 } from './ui_tick_tasks.mjs';
 
@@ -547,23 +552,6 @@ const LOOP_TAP_TICKS  = 40;
 const LOOP_DBLTAP_GAP = 80;
 
 /* Live pad note input — isomorphic 4ths diatonic layout. */
-const SCALE_INTERVALS = [
-    [0, 2, 4, 5, 7, 9, 11],        /*  0 Major           */
-    [0, 2, 3, 5, 7, 8, 10],        /*  1 Minor           */
-    [0, 2, 3, 5, 7, 9, 10],        /*  2 Dorian          */
-    [0, 1, 3, 5, 7, 8, 10],        /*  3 Phrygian        */
-    [0, 2, 4, 6, 7, 9, 11],        /*  4 Lydian          */
-    [0, 2, 4, 5, 7, 9, 10],        /*  5 Mixolydian      */
-    [0, 1, 3, 5, 6, 8, 10],        /*  6 Locrian         */
-    [0, 2, 3, 5, 7, 8, 11],        /*  7 Harmonic Minor  */
-    [0, 2, 3, 5, 7, 9, 11],        /*  8 Melodic Minor   */
-    [0, 2, 4, 7, 9],               /*  9 Pentatonic Major*/
-    [0, 3, 5, 7, 10],              /* 10 Pentatonic Minor*/
-    [0, 3, 5, 6, 7, 10],           /* 11 Blues           */
-    [0, 2, 4, 6, 8, 10],           /* 12 Whole Tone      */
-    [0, 2, 3, 5, 6, 8, 9, 11],     /* 13 Diminished      */
-];
-
 /* Step-edit pitch nudge: move note up/down to next in-scale pitch.
  * When scale-aware is off, shifts by exactly 1 semitone per dir. */
 function scaleNudgeNote(note, dir, key, scale) {
@@ -1976,59 +1964,6 @@ function xposeCommit(candK, candS) {
 }
 
 function computePadNoteMap() {
-    const t = S.activeTrack;
-    if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-        /* Drum mode: left half (cols 0-3) maps to drum lanes via drumPadToLane;
-         * right half (cols 4-7) is velocity zones (no note dispatch).
-         * For each pad we store the corresponding lane's midi_note, or 0xFF
-         * for velocity-zone slots so DSP on_midi skips dispatch (JS still
-         * handles vel-zone arming as state, independent of note routing). */
-        const page = S.drumLanePage[t] | 0;
-        const coRunSilentLeft = (S.moveCoRunTrack >= 0);
-        for (let i = 0; i < 32; i++) {
-            const col = i % 8;
-            if (col >= 4) { S.padNoteMap[i] = 0xFF; continue; }
-            if (coRunSilentLeft) { S.padNoteMap[i] = 0xFF; continue; }
-            const row = Math.floor(i / 8);
-            const lane = page * 16 + row * 4 + col;
-            const note = (lane >= 0 && lane < DRUM_LANES)
-                ? ((S.drumLaneNote[t][lane] | 0) || (DRUM_BASE_NOTE + lane))
-                : 0xFF;
-            S.padNoteMap[i] = note & 0xFF;
-        }
-    } else {
-        /* While a transpose preview is armed, lay the pads out for the CANDIDATE
-         * key/scale (committed padKey/padScale stay put until commit). */
-        const effKey   = S.xposePrevKey   !== null ? S.xposePrevKey   : S.padKey;
-        const effScale = S.xposePrevScale !== null ? S.xposePrevScale : S.padScale;
-        const root = S.padOctave[t] * 12 + effKey;
-        const intervals = SCALE_INTERVALS[effScale] || SCALE_INTERVALS[0];
-        S.padScaleSet.clear();
-        for (let i = 0; i < intervals.length; i++) S.padScaleSet.add(intervals[i]);
-        if (S.padLayoutChromatic[t]) {
-            for (let i = 0; i < 32; i++) {
-                const col = i % 8;
-                const row = Math.floor(i / 8);
-                /* OOB pads (computed pitch < 0 or > 127) get the 0xFF sentinel
-                 * to match drum vel-zone slots. Previously clamped to 0/127,
-                 * which made multiple OOB pads share the same MIDI note → all
-                 * lit when any one was pressed (LED cache keyed on note). */
-                const p = root + col + row * 8;
-                S.padNoteMap[i] = (p < 0 || p > 127) ? 0xFF : p;
-            }
-        } else {
-            const n = intervals.length;
-            for (let i = 0; i < 32; i++) {
-                const col = i % 8;
-                const row = Math.floor(i / 8);
-                const deg = col + row * 3;
-                const oct = Math.floor(deg / n);
-                const semitone = oct * 12 + intervals[deg % n];
-                const p = root + semitone;
-                S.padNoteMap[i] = (p < 0 || p > 127) ? 0xFF : p;
-            }
-        }
-    }
     /* Phase 1: push the resolved active-track map to DSP for audio-thread
      * inbound. DSP only ever indexes pad_note_map[inst->active_track], so
      * pushing the one active track's map on every recompute is sufficient.
@@ -2040,61 +1975,13 @@ function computePadNoteMap() {
      * false, the push is skipped, on_midi (which isn't called on stock anyway)
      * stays dormant, and the JS pendingLiveNotes path keeps working unchanged.
      * Remove this gate when patches upstreamed. */
-    if (S.dspInboundEnabled && typeof host_module_set_param === 'function') {
-        /* JS dispatch today adds S.trackOctave * 12 at the pad-press site
-         * (lines ~6838, ~6909). Phase 1's on_midi reads pad_note_map as-is,
-         * so we bake the runtime octave offset into the pushed payload while
-         * leaving S.padNoteMap itself unshifted (the stock-Schwung fallback
-         * path still adds the offset at dispatch). Drum tracks ignore the
-         * offset (lane midi_notes are fixed). Session View: pads launch
-         * clips — emit all-0xFF so DSP on_midi skips dispatch. Track-view
-         * re-entry triggers another computePadNoteMap() in tick(). */
-        /* PHASE-1: pad dispatch is muted while a modal gesture owns the pad
-         * surface. DSP on_midi skips 0xFF entries, so pushing all-0xFF
-         * suppresses note dispatch without changing on_midi code. State
-         * sources: button-held modifiers (covered by explicit hooks in
-         * _onCC_buttons for zero-latency), dialogs (covered by the
-         * tick()-time muted-edge detector below). Remove the modal-flag
-         * checks when patches upstreamed. See [[project-modal-pad-
-         * interception-regression]]. */
-        const padDispatchMuted = _padDispatchMutedNow();
-        const isDrum = S.trackPadMode[t] === PAD_MODE_DRUM;
-        const octShift = isDrum ? 0 : ((S.trackOctave[t] | 0) * 12);
-        let payload = '';
-        for (let i = 0; i < 32; i++) {
-            let out;
-            if (padDispatchMuted && S.sessionView) {
-                out = 0xFF;
-            } else if (padDispatchMuted) {
-                const p = S.padNoteMap[i];
-                out = (p === 0xFF) ? 0xFF : Math.max(0, Math.min(127, p + octShift));
-            } else {
-                const p = S.padNoteMap[i];
-                out = (p === 0xFF) ? 0xFF : Math.max(0, Math.min(127, p + octShift));
-            }
-            payload += (i ? ' ' : '') + out;
-        }
-        /* The tN_padmap key encodes the active track index — DSP's
-         * tN_padmap handler updates inst->active_track + dsp_inbound_enabled
-         * from it. (Schwung host silently drops module-defined global keys,
-         * so we piggyback signals onto the per-track padmap push.)
-         *
-         * PHASE-2: trailing 33rd token = ext_send_async capability flag.
-         * Tells DSP to call g_host->midi_send_external directly for
-         * ROUTE_EXTERNAL instead of pushing to ext_queue. Survives DSP
-         * recreate because computePadNoteMap re-runs after pendingDspSync.
-         * Stock Schwung: extSendAsyncEnabled=false, token is "0", DSP keeps
-         * the ext_queue path. Remove when patches upstreamed. */
-        payload += ' ' + (S.extSendAsyncEnabled ? 1 : 0);
-        /* 34th token = pad-dispatch-muted flag. While set, DSP on_midi skips
-         * drum_pad_event (Rpt1/Rpt2 rate-pad + vel-zone handling) on top of
-         * the existing pad_note_map=0xFF mute. Fixes Shift+bottom-row track
-         * shortcut leaking into Rpt1/Rpt2 latch on the prior active track. */
-        payload += ' ' + (padDispatchMuted ? 1 : 0);
-        payload += ' ' + (S.deleteHeld ? 1 : 0);
-        host_module_set_param('t' + t + '_padmap', payload);
-        S.lastPushedMuted = padDispatchMuted;
-    }
+    applyPadNoteMap(S, {
+        PAD_MODE_DRUM,
+        DRUM_LANES,
+        DRUM_BASE_NOTE,
+        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        padDispatchMuted: _padDispatchMutedNow
+    });
 }
 
 /* Drum helpers --------------------------------------------------------------- */
@@ -3331,20 +3218,6 @@ function applyBankParam(t, bankIdx, knobIdx, val) {
  * from any number of onMidiMessage calls; tick() drains once per audio
  * buffer into one set_param per track. Cost: up to ~10 ms (one tick) of
  * live-monitor latency. Benefit: chord-press survives intact. */
-function _drainLiveNotes() {
-    if (typeof host_module_set_param !== 'function') return;
-    for (let _t = 0; _t < NUM_TRACKS; _t++) {
-        if (pendingLiveNotes[_t].length === 0) continue;
-        const evts = pendingLiveNotes[_t];
-        pendingLiveNotes[_t] = [];
-        const parts = [];
-        for (const e of evts) {
-            if (e.isOff) parts.push('off ' + e.pitch);
-            else parts.push('on ' + e.pitch + ' ' + e.vel);
-        }
-        host_module_set_param('t' + _t + '_live_notes', parts.join(' '));
-    }
-}
 function queueLiveNoteOn(t, pitch, vel) {
     pendingLiveNotes[t].push({ isOff: false, pitch, vel });
 }
@@ -5635,11 +5508,6 @@ function _tickImpl() {
         }
     }
 
-    /* Drain live-note events queued by onMidiMessage handlers since the last
-     * tick. One set_param per track per tick — survives same-buffer
-     * coalescing of multiple pad presses in one audio buffer. */
-    _drainLiveNotes();
-
     /* Reapply cable-2 channel remap if anything affecting it changed. */
     {
         const _rt = S.activeTrack;
@@ -5734,29 +5602,11 @@ function _tickImpl() {
      * a follow-up off — the note hangs on Move. Pitches with only offs or only
      * ons keep the legacy offs-first sort, which still protects release-before-
      * retrigger semantics across different pitches. */
-    if (S.tickCount > S.stepOpTick + 1) {
-        for (let _t = 0; _t < NUM_TRACKS; _t++) {
-            if (pendingLiveNotes[_t].length === 0) continue;
-            const evts = pendingLiveNotes[_t];
-            pendingLiveNotes[_t] = [];
-            const offPitches = new Set();
-            const onPitches  = new Set();
-            for (const e of evts) (e.isOff ? offPitches : onPitches).add(e.pitch);
-            const collide = new Set();
-            for (const p of offPitches) if (onPitches.has(p)) collide.add(p);
-            const parts = [];
-            if (collide.size === 0) {
-                for (const e of evts) if (e.isOff)  parts.push('off ' + e.pitch);
-                for (const e of evts) if (!e.isOff) parts.push('on '  + e.pitch + ' ' + e.vel);
-            } else {
-                for (const e of evts) if (e.isOff  && !collide.has(e.pitch)) parts.push('off ' + e.pitch);
-                for (const e of evts) if (!e.isOff && !collide.has(e.pitch)) parts.push('on '  + e.pitch + ' ' + e.vel);
-                for (const e of evts) if (collide.has(e.pitch))
-                    parts.push(e.isOff ? ('off ' + e.pitch) : ('on ' + e.pitch + ' ' + e.vel));
-            }
-            host_module_set_param('t' + _t + '_live_notes', parts.join(' '));
-        }
-    }
+    runLiveNoteDrain(S, {
+        NUM_TRACKS,
+        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        pendingLiveNotes
+    });
 
     /* Drain deferred drum tap note-offs */
     for (let _t = 0; _t < NUM_TRACKS; _t++) {
