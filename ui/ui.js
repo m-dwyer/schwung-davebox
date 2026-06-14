@@ -111,6 +111,7 @@ import {
     createLiveNoteQueues,
     drumPadToLane as padSurfaceDrumPadToLane,
     drumVelZoneToVelocity,
+    handleCaptureDrumLanePress,
     handleDrumLanePadPress,
     handleDrumVelocityPadPress,
     queueLiveNoteOff,
@@ -9649,15 +9650,9 @@ function _onPadPressTrackView(status, d1, d2) {
         }
         /* Capture + drum pad: silently select lane without playing a note */
         if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.captureHeld && !S.muteHeld && !S.copyHeld && !S.deleteHeld) {
-            const _sl_lane = drumPadToLane(padIdx);
-            if (_sl_lane >= 0 && _sl_lane < DRUM_LANES) {
-                const t = S.activeTrack;
-                S.captureUsedAsModifier = true;
-                padPitch[padIdx] = 0xFF;
-                setActiveDrumLane(t, _sl_lane);
-                syncDrumLaneSteps(t, _sl_lane);
-                refreshDrumLaneBankParams(t, _sl_lane);
-                forceRedraw();
+            const t = S.activeTrack;
+            const drumPadTarget = resolveDrumPadTarget(padIdx, S.drumLanePage[t], DRUM_LANES);
+            if (handleCaptureDrumLanePress(S, createDrumPadPressDeps(), t, padIdx, drumPadTarget)) {
                 return;
             }
         }

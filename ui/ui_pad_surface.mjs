@@ -59,6 +59,21 @@ export function resolveDrumPadTarget(padIdx, lanePage, drumLanes) {
     return { kind: 'none' };
 }
 
+export function selectDrumLaneSurface(deps, track, lane) {
+    deps.setActiveDrumLane(track, lane);
+    deps.syncDrumLaneSteps(track, lane);
+    deps.refreshDrumLaneBankParams(track, lane);
+}
+
+export function handleCaptureDrumLanePress(S, deps, track, padIdx, target) {
+    if (!target || target.kind !== 'lane') return false;
+    S.captureUsedAsModifier = true;
+    deps.padPitch[padIdx] = 0xFF;
+    selectDrumLaneSurface(deps, track, target.lane);
+    deps.forceRedraw();
+    return true;
+}
+
 export function handleDrumVelocityPadPress(S, deps, track, padIdx, target) {
     if (!target || target.kind !== 'velocity') return false;
 
@@ -97,9 +112,7 @@ export function handleDrumLanePadPress(S, deps, track, padIdx, rawVelocity, targ
     if (!target || target.kind !== 'lane') return false;
 
     const lane = target.lane;
-    deps.setActiveDrumLane(track, lane);
-    deps.syncDrumLaneSteps(track, lane);
-    deps.refreshDrumLaneBankParams(track, lane);
+    selectDrumLaneSurface(deps, track, lane);
 
     if (S.moveCoRunTrack >= 0) {
         deps.padPitch[padIdx] = 0xFF;

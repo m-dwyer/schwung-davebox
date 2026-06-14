@@ -273,6 +273,9 @@ Candidate 3:
   `handleDrumLanePadPress()`, keeping Copy/Mute/Delete workflows in `ui.js`.
 - Added a local `createDrumPadPressDeps()` adapter in `ui.js` so drum pad-surface
   behavior calls share one dependency bundle.
+- Added `selectDrumLaneSurface()` to centralize lane select/sync/refresh work,
+  and moved Capture+drum-lane silent selection into `ui_pad_surface.mjs` as
+  `handleCaptureDrumLanePress()`.
 
 Verification:
 
