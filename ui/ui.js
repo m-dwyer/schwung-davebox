@@ -120,7 +120,8 @@ import {
     runExternalRouteQueueDrain,
     runLiveNoteDrain,
     runMetroNoteOffTask,
-    runMoveCoRunTickTasks
+    runMoveCoRunTickTasks,
+    runPadMapSelfHealTask
 } from './ui_tick_tasks.mjs';
 
 /* ------------------------------------------------------------------ */
@@ -5476,36 +5477,15 @@ function _tickImpl() {
      * caught by explicit hooks (dialogs, ARP-step-edit, knob-touch state).
      * Cheap check — boolean compare. Tick is ~10.6 ms, more than fast
      * enough for non-button-CC modal transitions (dialog open / knob touch). */
-    if (S.dspInboundEnabled) {
-        const _muted = _padDispatchMutedNow();
-        if (_muted !== S.lastPushedMuted) computePadNoteMap();
-        /* Self-heal: every 5 ticks (~50ms), read back DSP's pad_dispatch_muted
-         * via get_param and re-push the padmap if it diverged from JS truth.
-         * Necessary because tN_padmap pushes can be dropped when set_param
-         * loses to shadow_send_midi_to_dsp in the same audio buffer (see
-         * feedback_set_param_coalescing). Without this, an un-mute push lost
-         * to MIDI contention leaves DSP stuck with pad_dispatch_muted=1 and
-         * all pads silent until the user happens to gesture a modifier
-         * (which retriggers computePadNoteMap). Worst-case stuck pad
-         * duration is now ~50ms instead of indefinite. */
-        if ((S.tickCount % 5) === 0 && typeof host_module_get_param === 'function') {
-            const _dspM = host_module_get_param('pad_dispatch_muted');
-            if (_dspM !== null && _dspM !== undefined) {
-                const _dspMi = parseInt(_dspM, 10);
-                const _jsM = _muted ? 1 : 0;
-                if (_dspMi !== _jsM) computePadNoteMap();
-            }
-            const _dspMap0 = host_module_get_param('pad_note_map_0');
-            if (_dspMap0 !== null && _dspMap0 !== undefined) {
-                const _dspMap0i = parseInt(_dspMap0, 10);
-                const _jsMap0 = _muted && S.sessionView ? 0xFF
-                    : Math.max(0, Math.min(127, (S.padNoteMap[0] | 0) +
-                        (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM ? 0 : (S.trackOctave[S.activeTrack] | 0) * 12)));
-                const _expect = S.padNoteMap[0] === 0xFF ? 255 : _jsMap0;
-                if (_dspMap0i !== _expect) computePadNoteMap();
-            }
-        }
-    }
+    /* Self-heal: every 5 ticks (~50ms), read back DSP's pad_dispatch_muted
+     * and pad_note_map_0 via get_param and re-push the padmap if either
+     * diverges from JS truth. */
+    runPadMapSelfHealTask(S, {
+        PAD_MODE_DRUM,
+        host_module_get_param: (typeof host_module_get_param === 'function') ? host_module_get_param : null,
+        padDispatchMuted: _padDispatchMutedNow,
+        computePadNoteMap
+    });
 
     /* Reapply cable-2 channel remap if anything affecting it changed. */
     {

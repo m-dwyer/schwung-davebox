@@ -73,6 +73,29 @@ export function runMetroNoteOffTask(S, deps) {
         deps.move_midi_inject_to_move([0x09, 0x80, 108, 0]);
 }
 
+export function runPadMapSelfHealTask(S, deps) {
+    if (!S.dspInboundEnabled) return;
+    const muted = deps.padDispatchMuted();
+    if (muted !== S.lastPushedMuted) deps.computePadNoteMap();
+    if ((S.tickCount % 5) !== 0 || typeof deps.host_module_get_param !== 'function') return;
+
+    const dspM = deps.host_module_get_param('pad_dispatch_muted');
+    if (dspM !== null && dspM !== undefined) {
+        const dspMi = parseInt(dspM, 10);
+        const jsM = muted ? 1 : 0;
+        if (dspMi !== jsM) deps.computePadNoteMap();
+    }
+    const dspMap0 = deps.host_module_get_param('pad_note_map_0');
+    if (dspMap0 !== null && dspMap0 !== undefined) {
+        const dspMap0i = parseInt(dspMap0, 10);
+        const jsMap0 = muted && S.sessionView ? 0xFF
+            : Math.max(0, Math.min(127, (S.padNoteMap[0] | 0) +
+                (S.trackPadMode[S.activeTrack] === deps.PAD_MODE_DRUM ? 0 : (S.trackOctave[S.activeTrack] | 0) * 12)));
+        const expect = S.padNoteMap[0] === 0xFF ? 255 : jsMap0;
+        if (dspMap0i !== expect) deps.computePadNoteMap();
+    }
+}
+
 export function runDefaultSetParamDrain(S, deps) {
     /* Drain first-run default set_params one per tick, after state is fully settled.
      * clearDrainHold defers the drain past the on_midi-context buffer where

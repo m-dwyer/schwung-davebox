@@ -246,6 +246,8 @@ Candidate 1:
   bypass.
 - Moved scheduled metro note-off injection into `ui_tick_tasks.mjs` as
   `runMetroNoteOffTask()`.
+- Moved patched-Schwung padmap self-heal polling into `ui_tick_tasks.mjs` as
+  `runPadMapSelfHealTask()`.
 
 Candidate 3:
 
