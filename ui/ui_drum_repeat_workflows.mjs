@@ -22,3 +22,36 @@ export function handleDrumRepeatGatePad(S, deps, track, lane, step) {
     deps.forceRedraw();
     return true;
 }
+
+export function handleDrumRepeat2LanePadPress(S, deps, track, lane, padIdx, rawVelocity) {
+    if (lane < 0 || lane >= deps.DRUM_LANES) return false;
+
+    deps.setActiveDrumLane(track, lane);
+    deps.syncDrumLaneSteps(track, lane);
+    deps.refreshDrumLaneBankParams(track, lane);
+
+    if (S.drumRepeat2LatchedLanes[track].has(lane)) {
+        S.drumRepeat2LatchedLanes[track].delete(lane);
+        if (typeof deps.host_module_set_param === 'function' && !S.dspInboundEnabled)
+            deps.host_module_set_param('t' + track + '_drum_repeat2_lane_off', String(lane));
+        if (S.loopHeld) S.rpt2LoopPadUsed = true;
+    } else {
+        S.drumRepeat2HeldLanes[track].add(lane);
+        if (S.loopHeld) {
+            S.drumRepeat2LatchedLanes[track].add(lane);
+            S.rpt2LoopPadUsed = true;
+        }
+        deps.padPitch[padIdx] = -1;
+        if (typeof deps.host_module_set_param === 'function') {
+            if (!S.dspInboundEnabled)
+                deps.host_module_set_param('t' + track + '_drum_repeat2_lane_on', lane + ' ' + rawVelocity);
+            /* Loop-held latch uses one atomic set_param so simultaneous lane
+             * presses do not coalesce different lane payloads under one key. */
+            if (S.loopHeld)
+                deps.host_module_set_param('t' + track + '_drum_repeat2_latch_held', '1');
+        }
+    }
+
+    deps.forceRedraw();
+    return true;
+}

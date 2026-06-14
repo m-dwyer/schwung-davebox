@@ -124,6 +124,7 @@ import {
     handleDrumLaneMuteSolo
 } from './ui_drum_lane_workflows.mjs';
 import {
+    handleDrumRepeat2LanePadPress,
     handleDrumRepeatGatePad
 } from './ui_drum_repeat_workflows.mjs';
 import {
@@ -2082,8 +2083,13 @@ function createDrumLaneWorkflowDeps() {
 
 function createDrumRepeatWorkflowDeps() {
     return {
+        DRUM_LANES,
+        setActiveDrumLane,
+        syncDrumLaneSteps,
+        refreshDrumLaneBankParams,
         host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
-        forceRedraw
+        forceRedraw,
+        padPitch
     };
 }
 
@@ -9592,39 +9598,7 @@ function _onPadPressTrackView(status, d1, d2) {
                  * Sets) is parallel state for OLED display — stays correct
                  * because JS and DSP run the same toggle logic. */
                 const lane = drumPadToLane(padIdx);
-                if (lane >= 0 && lane < DRUM_LANES) {
-                    setActiveDrumLane(t, lane);
-                    syncDrumLaneSteps(t, lane);
-                    refreshDrumLaneBankParams(t, lane);
-                    if (S.drumRepeat2LatchedLanes[t].has(lane)) {
-                        S.drumRepeat2LatchedLanes[t].delete(lane);
-                        if (typeof host_module_set_param === 'function' && !S.dspInboundEnabled)
-                            host_module_set_param('t' + t + '_drum_repeat2_lane_off', String(lane));
-                        if (S.loopHeld) S.rpt2LoopPadUsed = true;
-                    } else {
-                        S.drumRepeat2HeldLanes[t].add(lane);
-                        if (S.loopHeld) { S.drumRepeat2LatchedLanes[t].add(lane); S.rpt2LoopPadUsed = true; }
-                        padPitch[padIdx] = -1;
-                        if (typeof host_module_set_param === 'function') {
-                            if (!S.dspInboundEnabled)
-                                host_module_set_param('t' + t + '_drum_repeat2_lane_on', lane + ' ' + d2);
-                            /* Phase 1 / Bundle 2C-Rpt2: Loop-held latch via
-                             * the atomic latch_held set_param (handler ORs
-                             * active|pending into latched). Avoids the
-                             * coalescing trap of per-lane edge pushes: when
-                             * multiple lanes are pressed simultaneously with
-                             * Loop held, each press would push the same
-                             * set_param key with a different lane payload
-                             * → only the last lane would land. Non-Loop
-                             * engagement needs no push (latched bit is 0
-                             * by invariant: previously-latched lanes go
-                             * through the unlatch path, not the engage path). */
-                            if (S.loopHeld)
-                                host_module_set_param('t' + t + '_drum_repeat2_latch_held', '1');
-                        }
-                    }
-                    forceRedraw();
-                }
+                handleDrumRepeat2LanePadPress(S, createDrumRepeatWorkflowDeps(), t, lane, padIdx, d2);
                 return;
             }
         }

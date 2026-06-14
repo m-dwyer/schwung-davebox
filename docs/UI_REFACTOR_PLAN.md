@@ -333,6 +333,11 @@ Drum repeat workflows:
   `handleDrumRepeatGatePad()`, preserving Delete+gate defaults reset,
   Loop+gate cycle-fill behavior, tap gate toggles, DSP write payloads, and
   redraw ordering.
+- Moved the Rpt2 lane-pad press workflow into
+  `handleDrumRepeat2LanePadPress()`, preserving lane selection refresh,
+  held/latched lane Set updates, patched-Schwung lane-on/off gating,
+  Loop-held latch coalescing behavior, `padPitch` suppression, and redraw
+  ordering.
 - Added `ui_drum_repeat_workflows.mjs` to `scripts/bundle_ui.py`.
 
 Verification:
