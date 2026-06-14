@@ -111,6 +111,7 @@ import {
     createLiveNoteQueues,
     drumPadToLane as padSurfaceDrumPadToLane,
     drumVelZoneToVelocity,
+    handleDrumVelocityPadPress,
     queueLiveNoteOff,
     queueLiveNoteOn,
     resolveDrumPadTarget
@@ -9650,36 +9651,14 @@ function _onPadPressTrackView(status, d1, d2) {
             const lane = drumPadTarget.kind === 'lane' ? drumPadTarget.lane : -1;
             const velZone = drumPadTarget.kind === 'velocity' ? drumPadTarget.zone : -1;
             if (velZone >= 0) {
-                /* Velocity pad: which pad determines the zone; zone determines velocity.
-                 * Pad pressure is ignored — zone vel used for monitoring, step-edit, recording. */
-                S.drumLastVelZone[t] = velZone;
-                S.drumVelZoneArmed[t] = true;
-                const zoneVel  = drumPadTarget.velocity;
-                const lane_vp  = S.activeDrumLane[t];
-                const laneNote = S.drumLaneNote[t][lane_vp];
-                liveSendNote(t, 0x90, laneNote, zoneVel, true);
-                padPitch[padIdx] = laneNote;
-                padPressTick[padIdx] = S.tickCount;
-                S.liveActiveNotes.add(laneNote);
-                if (S.heldStep >= 0 && S.heldStepNotes.length > 0) {
-                    /* Active vel-pad press while step held → zone wins (beats VelIn) */
-                    const _heldWriteVel = stepEntryVelocity(t, zoneVel, true);
-                    S.stepEditVel = _heldWriteVel;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_l' + lane_vp + '_step_' + S.heldStep + '_vel', String(_heldWriteVel));
-                    S.stepBtnPressedTick[S.heldStepBtn] = -1;
-                }
-                /* Record hit at zone velocity if armed */
-                if (S.recordArmed && !S.recordCountingIn && t === S.recordArmedTrack) {
-                    _drumRecNoteOns.push({ track: t, laneNote: laneNote, vel: zoneVel });
-                    /* Monitor: DSP drum_record_note_on inline-fires live_note_on for
-                     * ROUTE_MOVE, so a separate live_notes set_param here would just
-                     * coalesce with the record payload. Mirrors melodic recording. */
-                    S.pendingDrumLaneResync      = 3;
-                    S.pendingDrumLaneResyncTrack = t;
-                    S.pendingDrumLaneResyncLane  = lane_vp;
-                }
-                S.screenDirty = true;
+                handleDrumVelocityPadPress(S, {
+                    liveSendNote,
+                    stepEntryVelocity,
+                    host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+                    padPitch,
+                    padPressTick,
+                    drumRecNoteOns: _drumRecNoteOns
+                }, t, padIdx, drumPadTarget);
             } else if (lane >= 0 && lane < DRUM_LANES && S.copyHeld && !S.muteHeld) {
                 /* Copy+lane pad: drum lane copy/cut gesture (same track, active clip) */
                 if (!S.copySrc) {

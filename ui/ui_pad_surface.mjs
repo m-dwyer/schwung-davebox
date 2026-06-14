@@ -59,6 +59,40 @@ export function resolveDrumPadTarget(padIdx, lanePage, drumLanes) {
     return { kind: 'none' };
 }
 
+export function handleDrumVelocityPadPress(S, deps, track, padIdx, target) {
+    if (!target || target.kind !== 'velocity') return false;
+
+    const velZone = target.zone;
+    S.drumLastVelZone[track] = velZone;
+    S.drumVelZoneArmed[track] = true;
+
+    const zoneVel = target.velocity;
+    const lane = S.activeDrumLane[track];
+    const laneNote = S.drumLaneNote[track][lane];
+    deps.liveSendNote(track, 0x90, laneNote, zoneVel, true);
+    deps.padPitch[padIdx] = laneNote;
+    deps.padPressTick[padIdx] = S.tickCount;
+    S.liveActiveNotes.add(laneNote);
+
+    if (S.heldStep >= 0 && S.heldStepNotes.length > 0) {
+        const writeVel = deps.stepEntryVelocity(track, zoneVel, true);
+        S.stepEditVel = writeVel;
+        if (typeof deps.host_module_set_param === 'function')
+            deps.host_module_set_param('t' + track + '_l' + lane + '_step_' + S.heldStep + '_vel', String(writeVel));
+        S.stepBtnPressedTick[S.heldStepBtn] = -1;
+    }
+
+    if (S.recordArmed && !S.recordCountingIn && track === S.recordArmedTrack) {
+        deps.drumRecNoteOns.push({ track: track, laneNote: laneNote, vel: velZone });
+        S.pendingDrumLaneResync      = 3;
+        S.pendingDrumLaneResyncTrack = track;
+        S.pendingDrumLaneResyncLane  = lane;
+    }
+
+    S.screenDirty = true;
+    return true;
+}
+
 export function updatePadNoteMap(S, deps) {
     const t = S.activeTrack;
     if (S.trackPadMode[t] === deps.PAD_MODE_DRUM) {

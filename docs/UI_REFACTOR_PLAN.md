@@ -266,6 +266,9 @@ Candidate 3:
 - Added `resolveDrumPadTarget()` to `ui_pad_surface.mjs` so drum pad callers can
   classify lane, velocity-zone, and invalid lane-page targets through one
   interface.
+- Moved drum velocity-pad press behavior into `ui_pad_surface.mjs` as
+  `handleDrumVelocityPadPress()`, covering live preview, held-step velocity
+  writes, and armed-recording resync scheduling.
 
 Verification:
 
