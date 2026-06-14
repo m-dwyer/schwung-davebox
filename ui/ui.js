@@ -109,6 +109,8 @@ import {
     SCALE_INTERVALS,
     applyPadNoteMap,
     createLiveNoteQueues,
+    drumPadToLane as padSurfaceDrumPadToLane,
+    drumPadToVelZone,
     queueLiveNoteOff,
     queueLiveNoteOn
 } from './ui_pad_surface.mjs';
@@ -2033,10 +2035,7 @@ function syncDrumLanesMeta(t) {
 
 /** Convert a padIdx (0-31) to drum lane index for the current lane page, or -1 if right half. */
 function drumPadToLane(padIdx) {
-    const col = padIdx % 8;
-    if (col >= 4) return -1;
-    const row = Math.floor(padIdx / 8);
-    return S.drumLanePage[S.activeTrack] * 16 + row * 4 + col;
+    return padSurfaceDrumPadToLane(padIdx, S.drumLanePage[S.activeTrack]);
 }
 
 /* Bundle 2A: single setter for S.activeDrumLane that also pushes the
@@ -2081,14 +2080,6 @@ function setDrumLanePage(t, page) {
     arrLp[t] = page;
     if (typeof host_module_set_param === 'function')
         host_module_set_param('t' + t + '_drum_lane_page', String(page));
-}
-
-/** Convert a padIdx (0-31) to velocity zone 0-15, or -1 if left half. */
-function drumPadToVelZone(padIdx) {
-    const col = padIdx % 8;
-    if (col < 4) return -1;
-    const row = Math.floor(padIdx / 8);
-    return row * 4 + (col - 4);
 }
 
 /** Map velocity zone 0-15 to a MIDI velocity (8…127). */

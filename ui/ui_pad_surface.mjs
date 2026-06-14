@@ -27,17 +27,29 @@ export function queueLiveNoteOff(queues, track, pitch) {
     queues[track].push({ isOff: true, pitch });
 }
 
+export function drumPadToLane(padIdx, lanePage) {
+    const col = padIdx % 8;
+    if (col >= 4) return -1;
+    const row = Math.floor(padIdx / 8);
+    return (lanePage | 0) * 16 + row * 4 + col;
+}
+
+export function drumPadToVelZone(padIdx) {
+    const col = padIdx % 8;
+    if (col < 4) return -1;
+    const row = Math.floor(padIdx / 8);
+    return row * 4 + (col - 4);
+}
+
 export function updatePadNoteMap(S, deps) {
     const t = S.activeTrack;
     if (S.trackPadMode[t] === deps.PAD_MODE_DRUM) {
         const page = S.drumLanePage[t] | 0;
         const coRunSilentLeft = (S.moveCoRunTrack >= 0);
         for (let i = 0; i < 32; i++) {
-            const col = i % 8;
-            if (col >= 4) { S.padNoteMap[i] = 0xFF; continue; }
+            const lane = drumPadToLane(i, page);
+            if (lane < 0) { S.padNoteMap[i] = 0xFF; continue; }
             if (coRunSilentLeft) { S.padNoteMap[i] = 0xFF; continue; }
-            const row = Math.floor(i / 8);
-            const lane = page * 16 + row * 4 + col;
             const note = (lane >= 0 && lane < deps.DRUM_LANES)
                 ? ((S.drumLaneNote[t][lane] | 0) || (deps.DRUM_BASE_NOTE + lane))
                 : 0xFF;
