@@ -116,6 +116,10 @@ import {
     renderMotionBankOverview
 } from './ui_bank_render.mjs';
 import {
+    renderDrumTrackIdleView,
+    renderMelodicTrackIdleView
+} from './ui_track_idle_render.mjs';
+import {
     SCALE_INTERVALS,
     applyPadNoteMap,
     createLiveNoteQueues,
@@ -3564,6 +3568,19 @@ function createBankRenderDeps() {
     };
 }
 
+function createTrackIdleRenderDeps() {
+    return {
+        pixelPrint,
+        fill_rect,
+        drawBankHeading,
+        drawBankHeadingInverted,
+        drawMetroIndicator,
+        drawTrackRow,
+        drawPositionBar,
+        drawDrumPositionBar
+    };
+}
+
 function drawUI() {
     /* CO-RUN: shadow_ui's chain editor owns the OLED while this is active.
      * Skip every Overture draw path so it doesn't fight the chain editor's
@@ -4205,82 +4222,9 @@ function drawUI() {
         }
 
     } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-        /* Drum Track View — idle state */
-        const t         = S.activeTrack;
-        const lane      = S.activeDrumLane[t];
-        const pg        = S.drumLanePage[t];
-        const note      = S.drumLaneNote[t][lane];
-        const oct       = Math.floor(note / 12) - 2;
-        const name      = NOTE_KEYS[note % 12];
-        const bankGroup = pg === 0 ? 'Bank: A' : 'Bank: B';
-        const bankName  = S.activeBank === 0 ? 'DRUM LANE' : S.activeBank === 1 ? 'NOTE FX' : S.activeBank === 5 ? 'REPEAT GROOVE' : S.activeBank === 6 ? BANKS[6].name : S.activeBank === 7 ? 'ALL LANES' : BANKS[S.activeBank] ? BANKS[S.activeBank].name : '?';
-        (S.activeBank === 5 || S.activeBank === 6 ? drawBankHeadingInverted : drawBankHeading)(bankName, false);
-        pixelPrint(4, 10, bankGroup + '  Pad: ' + name + oct + ' (' + note + ')', 1);
-        const laneBit = 1 << lane;
-        if (S.drumLaneSolo[t] & laneBit) {
-            pixelPrint(128 - 4 - 6 * 6, 21, 'SOLOED', 1);
-        } else if (S.drumLaneMute[t] & laneBit) {
-            if (Math.floor(S.tickCount / 50) % 2 === 0)
-                pixelPrint(128 - 4 - 5 * 6, 21, 'MUTED', 1);
-        }
-        drawMetroIndicator();
-        drawTrackRow(34);
-        for (let _t = 0; _t < NUM_TRACKS; _t++) {
-            const _cx = _t * 16 + 5;
-            const _ac = S.trackActiveClip[_t];
-            const _hasData = S.trackPadMode[_t] === PAD_MODE_DRUM
-                ? S.drumClipNonEmpty[_t][_ac]
-                : S.clipNonEmpty[_t][_ac];
-            const _isActive = (S.trackClipPlaying[_t] || S.trackWillRelaunch[_t] || (S.trackQueuedClip[_t] >= 0)) && _hasData;
-            if (_isActive) {
-                fill_rect(_cx - 1, 45, 9, 7, 1);
-                pixelPrint(_cx, 46, SCENE_LETTERS[_ac], 0);
-            } else {
-                pixelPrint(_cx, 46, SCENE_LETTERS[_ac], 1);
-            }
-        }
-        drawDrumPositionBar(t);
+        renderDrumTrackIdleView(createTrackIdleRenderDeps());
     } else {
-        /* State 4: normal Track View */
-        const recTag  = (S.recordArmed && !S.recordCountingIn && S.recordArmedTrack === S.activeTrack)
-            ? ' REC' : '';
-        const oct     = S.trackOctave[S.activeTrack];
-        const octStr  = 'Oct:' + (oct >= 0 ? '+' : '') + oct;
-        const keyScl  = NOTE_KEYS[S.padKey] + ' ' + (SCALE_DISPLAY[S.padScale] || '?');
-        const CHAR_W  = 6;
-        const keySclX = 128 - 4 - keyScl.length * CHAR_W;
-        (S.activeBank === 5 || S.activeBank === 6 ? drawBankHeadingInverted : drawBankHeading)(BANKS[S.activeBank].name + recTag, false);
-        pixelPrint(4, 10, octStr, 1);
-        if (S.bankParams[S.activeTrack][5][0]) {
-            if (S.bankParams[S.activeTrack][5][7]) {
-                /* Latch on: invert 'Arp' (black on white chip) — pixelPrint
-                 * uses a 5x5 glyph with 6px step; 'Arp' spans x=52..68, y=10..14.
-                 * Chip pads 1px around: x=51..69 (w=19), y=9..15 (h=7). */
-                fill_rect(51, 9, 19, 7, 1);
-                pixelPrint(52, 10, 'Arp', 0);
-            } else {
-                pixelPrint(52, 10, 'Arp', 1);
-            }
-        }
-        pixelPrint(keySclX, 10, keyScl, 1);
-        if (S.scaleAware) fill_rect(keySclX, 15, keyScl.length * CHAR_W, 1, 1);
-        drawMetroIndicator();
-        drawTrackRow(34);
-        for (let t = 0; t < NUM_TRACKS; t++) {
-            const _cx = t * 16 + 5;
-            const _ac = S.trackActiveClip[t];
-            const _hasData = S.trackPadMode[t] === PAD_MODE_DRUM
-                ? S.drumClipNonEmpty[t][_ac]
-                : S.clipNonEmpty[t][_ac];
-            const _isActive = (S.trackClipPlaying[t] || S.trackWillRelaunch[t] || (S.trackQueuedClip[t] >= 0)) && _hasData;
-            if (_isActive) {
-                fill_rect(_cx - 1, 45, 9, 7, 1);
-                pixelPrint(_cx, 46, SCENE_LETTERS[_ac], 0);
-            } else {
-                pixelPrint(_cx, 46, SCENE_LETTERS[_ac], 1);
-            }
-        }
-        drawPositionBar(S.activeTrack);
+        renderMelodicTrackIdleView(createTrackIdleRenderDeps());
     }
 }
 
