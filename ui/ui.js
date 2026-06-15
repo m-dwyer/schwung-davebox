@@ -173,6 +173,9 @@ import {
     handleUiSideButton
 } from './ui_side_button_workflow.mjs';
 import {
+    handleUiPlayButton
+} from './ui_transport_cc_workflow.mjs';
+import {
     renderTrackStepEditView
 } from './ui_step_edit_render.mjs';
 import {
@@ -6151,72 +6154,7 @@ function _onCC_transport(d1, d2) {
     }
 
     /* Play: toggle transport; Shift+Play = restart transport; Delete+Play = deactivate_all; Mute+Play = toggle metro */
-    if (d1 === MovePlay && d2 === 127) {
-        if (S.deleteHeld) {
-            if (typeof host_module_set_param === 'function') {
-                if (!S.playing) {
-                    /* Stopped: panic clears will_relaunch + all clip state atomically for all tracks. */
-                    host_module_set_param('transport', 'panic');
-                    for (let t = 0; t < NUM_TRACKS; t++) {
-                        S.trackWillRelaunch[t] = false;
-                        S.trackQueuedClip[t]   = -1;
-                    }
-                    /* Mirror the playing-branch sweep so LEDs/UI stay in sync with audio panic. */
-                    unlatchAllTracks(S, NUM_TRACKS);
-                } else {
-                    host_module_set_param('transport', 'deactivate_all');
-                    /* Unlatch Rpt1/Rpt2/TARP across all tracks — queued one-per-tick via pendingDefaultSetParams to avoid coalescing */
-                    unlatchAllTracks(S, NUM_TRACKS);
-                }
-            }
-        } else if (S.muteHeld) {
-            S.muteUsedAsModifier = true;
-            if (S.metronomeOn !== 0) S.metronomeOnLast = S.metronomeOn;
-            S.metronomeOn = S.metronomeOn === 0 ? S.metronomeOnLast : 0;
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('metro_on', String(S.metronomeOn));
-            showActionPopup('METRO ' + (S.metronomeOn === 0 ? 'OFF' : 'ON'));
-        } else if (S.loopHeld && !S.sessionView) {
-            /* Loop+Play (Track View only): restart with active clip starting at
-             * the first step of the visible page; other tracks land at the
-             * musically-equivalent offset. Atomic single set_param. */
-            const _lpAt   = S.activeTrack;
-            const _lpIsDr = S.trackPadMode[_lpAt] === PAD_MODE_DRUM;
-            const _lpPage = _lpIsDr ? (S.drumStepPage[_lpAt] | 0) : (S.trackCurrentPage[_lpAt] | 0);
-            const _lpLane = _lpIsDr ? (S.activeDrumLane[_lpAt] | 0) : -1;
-            if (typeof host_module_set_param === 'function') {
-                host_module_set_param('transport', 'restart_at:' + _lpAt + ':' + _lpPage + ':' + _lpLane);
-            }
-        } else if (S.shiftHeld) {
-            /* Restart: atomic DSP-side stop+play. Single set_param avoids
-             * coalescing flakiness when stop+play land in same audio block. */
-            if (typeof host_module_set_param === 'function') {
-                host_module_set_param('transport', S.playing ? 'restart' : 'play');
-            }
-        } else {
-            if (S.recordCountingIn) {
-                disarmRecord();
-            } else if (typeof host_module_set_param === 'function') {
-                /* Use the combined `transport=play_focus:T:C` set_param so the
-                 * DSP arms the focused track's clip + sets playing=1 in a
-                 * single buffer. Sending launch_clip + transport=play as two
-                 * separate set_params coalesces (same buffer same channel),
-                 * leaving clip_playing=0 on the first cycle after a clip
-                 * clear (since clear leaves will_relaunch=0). */
-                if (!S.playing && !S.sessionView
-                        && !S.trackClipPlaying[S.activeTrack]
-                        && !S.trackWillRelaunch[S.activeTrack]
-                        && _focusedClipIsEmpty(S.activeTrack)) {
-                    const _at = S.activeTrack;
-                    const _ac = S.trackActiveClip[_at];
-                    host_module_set_param('transport', 'play_focus:' + _at + ':' + _ac);
-                    S.trackQueuedClip[_at] = _ac;
-                } else {
-                    host_module_set_param('transport', S.playing ? 'stop' : 'play');
-                }
-            }
-        }
-    }
+    handleUiPlayButton(S, createTransportCcWorkflowDeps(), d1, d2);
 
     /* Record button (CC 86): toggle arm/disarm */
     if (d1 === MoveRec && d2 === 127) {
@@ -7746,6 +7684,21 @@ function createSideButtonWorkflowDeps() {
             return handleSessionViewSideRowPress(S, createSessionViewWorkflowDeps(), rowIdx);
         },
         selectTrackGesture
+    };
+}
+
+function createTransportCcWorkflowDeps() {
+    return {
+        disarmRecord,
+        focusedClipIsEmpty: _focusedClipIsEmpty,
+        movePlay: MovePlay,
+        numTracks: NUM_TRACKS,
+        padModeDrum: PAD_MODE_DRUM,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        showActionPopup,
+        unlatchAllTracks: function () {
+            return unlatchAllTracks(S, NUM_TRACKS);
+        }
     };
 }
 
