@@ -143,7 +143,8 @@ import {
     unlatchAllTracks
 } from './ui_latch_workflows.mjs';
 import {
-    readMelodicClipFromDsp
+    readMelodicClipFromDsp,
+    readTargetedClipAutomationFromDsp
 } from './ui_clip_track_sync.mjs';
 import {
     runDefaultSetParamDrain,
@@ -5271,18 +5272,7 @@ function syncClipsTargeted(infoStr) {
                 refreshActiveBankParams: true
             });
         }
-        const _abits = host_module_get_param('t' + t + '_c' + c + '_cc_auto_bits');
-        S.trackCCAutoBits[t][c] = _abits !== null ? (parseInt(_abits, 10) || 0) : 0;
-        const _arest = host_module_get_param('t' + t + '_c' + c + '_cc_rest');
-        if (_arest) {
-            const _arp = _arest.split(' ');
-            for (let k = 0; k < 8; k++) {
-                const rv = parseInt(_arp[k], 10);
-                S.clipCCVal[t][c][k] = (rv >= 0 && rv <= 127) ? rv : -1;
-            }
-        }
-        const _ath = host_module_get_param('t' + t + '_c' + c + '_at_has');
-        S.clipAtHas[t][c] = (_ath !== null && parseInt(_ath, 10) === 1);
+        readTargetedClipAutomationFromDsp(S, { host_module_get_param }, t, c);
     }
     /* Parse 'DR rowN' tokens — resync drum clip content for all tracks at those rows */
     while (i + 1 < parts.length) {

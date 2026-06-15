@@ -24,3 +24,20 @@ export function readMelodicClipFromDsp(S, deps, track, clip, opts) {
     if (refreshActiveBankParams && clip === S.trackActiveClip[track])
         deps.refreshPerClipBankParams(track);
 }
+
+export function readTargetedClipAutomationFromDsp(S, deps, track, clip) {
+    const bits = deps.host_module_get_param('t' + track + '_c' + clip + '_cc_auto_bits');
+    S.trackCCAutoBits[track][clip] = bits !== null ? (parseInt(bits, 10) || 0) : 0;
+
+    const rest = deps.host_module_get_param('t' + track + '_c' + clip + '_cc_rest');
+    if (rest) {
+        const parts = rest.split(' ');
+        for (let k = 0; k < 8; k++) {
+            const rv = parseInt(parts[k], 10);
+            S.clipCCVal[track][clip][k] = (rv >= 0 && rv <= 127) ? rv : -1;
+        }
+    }
+
+    const atHas = deps.host_module_get_param('t' + track + '_c' + clip + '_at_has');
+    S.clipAtHas[track][clip] = (atHas !== null && parseInt(atHas, 10) === 1);
+}
