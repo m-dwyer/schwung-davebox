@@ -158,6 +158,11 @@ import {
     renderLoopView
 } from './ui_loop_render.mjs';
 import {
+    handleLoopStepPress,
+    handleLoopStepRelease,
+    resolveLoopGesture
+} from './ui_loop_gesture_workflow.mjs';
+import {
     renderCcStepEditView
 } from './ui_cc_step_edit_render.mjs';
 import {
@@ -6238,7 +6243,7 @@ function _onCC_buttons(d1, d2) {
             /* Loop released before the held start step — treat as aborted
              * gesture and fire the length-only fallback (single-tap semantics). */
             if (S.loopGestureStart >= 0) {
-                _resolveLoopGesture(true);
+                resolveLoopGesture(S, createLoopGestureWorkflowDeps(), true);
                 S.loopTapUnlatchTrack = -1;
             }
             /* Tap-loop-alone: unlatch all latched repeats on active drum track.
@@ -8242,74 +8247,13 @@ function _fireLoopWindowSetCC(track, startStep, lenSteps) {
     else if (S.trackCurrentPage[track] > lastPage) S.trackCurrentPage[track] = lastPage;
 }
 
-/* Snapshot the gesture context at press-time so a later release fires in the
- * same context the user started in (immune to track/lane/bank flips). */
-function _loopGestureCtxFor(track) {
-    if (S.trackPadMode[track] !== PAD_MODE_DRUM) {
-        if (S.activeBank === 6) return 3;
-        return 0;
-    }
-    return S.activeBank === 7 ? 2 : 1;
-}
-
-/* Drop any partial Loop+step gesture, optionally firing the length-only
- * fallback if a B-tap never landed. Called on step release of the held
- * start page AND on Loop button release.
- *
- * Fallback semantics:
- *   loop_start == 0 → length = (a+1)*16, loop_start stays 0 (the original
- *                     pre-window single-tap behavior, preserved).
- *   loop_start > 0  → if a >= startPage: length = (a - startPage + 1)*16,
- *                     loop_start unchanged ("set END at page a, keep start").
- *                     if a < startPage: tap is below the window — re-anchor
- *                     by resetting to loop_start=0, length=(a+1)*16. */
-function _resolveLoopGesture(fireFallback) {
-    const a = S.loopGestureStart;
-    if (a < 0) return;
-    const ctx   = S.loopGestureCtx;
-    const trk   = S.loopGestureTrack;
-    const clip  = S.loopGestureClip;
-    const fired = S.loopGestureFired;
-    S.loopGestureStart = -1;
-    S.loopGestureFired = false;
-    S.loopGestureTrack = -1;
-    S.loopGestureClip  = -1;
-    S.loopGestureLane  = -1;
-    if (fired) { forceRedraw(); return; }
-    if (fireFallback) {
-        var currentLs, currentLen;
-        if (ctx === 3) {
-            var _ccLane = S.ccActiveLane[trk];
-            currentLs  = S.ccLaneLoopStart[trk][clip][_ccLane] | 0;
-            currentLen = S.ccLaneLength[trk][clip][_ccLane] | 0;
-            if (currentLen === 0) {
-                var _cTps = S.clipTPS[trk][clip] || 24;
-                var _lTps = S.ccLaneTps[trk][clip][_ccLane] || _cTps;
-                currentLs  = Math.round((S.clipLoopStart[trk][clip] | 0) * _cTps / _lTps);
-                currentLen = Math.max(1, Math.round(S.clipLength[trk][clip] * _cTps / _lTps));
-            }
-        } else if (ctx === 0) {
-            currentLs  = S.clipLoopStart[trk][clip] | 0;
-            currentLen = S.clipLength[trk][clip] | 0;
-        } else {
-            currentLs  = S.drumLaneLoopStart[trk] | 0;
-            currentLen = S.drumLaneLength[trk] | 0;
-        }
-        const startPage = currentLs >> 4;
-        let newLs, newLen;
-        if (currentLs === 0 || a < startPage) {
-            newLs  = 0;
-            newLen = (a + 1) * 16;
-        } else {
-            newLs  = currentLs;
-            newLen = (a - startPage + 1) * 16;
-        }
-        if (newLen === currentLen && currentLen === 32) {
-            newLen = 16;
-        }
-        _fireLoopWindowSet(trk, ctx, newLs, newLen);
-    }
-    forceRedraw();
+function createLoopGestureWorkflowDeps() {
+    return {
+        effectiveClip,
+        fireLoopWindowSet: _fireLoopWindowSet,
+        forceRedraw,
+        padModeDrum: PAD_MODE_DRUM
+    };
 }
 
 function _onStepButtons(d1, d2) {
@@ -8338,34 +8282,8 @@ function _onStepButtons(d1, d2) {
     }
     if (handleSessionViewStepPress(S, createSessionViewWorkflowDeps(), idx)) {
         return;
-    } else if (S.loopHeld) {
-        if (S.recordArmed && !S.recordCountingIn) {
-            /* Block length changes during active recording */
-        } else if (S.loopGestureStart < 0) {
-            /* First press: arm the gesture. Defer the actual DSP write to
-             * either a B-tap (range) or this step's release (length-only
-             * fallback) so a single tap retains its existing semantics. */
-            const t = S.activeTrack;
-            S.loopGestureStart = idx;
-            S.loopGestureFired = false;
-            S.loopGestureCtx   = _loopGestureCtxFor(t);
-            S.loopGestureTrack = t;
-            S.loopGestureClip  = (S.loopGestureCtx === 0 || S.loopGestureCtx === 3) ? effectiveClip(t) : -1;
-            S.loopGestureLane  = (S.loopGestureCtx === 1) ? S.activeDrumLane[t] : -1;
-            forceRedraw();
-        } else if (idx !== S.loopGestureStart) {
-            /* Second tap while holding start — fire the range. B<A swaps so
-             * the window is always [min, max]. Multiple B taps re-fire (last
-             * tap wins, allowing scrub without releasing the start page). */
-            const a = Math.min(S.loopGestureStart, idx);
-            const b = Math.max(S.loopGestureStart, idx);
-            const startStep = a * 16;
-            const lenSteps  = (b - a + 1) * 16;
-            _fireLoopWindowSet(S.loopGestureTrack, S.loopGestureCtx, startStep, lenSteps);
-            S.loopGestureFired = true;
-            forceRedraw();
-        }
-        /* idx === loopGestureStart while held: ignore (same-page tap is a no-op) */
+    } else if (handleLoopStepPress(S, createLoopGestureWorkflowDeps(), idx)) {
+        return;
     } else if (S.copyHeld) {
         /* Copy + step button (Track View): step-to-step copy within active clip */
         const ac     = effectiveClip(S.activeTrack);
@@ -8680,7 +8598,7 @@ function _onPadRelease(status, d1, d2) {
      * the range already fired on the B-tap. */
     if (d1 >= 16 && d1 <= 31 && S.loopGestureStart >= 0) {
         const idx = d1 - 16;
-        if (idx === S.loopGestureStart) _resolveLoopGesture(true);
+        handleLoopStepRelease(S, createLoopGestureWorkflowDeps(), idx);
         return;
     }
     /* Swallow pad releases while SEQ ARP step-level editor is open. */

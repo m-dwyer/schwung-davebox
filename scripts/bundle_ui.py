@@ -34,6 +34,7 @@ ORDER = [
     'ui/ui_modal_render.mjs',
     'ui/ui_param_peek_render.mjs',
     'ui/ui_loop_render.mjs',
+    'ui/ui_loop_gesture_workflow.mjs',
     'ui/ui_cc_step_edit_render.mjs',
     'ui/ui_step_edit_render.mjs',
     'ui/ui_step_interval_render.mjs',
