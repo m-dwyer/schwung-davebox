@@ -1005,6 +1005,15 @@ Drum repeat workflows:
   routing, recording, drum pad behavior, Session View behavior, and Parameter
   Bank behavior in `ui.js`. Preserved existing CC-bank behavior for held melodic
   step note assignment; deeper CC step-edit behavior remains in `ui.js`.
+- Continued the Track View Step Workflow seam with melodic non-CC held-step knob
+  handling. Moved K1 octave, K2 scale-aware pitch nudge, K3 gate, K4 velocity,
+  K5 nudge, K6 iter, K7 probability, K8 ratchet, knob touch state, and
+  screen-dirty updates into `handleTrackViewMelodicStepKnob()`. Preserved
+  priority by keeping CC-bank step-edit knobs and drum held-step knobs ahead of
+  this handler in `_onCC_stepedit()`. `ui.js` remains the adapter for shared
+  state, host writes, `effectiveClip()`, `ccKnobDelta()`, `scaleNudgeNote()`,
+  `STEP_ITER_LIST`, top-level CC routing, drum held-step knobs, CC-bank
+  step-edit, Parameter Bank behavior, and recording behavior.
 
 Verification:
 

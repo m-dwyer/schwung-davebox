@@ -185,7 +185,8 @@ import {
     handleTrackViewStepRelease,
     handleTrackViewStepHoldThreshold,
     handleTrackViewChordFirstStepTick,
-    handleTrackViewMelodicStepNoteAssignment
+    handleTrackViewMelodicStepNoteAssignment,
+    handleTrackViewMelodicStepKnob
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -6699,105 +6700,7 @@ function _onCC_stepedit(d1, d2) {
         }
         return;
     }
-    /* Melodic step edit: K1 Oct, K2 Note, K3 Leng, K4 Vel, K5 Nudg, K6 Iter, K7 Prob, K8 Ratch */
-    if (S.heldStep >= 0 && S.heldStepNotes.length > 0 && d1 >= 71 && d1 <= 78 && S.activeBank !== 6) {
-        const knobIdx = d1 - 71;
-        const dir     = (d2 >= 1 && d2 <= 63) ? 1 : -1;
-        const t       = S.activeTrack;
-        const ac      = effectiveClip(t);
-        const pfx     = 't' + t + '_c' + ac + '_step_' + S.heldStep;
-        S.knobTouched          = knobIdx;
-        S.knobTurnedTick[knobIdx] = S.tickCount;
-        S.screenDirty   = true;
-        if (knobIdx === 0) {
-            /* K1 Oct: shift all notes ±12 semitones, sens=12 */
-            S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
-            S.knobLastDir[knobIdx] = dir;
-            if (S.knobAccum[knobIdx] >= 12) {
-                S.knobAccum[knobIdx] = 0;
-                S.heldStepNotes = S.heldStepNotes.map(function(n) {
-                    return Math.max(0, Math.min(127, n + dir * 12));
-                });
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param(pfx + '_set_notes', S.heldStepNotes.join(' '));
-            }
-        } else if (knobIdx === 1) {
-            /* K2 Pitch: shift each note ±1 scale degree (or ±1 semitone if scale-aware off), sens=10 */
-            S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
-            S.knobLastDir[knobIdx] = dir;
-            if (S.knobAccum[knobIdx] >= 10) {
-                S.knobAccum[knobIdx] = 0;
-                S.heldStepNotes = S.heldStepNotes.map(function(n) {
-                    return scaleNudgeNote(n, dir, S.padKey, S.padScale);
-                });
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param(pfx + '_set_notes', S.heldStepNotes.join(' '));
-            }
-        } else if (knobIdx === 2) {
-            /* K3 Dur: accelerated with breakpoints at 16/64 steps */
-            { const _acD = effectiveClip(S.activeTrack);
-              const _tpsD = S.clipTPS[S.activeTrack][_acD] || 24;
-              const _gmaxD = Math.min(65535, 256 * _tpsD);
-              const _acc = ccKnobDelta(d2, knobIdx);
-              if (_acc === 0) return;
-              const _steps = S.stepEditGate / _tpsD;
-              const _inc = _steps <= 16 ? Math.round(_tpsD / 4)
-                         : _steps <= 64 ? _tpsD
-                         :                 _tpsD * 8;
-              let _nv = S.stepEditGate + _acc * _inc;
-              if (_inc > 1) _nv = Math.round(_nv / _inc) * _inc;
-              S.stepEditGate = Math.max(1, Math.min(_gmaxD, _nv)); }
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param(pfx + '_gate', String(S.stepEditGate));
-        } else if (knobIdx === 3) {
-            /* K4 Vel: velocity 0-127 */
-            S.stepEditVel = Math.max(0, Math.min(127, S.stepEditVel + dir));
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param(pfx + '_vel', String(S.stepEditVel));
-        } else if (knobIdx === 4) {
-            /* K5 Nudge: tick offset ±(TPS-1), sens=8 */
-            S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
-            S.knobLastDir[knobIdx] = dir;
-            if (S.knobAccum[knobIdx] >= 8) {
-                S.knobAccum[knobIdx] = 0;
-                const _acN = effectiveClip(S.activeTrack);
-                const _tpsN1 = (S.clipTPS[S.activeTrack][_acN] || 24) - 1;
-                S.stepEditNudge = Math.max(-_tpsN1, Math.min(_tpsN1, S.stepEditNudge + dir));
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param(pfx + '_nudge', String(S.stepEditNudge));
-            }
-        } else if (knobIdx === 5) {
-            /* K6 Iter: discrete step, sens=3 (no accel) */
-            S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
-            S.knobLastDir[knobIdx] = dir;
-            if (S.knobAccum[knobIdx] >= 3) {
-                S.knobAccum[knobIdx] = 0;
-                let idx = STEP_ITER_LIST.indexOf(S.stepEditIter);
-                if (idx < 0) idx = 0;
-                idx = Math.max(0, Math.min(STEP_ITER_LIST.length - 1, idx + dir));
-                S.stepEditIter = STEP_ITER_LIST[idx];
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param(pfx + '_iter', String(S.stepEditIter));
-            }
-        } else if (knobIdx === 6) {
-            /* K7 Rand: 0..100 with accel */
-            const acc = ccKnobDelta(d2, knobIdx);
-            if (acc !== 0) {
-                S.stepEditRand = Math.max(0, Math.min(100, S.stepEditRand + acc));
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param(pfx + '_rand', String(S.stepEditRand));
-            }
-        } else if (knobIdx === 7) {
-            /* K8 Ratch: 0..4, sens=8 */
-            S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
-            S.knobLastDir[knobIdx] = dir;
-            if (S.knobAccum[knobIdx] >= 8) {
-                S.knobAccum[knobIdx] = 0;
-                S.stepEditRatch = Math.max(0, Math.min(4, S.stepEditRatch + dir));
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param(pfx + '_ratch', String(S.stepEditRatch));
-            }
-        }
+    if (handleTrackViewMelodicStepKnob(S, createTrackViewStepWorkflowDeps(), d1, d2)) {
         return;
     }
 
@@ -8025,9 +7928,12 @@ function createTrackViewStepWorkflowDeps() {
         noNoteFlashTicks: NO_NOTE_FLASH_TICKS,
         padModeDrum: PAD_MODE_DRUM,
         refreshSeqNotesIfCurrent,
+        scaleNudgeNote,
         setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        ccKnobDelta,
         stepHoldTicks: STEP_HOLD_TICKS,
         stepEntryVelocity,
+        stepIterList: STEP_ITER_LIST,
         showActionPopup
     };
 }
