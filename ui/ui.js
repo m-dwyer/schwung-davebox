@@ -167,6 +167,9 @@ import {
     renderCcStepEditView
 } from './ui_cc_step_edit_render.mjs';
 import {
+    handleUiCcMessage
+} from './ui_cc_message_workflow.mjs';
+import {
     renderTrackStepEditView
 } from './ui_step_edit_render.mjs';
 import {
@@ -7402,12 +7405,14 @@ function _switchViewCleanup() {
 }
 
 function _onCCMsg(d1, d2) {
-    _onCC_jog(d1, d2);
-    _onCC_buttons(d1, d2);
-    _onCC_transport(d1, d2);
-    _onCC_side(d1, d2);
-    _onCC_stepedit(d1, d2);
-    _onCC_knobs(d1, d2);
+    handleUiCcMessage({
+        onJog: _onCC_jog,
+        onButtons: _onCC_buttons,
+        onTransport: _onCC_transport,
+        onSide: _onCC_side,
+        onStepEdit: _onCC_stepedit,
+        onKnobs: _onCC_knobs
+    }, d1, d2);
 }
 
 
