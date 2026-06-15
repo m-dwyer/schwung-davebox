@@ -962,6 +962,18 @@ Drum repeat workflows:
   behavior, Parameter Bank behavior, recording behavior, Session View
   Performance Mode, modal workflows, and unrelated DSP reads/writes remain in
   `ui.js`.
+- Continued the Track View Step Workflow seam with Track View step release
+  handling. Moved drum tap commit/clear, drum hold-release reassign and velocity
+  confirm, melodic tap commit/clear/no-note flash, melodic hold-release reassign
+  and reread scheduling, and CC-safe release cleanup into
+  `handleTrackViewStepRelease()`. Preserved `_onPadRelease()` priority: the
+  release path still stamps `stepOpTick`, lets Session View step release handle
+  first, then delegates only the Track View held-step release cluster. `ui.js`
+  remains the adapter for shared state, host reads/writes, velocity helpers,
+  clip resolution, sequence-note refresh, redraw, and MIDI/button routing.
+  Drum/melodic hold-threshold behavior, deeper CC step-edit behavior, Parameter
+  Bank behavior, recording behavior, Session View Performance Mode, modal
+  workflows, and unrelated DSP reads/writes remain in `ui.js`.
 
 Verification:
 

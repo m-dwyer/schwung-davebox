@@ -181,7 +181,8 @@ import {
     handleTrackViewMuteStepPress,
     handleTrackViewShiftStepPress,
     handleTrackViewDrumStepPress,
-    handleTrackViewMelodicStepPress
+    handleTrackViewMelodicStepPress,
+    handleTrackViewStepRelease
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -8158,6 +8159,7 @@ function createTrackViewStepWorkflowDeps() {
         forceRedraw,
         getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
         invalidateLEDCache,
+        noNoteFlashTicks: NO_NOTE_FLASH_TICKS,
         padModeDrum: PAD_MODE_DRUM,
         refreshSeqNotesIfCurrent,
         setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
@@ -8304,115 +8306,7 @@ function _onPadRelease(status, d1, d2) {
         if (handleSessionViewStepRelease(S, createSessionViewWorkflowDeps(), btn)) {
             return;
         }
-        if (btn === S.heldStepBtn) {
-            if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-                /* Drum step release: tap toggles, hold-release exits + vel confirm */
-                const t    = S.activeTrack;
-                const lane = S.activeDrumLane[t];
-                let drumStepCleared = false;
-                if (S.stepBtnPressedTick[btn] >= 0) {
-                    S.stepBtnPressedTick[btn] = -1;
-                    if (S.stepWasEmpty) {
-                        /* Empty step tapped: assign now with current velocity */
-                        const _writeVel = stepEntryVelocity(t, -1, true);
-                        S.stepEditVel = _writeVel;
-                        if (typeof host_module_set_param === 'function')
-                            host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_toggle', String(_writeVel));
-                        S.drumLaneSteps[t][lane][S.heldStep] = '1';
-                        S.drumLaneHasNotes[t][lane] = true;
-                    } else {
-                        /* Occupied step tapped: clear it */
-                        if (typeof host_module_set_param === 'function')
-                            host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_clear', '1');
-                        S.drumLaneSteps[t][lane][S.heldStep] = '0';
-                        S.drumLaneHasNotes[t][lane] = S.drumLaneSteps[t][lane].some(c => c !== '0');
-                        drumStepCleared = true;
-                    }
-                    if (typeof host_module_get_param === 'function') {
-                        const ac = S.trackActiveClip[t];
-                        const hcRaw = host_module_get_param('t' + t + '_c' + ac + '_drum_has_content');
-                        S.drumClipNonEmpty[t][ac] = hcRaw === '1';
-                    }
-                }
-                /* Hold release: reassign to adjacent step if nudge crossed midpoint */
-                let drumDidReassign = false;
-                if (S.stepWasHeld && S.heldStepNotes.length > 0) {
-                    const _tpsMid = Math.floor((S.drumLaneTPS[t] || 24) / 2);
-                    let dstStep = -1;
-                    if (S.stepEditNudge >= _tpsMid)
-                        dstStep = (S.heldStep + 1) % S.drumLaneLength[t];
-                    else if (S.stepEditNudge < -_tpsMid)
-                        dstStep = (S.heldStep - 1 + S.drumLaneLength[t]) % S.drumLaneLength[t];
-                    if (dstStep >= 0) {
-                        if (typeof host_module_set_param === 'function')
-                            host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_reassign', String(dstStep));
-                        S.drumLaneSteps[t][lane][S.heldStep] = '0';
-                        S.pendingDrumLaneResync      = 3;
-                        S.pendingDrumLaneResyncTrack = t;
-                        S.pendingDrumLaneResyncLane  = lane;
-                        drumDidReassign = true;
-                    }
-                }
-                /* Confirm vel at release — ensures it sticks even if mid-hold send was coalesced */
-                if (!drumStepCleared && !drumDidReassign && S.heldStepNotes.length > 0) {
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_vel', String(S.stepEditVel));
-                }
-            } else {
-            if (S.stepBtnPressedTick[btn] >= 0 && S.activeBank !== 6) {
-                /* Quick release within threshold — commit as tap toggle */
-                const ac_t   = effectiveClip(S.activeTrack);
-                const absIdx = S.heldStep;
-                S.stepBtnPressedTick[btn] = -1;
-                if (S.stepWasEmpty) {
-                    /* Tap on empty step: assign lastPlayedNote now */
-                    if (S.lastPlayedNote >= 0) {
-                        const assignNote_t = S.lastPlayedNote;
-                        const assignVel_t  = stepEntryVelocity(S.activeTrack, -1, false);
-                        if (typeof host_module_set_param === 'function')
-                            host_module_set_param('t' + S.activeTrack + '_c' + ac_t + '_step_' + absIdx + '_toggle', assignNote_t + ' ' + assignVel_t);
-                        S.clipSteps[S.activeTrack][ac_t][absIdx] = 1;
-                        S.clipNonEmpty[S.activeTrack][ac_t] = true;
-                        refreshSeqNotesIfCurrent(S.activeTrack, ac_t, absIdx);
-                    } else {
-                        S.noNoteFlashEndTick = S.tickCount + NO_NOTE_FLASH_TICKS;
-                        S.screenDirty = true;
-                    }
-                } else {
-                    /* Step had data — tap clears it entirely */
-                    clearStep(S.activeTrack, ac_t, absIdx);
-                    refreshSeqNotesIfCurrent(S.activeTrack, ac_t, absIdx);
-                }
-            }
-            /* On long-hold release: if nudge moved notes past the step midpoint,
-             * reassign them to the adjacent step slot so it's editable from there. */
-            if (S.stepWasHeld && S.heldStep >= 0 && S.heldStepNotes.length > 0 && S.activeBank !== 6) {
-                const ac_ra = effectiveClip(S.activeTrack);
-                const lenRa = S.clipLength[S.activeTrack][ac_ra];
-                let dstStep = -1;
-                if (S.stepEditNudge >= 12)
-                    dstStep = (S.heldStep + 1) % lenRa;
-                else if (S.stepEditNudge <= -13)
-                    dstStep = (S.heldStep - 1 + lenRa) % lenRa;
-                if (dstStep >= 0) {
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + S.activeTrack + '_c' + ac_ra + '_step_' + S.heldStep + '_reassign', String(dstStep));
-                    S.clipSteps[S.activeTrack][ac_ra][S.heldStep] = 0;
-                }
-                /* Always re-read after hold release: poll may have set a neighbor lit */
-                S.pendingStepsReread = 2;
-                S.pendingStepsRereadTrack = S.activeTrack;
-                S.pendingStepsRereadClip  = ac_ra;
-            }
-            } /* end melodic branch */
-            /* Always exit step edit on release of the held button */
-            S.heldStepBtn   = -1;
-            S.heldStep      = -1;
-            S.heldStepNotes = [];
-            S.stepWasEmpty  = false;
-            S.stepWasHeld   = false;
-            forceRedraw();
-        }
+        handleTrackViewStepRelease(S, createTrackViewStepWorkflowDeps(), btn);
     }
     if (d1 >= TRACK_PAD_BASE && d1 < TRACK_PAD_BASE + 32) {
         const padIdx = d1 - TRACK_PAD_BASE;

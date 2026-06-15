@@ -314,3 +314,110 @@ export function handleTrackViewMelodicStepPress(S, deps, idx) {
 
     return true;
 }
+
+export function handleTrackViewStepRelease(S, deps, btn) {
+    if (btn !== S.heldStepBtn)
+        return false;
+
+    if (S.trackPadMode[S.activeTrack] === deps.padModeDrum) {
+        const track = S.activeTrack;
+        const lane = S.activeDrumLane[track];
+        let drumStepCleared = false;
+
+        if (S.stepBtnPressedTick[btn] >= 0) {
+            S.stepBtnPressedTick[btn] = -1;
+            if (S.stepWasEmpty) {
+                const writeVel = deps.stepEntryVelocity(track, -1, true);
+                S.stepEditVel = writeVel;
+                if (deps.setParam)
+                    deps.setParam('t' + track + '_l' + lane + '_step_' + S.heldStep + '_toggle', String(writeVel));
+                S.drumLaneSteps[track][lane][S.heldStep] = '1';
+                S.drumLaneHasNotes[track][lane] = true;
+            } else {
+                if (deps.setParam)
+                    deps.setParam('t' + track + '_l' + lane + '_step_' + S.heldStep + '_clear', '1');
+                S.drumLaneSteps[track][lane][S.heldStep] = '0';
+                S.drumLaneHasNotes[track][lane] = S.drumLaneSteps[track][lane].some(c => c !== '0');
+                drumStepCleared = true;
+            }
+            if (deps.getParam) {
+                const clip = S.trackActiveClip[track];
+                const hasContent = deps.getParam('t' + track + '_c' + clip + '_drum_has_content');
+                S.drumClipNonEmpty[track][clip] = hasContent === '1';
+            }
+        }
+
+        let drumDidReassign = false;
+        if (S.stepWasHeld && S.heldStepNotes.length > 0) {
+            const tpsMid = Math.floor((S.drumLaneTPS[track] || 24) / 2);
+            let dstStep = -1;
+            if (S.stepEditNudge >= tpsMid)
+                dstStep = (S.heldStep + 1) % S.drumLaneLength[track];
+            else if (S.stepEditNudge < -tpsMid)
+                dstStep = (S.heldStep - 1 + S.drumLaneLength[track]) % S.drumLaneLength[track];
+            if (dstStep >= 0) {
+                if (deps.setParam)
+                    deps.setParam('t' + track + '_l' + lane + '_step_' + S.heldStep + '_reassign', String(dstStep));
+                S.drumLaneSteps[track][lane][S.heldStep] = '0';
+                S.pendingDrumLaneResync = 3;
+                S.pendingDrumLaneResyncTrack = track;
+                S.pendingDrumLaneResyncLane = lane;
+                drumDidReassign = true;
+            }
+        }
+
+        if (!drumStepCleared && !drumDidReassign && S.heldStepNotes.length > 0) {
+            if (deps.setParam)
+                deps.setParam('t' + track + '_l' + lane + '_step_' + S.heldStep + '_vel', String(S.stepEditVel));
+        }
+    } else {
+        if (S.stepBtnPressedTick[btn] >= 0 && S.activeBank !== 6) {
+            const clip = deps.effectiveClip(S.activeTrack);
+            const absIdx = S.heldStep;
+            S.stepBtnPressedTick[btn] = -1;
+            if (S.stepWasEmpty) {
+                if (S.lastPlayedNote >= 0) {
+                    const assignNote = S.lastPlayedNote;
+                    const assignVel = deps.stepEntryVelocity(S.activeTrack, -1, false);
+                    if (deps.setParam)
+                        deps.setParam('t' + S.activeTrack + '_c' + clip + '_step_' + absIdx + '_toggle', assignNote + ' ' + assignVel);
+                    S.clipSteps[S.activeTrack][clip][absIdx] = 1;
+                    S.clipNonEmpty[S.activeTrack][clip] = true;
+                    deps.refreshSeqNotesIfCurrent(S.activeTrack, clip, absIdx);
+                } else {
+                    S.noNoteFlashEndTick = S.tickCount + deps.noNoteFlashTicks;
+                    S.screenDirty = true;
+                }
+            } else {
+                deps.clearStep(S.activeTrack, clip, absIdx);
+                deps.refreshSeqNotesIfCurrent(S.activeTrack, clip, absIdx);
+            }
+        }
+
+        if (S.stepWasHeld && S.heldStep >= 0 && S.heldStepNotes.length > 0 && S.activeBank !== 6) {
+            const clip = deps.effectiveClip(S.activeTrack);
+            const len = S.clipLength[S.activeTrack][clip];
+            let dstStep = -1;
+            if (S.stepEditNudge >= 12)
+                dstStep = (S.heldStep + 1) % len;
+            else if (S.stepEditNudge <= -13)
+                dstStep = (S.heldStep - 1 + len) % len;
+            if (dstStep >= 0) {
+                if (deps.setParam)
+                    deps.setParam('t' + S.activeTrack + '_c' + clip + '_step_' + S.heldStep + '_reassign', String(dstStep));
+                S.clipSteps[S.activeTrack][clip][S.heldStep] = 0;
+            }
+            S.pendingStepsReread = 2;
+            S.pendingStepsRereadTrack = S.activeTrack;
+            S.pendingStepsRereadClip = clip;
+        }
+    }
+
+    S.heldStepBtn = -1;
+    S.heldStep = -1;
+    S.heldStepNotes = [];
+    S.stepWasEmpty = false;
+    S.stepWasHeld = false;
+    deps.forceRedraw();
+    return true;
+}
