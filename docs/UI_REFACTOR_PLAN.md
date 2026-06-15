@@ -793,6 +793,15 @@ Drum repeat workflows:
   `web/tests/integration/step-edit-render.test.ts` for drum step edit, melodic
   merged note-cell rendering, empty held steps, and the note-loading fall-through
   case.
+- Continued the faster presentation path with the remaining held-step Track View
+  presentation branch. Added `ui/ui_cc_step_edit_render.mjs` for the CC
+  automation step-hold graph, header, knob cells, and progress bar. Kept the
+  render-time DSP graph read/cache inside this presentation renderer, and left
+  CC step edit/write behavior in `ui.js`.
+- Added focused output/cache coverage in
+  `web/tests/integration/cc-step-edit-render.test.ts` for graph refresh,
+  scheduler labels, knob-cell formatting, cached graph reuse, and missing-page
+  fallback rendering.
 
 Verification:
 
@@ -802,6 +811,7 @@ Verification:
 - `npm run test:node -- tests/integration/clip-track-sync.test.ts tests/integration/tick-tasks.test.ts`
 - `pnpm test:node tests/integration/loop-render.test.ts`
 - `pnpm vitest run tests/integration/step-edit-render.test.ts`
+- `pnpm vitest run tests/integration/cc-step-edit-render.test.ts`
 - `pnpm test:node tests/integration/loop-render.test.ts tests/integration/param-peek-render.test.ts tests/integration/prompt-render.test.ts tests/integration/popup-render.test.ts tests/integration/idle-render.test.ts tests/integration/bank-render.test.ts tests/integration/ui-descriptors.test.ts`
 - `pnpm test:node tests/integration`
 - `pnpm test:node`
