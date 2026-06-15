@@ -184,7 +184,8 @@ import {
     handleTrackViewMelodicStepPress,
     handleTrackViewStepRelease,
     handleTrackViewStepHoldThreshold,
-    handleTrackViewChordFirstStepTick
+    handleTrackViewChordFirstStepTick,
+    handleTrackViewMelodicStepNoteAssignment
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -7693,32 +7694,20 @@ function _onPadPressTrackView(status, d1, d2) {
         } else if (S.heldStep >= 0 && !S.shiftHeld) {
             /* Step edit: tap pad to toggle note assignment for held step */
             if (S.padNoteMap[padIdx] === 0xFF) return; /* OOB pad — no note to toggle */
-            const ac    = effectiveClip(S.activeTrack);
             const _pitchRaw = S.padNoteMap[padIdx] + S.trackOctave[S.activeTrack] * 12;
             if (_pitchRaw < 0 || _pitchRaw > 127) return; /* OOB after track-octave shift */
             const pitch = _pitchRaw;
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('t' + S.activeTrack + '_c' + ac + '_step_' + S.heldStep + '_toggle', pitch + ' ' + stepEntryVelocity(S.activeTrack, effectiveVelocity(d2), false));
-            /* Read back authoritative note list */
-            const raw = typeof host_module_get_param === 'function'
-                ? host_module_get_param('t' + S.activeTrack + '_c' + ac + '_step_' + S.heldStep + '_notes')
-                : null;
-            S.heldStepNotes = (raw && raw.trim().length > 0)
-                ? raw.trim().split(' ').map(Number).filter(n => n >= 0 && n <= 127)
-                : [];
-            /* Mirror step active state in JS */
-            S.clipSteps[S.activeTrack][ac][S.heldStep] = S.heldStepNotes.length > 0 ? 1 : 0;
-            if (S.heldStepNotes.length > 0) {
-                S.clipNonEmpty[S.activeTrack][ac] = true;
-            } else if (S.clipNonEmpty[S.activeTrack][ac]) {
-                S.clipNonEmpty[S.activeTrack][ac] = clipHasContent(S.activeTrack, ac);
-            }
-            refreshSeqNotesIfCurrent(S.activeTrack, ac, S.heldStep);
+            const vel = effectiveVelocity(d2);
+            handleTrackViewMelodicStepNoteAssignment(
+                S,
+                createTrackViewStepWorkflowDeps(),
+                pitch,
+                stepEntryVelocity(S.activeTrack, vel, false)
+            );
             /* Preview note */
             padPitch[padIdx] = pitch;
             S.liveActiveNotes.add(pitch);
-            liveSendNote(S.activeTrack, 0x90, pitch, effectiveVelocity(d2));
-            forceRedraw();
+            liveSendNote(S.activeTrack, 0x90, pitch, vel);
         } else if (S.shiftHeld && padIdx >= 24 && padIdx <= 31) {
             const _padOff = padIdx - 24;
             const _isDrum = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM;
@@ -8562,26 +8551,13 @@ function _onMidiExternalImpl(data) {
             extHeldNotes.set(d1, { track: t, recording: isRec });
         }
         if (S.heldStep >= 0 && !S.shiftHeld && !S.sessionView) {
-            const ac = effectiveClip(t);
-            if (typeof host_module_set_param === 'function')
-                /* Replace auto-assigned note if step was empty on hold; otherwise additive */
-                if (S.stepWasEmpty && S.heldStepNotes.length > 0)
-                    host_module_set_param('t' + t + '_c' + ac + '_step_' + S.heldStep + '_set_notes', String(d1));
-                else
-                    host_module_set_param('t' + t + '_c' + ac + '_step_' + S.heldStep + '_toggle', d1 + ' ' + vel);
-            const raw = typeof host_module_get_param === 'function'
-                ? host_module_get_param('t' + t + '_c' + ac + '_step_' + S.heldStep + '_notes') : null;
-            S.heldStepNotes = (raw && raw.trim().length > 0)
-                ? raw.trim().split(' ').map(Number).filter(function(n) { return n >= 0 && n <= 127; })
-                : [];
-            S.clipSteps[t][ac][S.heldStep] = S.heldStepNotes.length > 0 ? 1 : 0;
-            if (S.heldStepNotes.length > 0) {
-                S.clipNonEmpty[t][ac] = true;
-            } else if (S.clipNonEmpty[t][ac]) {
-                S.clipNonEmpty[t][ac] = clipHasContent(t, ac);
-            }
-            refreshSeqNotesIfCurrent(t, ac, S.heldStep);
-            forceRedraw();
+            handleTrackViewMelodicStepNoteAssignment(
+                S,
+                createTrackViewStepWorkflowDeps(),
+                d1,
+                vel,
+                { replaceAutoAssigned: true }
+            );
         }
     } else if (msgType === 0x80 || (msgType === 0x90 && d2 === 0)) {
         const info = extHeldNotes.get(d1);

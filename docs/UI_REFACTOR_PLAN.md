@@ -996,6 +996,15 @@ Drum repeat workflows:
   top-level tick/MIDI routing. Deeper CC step-edit behavior, Parameter Bank
   behavior, recording behavior, Session View Performance Mode, modal workflows,
   and unrelated DSP reads/writes remain in `ui.js`.
+- Continued the Track View Step Workflow seam with melodic held-step note
+  assignment from pad and external-note input. Moved step note toggle,
+  auto-assigned empty-step replacement, authoritative note readback, clip mirror
+  updates, sequence-note refresh, and redraw into
+  `handleTrackViewMelodicStepNoteAssignment()`. Preserved top-level input
+  routing by leaving pad-map resolution, pad live preview, external MIDI live
+  routing, recording, drum pad behavior, Session View behavior, and Parameter
+  Bank behavior in `ui.js`. Preserved existing CC-bank behavior for held melodic
+  step note assignment; deeper CC step-edit behavior remains in `ui.js`.
 
 Verification:
 

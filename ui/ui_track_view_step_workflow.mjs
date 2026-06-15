@@ -552,3 +552,36 @@ export function handleTrackViewChordFirstStepTick(S, deps) {
 
     return handled;
 }
+
+export function handleTrackViewMelodicStepNoteAssignment(S, deps, pitch, velocity, opts = {}) {
+    if (S.heldStep < 0 || S.shiftHeld || S.sessionView)
+        return false;
+    if (S.trackPadMode[S.activeTrack] === deps.padModeDrum)
+        return false;
+
+    const track = S.activeTrack;
+    const clip = deps.effectiveClip(track);
+    const prefix = 't' + track + '_c' + clip + '_step_' + S.heldStep;
+    const replaceAutoAssigned = !!opts.replaceAutoAssigned;
+
+    if (deps.setParam) {
+        if (replaceAutoAssigned && S.stepWasEmpty && S.heldStepNotes.length > 0)
+            deps.setParam(prefix + '_set_notes', String(pitch));
+        else
+            deps.setParam(prefix + '_toggle', pitch + ' ' + velocity);
+    }
+
+    const raw = deps.getParam ? deps.getParam(prefix + '_notes') : null;
+    S.heldStepNotes = (raw && raw.trim().length > 0)
+        ? raw.trim().split(' ').map(Number).filter(function(n) { return n >= 0 && n <= 127; })
+        : [];
+    S.clipSteps[track][clip][S.heldStep] = S.heldStepNotes.length > 0 ? 1 : 0;
+    if (S.heldStepNotes.length > 0) {
+        S.clipNonEmpty[track][clip] = true;
+    } else if (S.clipNonEmpty[track][clip]) {
+        S.clipNonEmpty[track][clip] = deps.clipHasContent(track, clip);
+    }
+    deps.refreshSeqNotesIfCurrent(track, clip, S.heldStep);
+    deps.forceRedraw();
+    return true;
+}
