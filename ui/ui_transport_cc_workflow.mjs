@@ -65,3 +65,79 @@ export function handleUiPlayButton(S, deps, d1, d2) {
         }
     }
 }
+
+export function handleUiRecordButton(S, deps, d1, d2) {
+    if (d1 !== deps.moveRec || d2 !== 127) return;
+
+    if (S.recordArmed) {
+        if (S.recordCountingIn) {
+            /* Record pressed during count-in -> cancel queued transport+record. */
+            deps.disarmRecord();
+        } else {
+            const t = S.recordArmedTrack >= 0 ? S.recordArmedTrack : S.activeTrack;
+            const c = S.trackActiveClip[t];
+            if (S.clipAdaptiveMode[t][c] && !S.recordScheduledStop && S.playing) {
+                /* Schedule stop at end of current page. */
+                const isDrum = S.trackPadMode[t] === deps.padModeDrum;
+                const step   = isDrum ? S.drumCurrentStep[t] : S.trackCurrentStep[t];
+                S.recordScheduledStop       = true;
+                S.recordScheduledStopTarget = (Math.floor(step / 16) + 1) * 16;
+            } else {
+                deps.disarmRecord();
+            }
+        }
+        return;
+    }
+
+    /* Arming path. First gate: refuse if the active clip / lane is playing in
+     * any non-Forward direction. */
+    const t = S.activeTrack;
+    const c = S.trackActiveClip[t];
+    const isDrum = S.trackPadMode[t] === deps.padModeDrum;
+    const playbackDir = isDrum
+        ? (S.drumLanePlaybackDir[t][S.activeDrumLane[t]] | 0)
+        : (S.clipPlaybackDir[t][c] | 0);
+    if (playbackDir !== 0) {
+        S.recordBlockedDialog    = true;
+        S.recordBlockedDialogSel = 0;
+        deps.forceRedraw();
+        return;
+    }
+
+    if (!S.playing) {
+        /* Stopped -> DSP-side 1-bar count-in; transport+recording fire from render thread. */
+        const rawBpm = deps.getParam ? parseFloat(deps.getParam('bpm')) : 120;
+        const bpm = (rawBpm > 0 && isFinite(rawBpm)) ? rawBpm : 120;
+        S.recordArmed          = true;
+        S.recordCountingIn     = true;
+        S.recordArmedTrack     = S.activeTrack;
+        S.recordBpm            = bpm;
+        S.countInStartTick     = S.tickCount;
+        S.countInBeatStartTick = S.tickCount;
+        S.countInQuarterTicks  = Math.round(196 * 60 / bpm);
+        S.pendingPrerollNotes       = [];
+        S.pendingPrerollToggleQueue = [];
+        if (deps.setParam)
+            deps.setParam('record_count_in', String(S.activeTrack));
+        S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+        deps.setButtonLED(deps.moveRec, deps.red);
+        return;
+    }
+
+    /* Playing -> arm with no count-in. Adaptive mode defers DSP recording to
+     * the next page boundary; fixed mode records immediately. */
+    const rawBpmLive = deps.getParam ? parseFloat(deps.getParam('bpm')) : 120;
+    const adaptive = isDrum
+        ? (!S.drumClipNonEmpty[t][c] && !S.drumLaneLengthManuallySet[t])
+        : (!S.clipNonEmpty[t][c] && !S.clipLengthManuallySet[t][c]);
+    S.recordArmed       = true;
+    S.recordCountingIn  = false;
+    S.recordArmedTrack  = t;
+    S.recordPendingPage = adaptive;
+    S.recordBpm         = (rawBpmLive > 0 && isFinite(rawBpmLive)) ? rawBpmLive : 120;
+    if (adaptive) S.clipAdaptiveMode[t][c] = true;
+    deps.setButtonLED(deps.moveRec, deps.red);
+    if (deps.setParam)
+        deps.setParam('t' + t + '_recording', adaptive ? '2' : '1');
+    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+}

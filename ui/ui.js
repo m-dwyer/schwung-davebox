@@ -173,7 +173,8 @@ import {
     handleUiSideButton
 } from './ui_side_button_workflow.mjs';
 import {
-    handleUiPlayButton
+    handleUiPlayButton,
+    handleUiRecordButton
 } from './ui_transport_cc_workflow.mjs';
 import {
     renderTrackStepEditView
@@ -6157,90 +6158,7 @@ function _onCC_transport(d1, d2) {
     handleUiPlayButton(S, createTransportCcWorkflowDeps(), d1, d2);
 
     /* Record button (CC 86): toggle arm/disarm */
-    if (d1 === MoveRec && d2 === 127) {
-        if (S.recordArmed) {
-            if (S.recordCountingIn) {
-                /* Record pressed during count-in → cancel queued transport+record */
-                disarmRecord();
-            } else {
-            const _recT  = S.recordArmedTrack >= 0 ? S.recordArmedTrack : S.activeTrack;
-            const _recAc = S.trackActiveClip[_recT];
-            if (S.clipAdaptiveMode[_recT][_recAc] && !S.recordScheduledStop && S.playing) {
-                /* Schedule stop at end of current page */
-                const _recDrum = S.trackPadMode[_recT] === PAD_MODE_DRUM;
-                const _recStp  = _recDrum ? S.drumCurrentStep[_recT] : S.trackCurrentStep[_recT];
-                S.recordScheduledStop       = true;
-                S.recordScheduledStopTarget = (Math.floor(_recStp / 16) + 1) * 16;
-            } else {
-                disarmRecord();
-            }
-            } /* end else (not counting in) */
-        } else {
-            /* Arming path. First gate: refuse if the active clip / lane is
-             * playing in any non-Forward direction. Recording into Bwd / PPf /
-             * PPb is confusing because the visual playhead is captured but
-             * next-loop semantics fire the note at a shifted position. RvSt
-             * (Step/Audio) is only meaningful during reverse motion, so it's
-             * a no-op when Dir=Fwd and doesn't need to gate recording. */
-            const _at = S.activeTrack;
-            const _aac = S.trackActiveClip[_at];
-            const _aIsDrum = S.trackPadMode[_at] === PAD_MODE_DRUM;
-            const _apd = _aIsDrum
-                ? (S.drumLanePlaybackDir[_at][S.activeDrumLane[_at]] | 0)
-                : (S.clipPlaybackDir[_at][_aac] | 0);
-            if (_apd !== 0) {
-                S.recordBlockedDialog    = true;
-                S.recordBlockedDialogSel = 0;  /* default OK */
-                forceRedraw();
-            } else if (!S.playing) {
-            /* Stopped → DSP-side 1-bar count-in; transport+recording fire from render thread */
-            const rawBpm = typeof host_module_get_param === 'function'
-                ? parseFloat(host_module_get_param('bpm')) : 120;
-            const bpm = (rawBpm > 0 && isFinite(rawBpm)) ? rawBpm : 120;
-            S.recordArmed         = true;
-            S.recordCountingIn    = true;
-            S.recordArmedTrack    = S.activeTrack;
-            S.recordBpm           = bpm;
-            S.countInStartTick    = S.tickCount;
-            S.countInBeatStartTick = S.tickCount;
-            S.countInQuarterTicks = Math.round(196 * 60 / bpm);
-            S.pendingPrerollNotes       = [];
-            S.pendingPrerollToggleQueue = [];
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('record_count_in', String(S.activeTrack));
-            S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-            setButtonLED(MoveRec, Red);
-            /* Adaptive mode: entered when count-in finishes (transport start edge in tick) */
-        } else {
-            /* Playing → arm with no count-in. Two paths by mode:
-             *   Adaptive (empty clip + length not manually set): defer DSP
-             *     recording=1 to next bar boundary AND reset playhead to
-             *     loop_start at fire time (next page becomes new step 0,
-             *     avoiding an empty leading page). Record LED blinks until
-             *     DSP fires. JS sends recording=2.
-             *   Fixed (clip exists / length locked): record immediately at
-             *     the current step — the existing clip grid is the meaningful
-             *     frame. JS sends recording=1 (legacy). No blink. */
-            const rawBpmLive = typeof host_module_get_param === 'function'
-                ? parseFloat(host_module_get_param('bpm')) : 120;
-            const _at = S.activeTrack, _ac = S.trackActiveClip[_at];
-            const _isDrum = S.trackPadMode[_at] === PAD_MODE_DRUM;
-            const _adaptive = _isDrum
-                ? (!S.drumClipNonEmpty[_at][_ac] && !S.drumLaneLengthManuallySet[_at])
-                : (!S.clipNonEmpty[_at][_ac] && !S.clipLengthManuallySet[_at][_ac]);
-            S.recordArmed       = true;
-            S.recordCountingIn  = false;
-            S.recordArmedTrack  = _at;
-            S.recordPendingPage = _adaptive;
-            S.recordBpm        = (rawBpmLive > 0 && isFinite(rawBpmLive)) ? rawBpmLive : 120;
-            if (_adaptive) S.clipAdaptiveMode[_at][_ac] = true;
-            setButtonLED(MoveRec, Red);
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('t' + _at + '_recording', _adaptive ? '2' : '1');
-            S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-        }
-        } /* end arming else (direction-gated) */
-    }
+    handleUiRecordButton(S, createTransportCcWorkflowDeps(), d1, d2);
 
     /* Sample press (no modifier): track held state; cancel dialogs/merge immediately on press */
     if (d1 === MoveSample && d2 === 127 && !S.shiftHeld) {
@@ -7691,9 +7609,14 @@ function createTransportCcWorkflowDeps() {
     return {
         disarmRecord,
         focusedClipIsEmpty: _focusedClipIsEmpty,
+        forceRedraw,
+        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
         movePlay: MovePlay,
+        moveRec: MoveRec,
         numTracks: NUM_TRACKS,
         padModeDrum: PAD_MODE_DRUM,
+        red: Red,
+        setButtonLED,
         setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
         showActionPopup,
         unlatchAllTracks: function () {
