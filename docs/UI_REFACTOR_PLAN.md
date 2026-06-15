@@ -802,6 +802,14 @@ Drum repeat workflows:
   `web/tests/integration/cc-step-edit-render.test.ts` for graph refresh,
   scheduler labels, knob-cell formatting, cached graph reuse, and missing-page
   fallback rendering.
+- Continued the faster presentation path with the AUTO idle Track View branch.
+  Moved lane info, badges, automation graph, render-time graph read/cache, and
+  lane-aware progress rendering into `renderMotionIdleView()` in
+  `ui/ui_idle_render.mjs`, preserving `drawUI()` priority/order and leaving CC
+  edit/write behavior in `ui.js`.
+- Added focused output/cache coverage in
+  `web/tests/integration/idle-render.test.ts` for AUTO idle lane text, badges,
+  graph refresh/cache reuse, and playing progress rendering.
 
 Verification:
 
@@ -812,6 +820,7 @@ Verification:
 - `pnpm test:node tests/integration/loop-render.test.ts`
 - `pnpm vitest run tests/integration/step-edit-render.test.ts`
 - `pnpm vitest run tests/integration/cc-step-edit-render.test.ts`
+- `pnpm test:node tests/integration/idle-render.test.ts`
 - `pnpm test:node tests/integration/loop-render.test.ts tests/integration/param-peek-render.test.ts tests/integration/prompt-render.test.ts tests/integration/popup-render.test.ts tests/integration/idle-render.test.ts tests/integration/bank-render.test.ts tests/integration/ui-descriptors.test.ts`
 - `pnpm test:node tests/integration`
 - `pnpm test:node`

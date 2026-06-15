@@ -99,9 +99,7 @@ import {
     requestEditSoundForTrack
 } from './ui_sound_edit.mjs';
 import {
-    PARAM_PEEK_DETAIL_TICKS,
-    autoLaneLabel,
-    motionIdleModel
+    PARAM_PEEK_DETAIL_TICKS
 } from './ui_motion.mjs';
 import {
     renderAllLanesBankOverview,
@@ -117,7 +115,8 @@ import {
 import {
     renderSessionIdleView,
     renderDrumTrackIdleView,
-    renderMelodicTrackIdleView
+    renderMelodicTrackIdleView,
+    renderMotionIdleView
 } from './ui_idle_render.mjs';
 import {
     renderSessionActionPopup,
@@ -3571,6 +3570,15 @@ function createSessionIdleRenderDeps() {
     };
 }
 
+function createMotionIdleRenderDeps() {
+    return {
+        print,
+        fill_rect,
+        drawBankHeadingInverted,
+        host_module_get_param
+    };
+}
+
 function createPopupRenderDeps() {
     return {
         print,
@@ -3772,116 +3780,7 @@ function drawUI() {
     /* Auto bank idle display: lane info + automation graph + progress bar */
     if (bank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM &&
             !S.loopHeld && S.knobTouched < 0 && !inTimeout) {
-        var _gt = S.activeTrack;
-        var _gac = effectiveClip(_gt);
-        var _gm = motionIdleModel(_gt, _gac);
-        var _gLane = _gm.lane;
-        var _gEffLen = _gm.effectiveLength;
-        drawBankHeadingInverted(_gm.heading);
-        var _bx = 60;
-        for (var _gb = 0; _gb < _gm.badges.length; _gb++) {
-            var _bt = _gm.badges[_gb];
-            var _bw = _bt.length * 6 + 3;
-            fill_rect(_bx, 1, _bw, 7, 1);
-            print(_bx + 1, 1, _bt, 0);
-            _bx += _bw + 2;
-        }
-        /* Lane info rows */
-        var _gValStr = _gm.value;
-        var _gLine1L = 'K' + (_gLane + 1) + ' ' + _gm.laneLabel + ':';
-        print(4, 10, _gLine1L, 1);
-        var _gValX = 4 + _gLine1L.length * 6;
-        print(_gValX, 10, _gValStr, 1);
-        fill_rect(_gValX, 19, _gValStr.length * 6, 1, 1);
-        if (_gm.paramText) {
-            print(128 - _gm.paramText.length * 6 - 1, 10, _gm.paramText, 1);
-        }
-        var _gResStr = _gm.resText;
-        var _gZoomStr = _gm.zoomText;
-        print(4, 21, _gResStr, 1);
-        print(128 - _gZoomStr.length * 6 - 4, 21, _gZoomStr, 1);
-        /* Automation graph: 128px wide, just above progress bar */
-        var _gBarY = 60, _gBarH = 3;
-        var _gH = 24, _gY = _gBarY - _gH - 3;
-        var _gPages = _gm.graphPages;
-        var _gCTps = S.clipTPS[_gt][_gac] || 24;
-        var _gTotalSteps = _gEffLen;
-        var _gKey = _gm.graphKey;
-        if (_gKey !== S.ccGraphOvKey || (S.tickCount % POLL_INTERVAL) === 0) {
-            S.ccGraphOvData = [];
-            for (var _gp = 0; _gp < _gPages; _gp++) {
-                var _gRaw = (typeof host_module_get_param === 'function')
-                    ? host_module_get_param('t' + _gt + '_c' + _gac + '_ccsv_' + _gLane + '_' + _gp) : null;
-                if (_gRaw) {
-                    var _gParts = _gRaw.split(' ');
-                    for (var _gs = 0; _gs < 16 && _gp * 16 + _gs < _gTotalSteps; _gs++)
-                        S.ccGraphOvData.push(_gs < _gParts.length ? parseInt(_gParts[_gs], 10) : 255);
-                }
-            }
-            S.ccGraphOvKey = _gKey;
-        }
-        /* Render graph: black background, 1px white border, white line */
-        fill_rect(0, _gY, 128, 1, 1);
-        fill_rect(0, _gY + _gH - 1, 128, 1, 1);
-        fill_rect(0, _gY, 1, _gH, 1);
-        fill_rect(127, _gY, 1, _gH, 1);
-        var _gDataLen = S.ccGraphOvData.length || 1;
-        var _gDrawY = _gY + 2, _gDrawH = _gH - 4;
-        var _gPrevPy = -1;
-        for (var _gc = 1; _gc < 127; _gc++) {
-            var _gIdx = Math.floor(_gc * _gDataLen / 128);
-            var _gv = _gIdx < S.ccGraphOvData.length ? S.ccGraphOvData[_gIdx] : -1;
-            if (_gv >= 0 && _gv <= 127) {
-                var _gpy = _gDrawY + _gDrawH - 1 - Math.round(_gv * (_gDrawH - 1) / 127);
-                if (_gPrevPy >= 0 && _gPrevPy !== _gpy) {
-                    var _gyMin = Math.min(_gPrevPy, _gpy);
-                    var _gyMax = Math.max(_gPrevPy, _gpy);
-                    fill_rect(_gc, _gyMin, 1, _gyMax - _gyMin + 1, 1);
-                } else {
-                    fill_rect(_gc, _gpy, 1, 1, 1);
-                }
-                _gPrevPy = _gpy;
-            } else {
-                _gPrevPy = -1;
-            }
-        }
-        /* Step-hold position indicator — black vertical line on graph */
-        if (S.heldStep >= 0) {
-            var _gSx = Math.floor(S.heldStep * 128 / _gDataLen);
-            if (_gSx > 127) _gSx = 127;
-            fill_rect(_gSx, _gY, 1, _gH, 0);
-        }
-        /* Progress bar — lane-aware */
-        var _gWinPages = Math.max(1, Math.ceil(_gEffLen / 16));
-        var _gViewPage = Math.max(0, Math.min(S.trackCurrentPage[_gt], _gWinPages - 1));
-        var _gSegGap = 1;
-        var _gSegW = Math.max(2, Math.floor((120 - (_gWinPages - 1) * _gSegGap) / _gWinPages));
-        var _gPlayPage = -1;
-        if (S.playing) {
-            var _gProg2 = (S.masterPos % (_gEffLen * _gLTps)) / (_gEffLen * _gLTps);
-            _gPlayPage = Math.floor(_gProg2 * _gWinPages);
-        }
-        for (var _gPg = 0; _gPg < _gWinPages; _gPg++) {
-            var _gx = 4 + _gPg * (_gSegW + _gSegGap);
-            if (_gPg === _gViewPage) {
-                fill_rect(_gx, _gBarY, _gSegW, _gBarH, 1);
-            } else if (_gPg === _gPlayPage) {
-                fill_rect(_gx, _gBarY, _gSegW, 1, 1);
-                fill_rect(_gx, _gBarY + _gBarH - 1, _gSegW, 1, 1);
-                fill_rect(_gx, _gBarY, 1, _gBarH, 1);
-                fill_rect(_gx + _gSegW - 1, _gBarY, 1, _gBarH, 1);
-            } else {
-                fill_rect(_gx, _gBarY + _gBarH - 1, _gSegW, 1, 1);
-            }
-        }
-        /* Playhead dot on progress bar */
-        if (S.playing) {
-            var _gBarW = _gWinPages * (_gSegW + _gSegGap) - _gSegGap;
-            var _gDotX = 4 + Math.floor(_gProg2 * _gBarW);
-            var _gViewStart = 4 + _gViewPage * (_gSegW + _gSegGap);
-            var _gOnSolid = _gDotX >= _gViewStart && _gDotX < _gViewStart + _gSegW;
-            fill_rect(_gDotX, _gBarY, 1, _gBarH, _gOnSolid ? 0 : 1);
-        }
+        renderMotionIdleView(createMotionIdleRenderDeps());
         return;
     }
 

@@ -4,9 +4,12 @@ import {
     NOTE_KEYS,
     NUM_TRACKS,
     PAD_MODE_DRUM,
+    POLL_INTERVAL,
     SCALE_DISPLAY,
     SCENE_LETTERS
 } from './ui_constants.mjs';
+import { effectiveClip } from './ui_leds.mjs';
+import { motionIdleModel } from './ui_motion.mjs';
 
 export function renderSessionIdleView(deps) {
     deps.fill_rect(0, 0, 128, 12, 1);
@@ -72,6 +75,127 @@ export function renderMelodicTrackIdleView(deps) {
     deps.drawTrackRow(34);
     renderActiveClipLetters(deps);
     deps.drawPositionBar(S.activeTrack);
+}
+
+export function renderMotionIdleView(deps) {
+    const t = S.activeTrack;
+    const ac = effectiveClip(t);
+    const model = motionIdleModel(t, ac);
+    const lane = model.lane;
+    const effectiveLength = model.effectiveLength;
+
+    deps.drawBankHeadingInverted(model.heading);
+    renderMotionBadges(deps, model.badges);
+    renderMotionLaneInfo(deps, model, lane);
+    refreshMotionGraphData(deps, t, ac, lane, effectiveLength, model.graphPages, model.graphKey);
+    renderMotionGraph(deps, 33, 24);
+    renderMotionProgress(deps, t, ac, lane, effectiveLength, 60, 3);
+}
+
+function renderMotionBadges(deps, badges) {
+    let x = 60;
+    for (let i = 0; i < badges.length; i++) {
+        const text = badges[i];
+        const w = text.length * 6 + 3;
+        deps.fill_rect(x, 1, w, 7, 1);
+        deps.print(x + 1, 1, text, 0);
+        x += w + 2;
+    }
+}
+
+function renderMotionLaneInfo(deps, model, lane) {
+    const value = model.value;
+    const line1 = 'K' + (lane + 1) + ' ' + model.laneLabel + ':';
+    deps.print(4, 10, line1, 1);
+    const valueX = 4 + line1.length * 6;
+    deps.print(valueX, 10, value, 1);
+    deps.fill_rect(valueX, 19, value.length * 6, 1, 1);
+    if (model.paramText) {
+        deps.print(128 - model.paramText.length * 6 - 1, 10, model.paramText, 1);
+    }
+    deps.print(4, 21, model.resText, 1);
+    deps.print(128 - model.zoomText.length * 6 - 4, 21, model.zoomText, 1);
+}
+
+function refreshMotionGraphData(deps, t, ac, lane, effectiveLength, graphPages, graphKey) {
+    if (graphKey === S.ccGraphOvKey && (S.tickCount % POLL_INTERVAL) !== 0) return;
+    S.ccGraphOvData = [];
+    for (let page = 0; page < graphPages; page++) {
+        const raw = (typeof deps.host_module_get_param === 'function')
+            ? deps.host_module_get_param('t' + t + '_c' + ac + '_ccsv_' + lane + '_' + page)
+            : null;
+        if (raw) {
+            const parts = raw.split(' ');
+            for (let step = 0; step < 16 && page * 16 + step < effectiveLength; step++)
+                S.ccGraphOvData.push(step < parts.length ? parseInt(parts[step], 10) : 255);
+        }
+    }
+    S.ccGraphOvKey = graphKey;
+}
+
+function renderMotionGraph(deps, graphY, graphH) {
+    deps.fill_rect(0, graphY, 128, 1, 1);
+    deps.fill_rect(0, graphY + graphH - 1, 128, 1, 1);
+    deps.fill_rect(0, graphY, 1, graphH, 1);
+    deps.fill_rect(127, graphY, 1, graphH, 1);
+    const dataLen = S.ccGraphOvData.length || 1;
+    const drawY = graphY + 2;
+    const drawH = graphH - 4;
+    let prevPy = -1;
+    for (let x = 1; x < 127; x++) {
+        const idx = Math.floor(x * dataLen / 128);
+        const value = idx < S.ccGraphOvData.length ? S.ccGraphOvData[idx] : -1;
+        if (value >= 0 && value <= 127) {
+            const py = drawY + drawH - 1 - Math.round(value * (drawH - 1) / 127);
+            if (prevPy >= 0 && prevPy !== py) {
+                const yMin = Math.min(prevPy, py);
+                const yMax = Math.max(prevPy, py);
+                deps.fill_rect(x, yMin, 1, yMax - yMin + 1, 1);
+            } else {
+                deps.fill_rect(x, py, 1, 1, 1);
+            }
+            prevPy = py;
+        } else {
+            prevPy = -1;
+        }
+    }
+    if (S.heldStep >= 0) {
+        const stepX = Math.min(127, Math.floor(S.heldStep * 128 / dataLen));
+        deps.fill_rect(stepX, graphY, 1, graphH, 0);
+    }
+}
+
+function renderMotionProgress(deps, t, ac, lane, effectiveLength, barY, barH) {
+    const laneTps = S.ccLaneTps[t][ac][lane] || (S.clipTPS[t][ac] || 24);
+    const pageCount = Math.max(1, Math.ceil(effectiveLength / 16));
+    const viewPage = Math.max(0, Math.min(S.trackCurrentPage[t], pageCount - 1));
+    const pageGap = 1;
+    const pageW = Math.max(2, Math.floor((120 - (pageCount - 1) * pageGap) / pageCount));
+    let playPage = -1;
+    let progress = 0;
+    if (S.playing) {
+        progress = (S.masterPos % (effectiveLength * laneTps)) / (effectiveLength * laneTps);
+        playPage = Math.floor(progress * pageCount);
+    }
+    for (let page = 0; page < pageCount; page++) {
+        const x = 4 + page * (pageW + pageGap);
+        if (page === viewPage) {
+            deps.fill_rect(x, barY, pageW, barH, 1);
+        } else if (page === playPage) {
+            deps.fill_rect(x, barY, pageW, 1, 1);
+            deps.fill_rect(x, barY + barH - 1, pageW, 1, 1);
+            deps.fill_rect(x, barY, 1, barH, 1);
+            deps.fill_rect(x + pageW - 1, barY, 1, barH, 1);
+        } else {
+            deps.fill_rect(x, barY + barH - 1, pageW, 1, 1);
+        }
+    }
+    if (S.playing) {
+        const barW = pageCount * (pageW + pageGap) - pageGap;
+        const dotX = 4 + Math.floor(progress * barW);
+        const viewStart = 4 + viewPage * (pageW + pageGap);
+        deps.fill_rect(dotX, barY, 1, barH, (dotX >= viewStart && dotX < viewStart + pageW) ? 0 : 1);
+    }
 }
 
 function renderActiveClipLetters(deps) {
