@@ -192,6 +192,7 @@ import {
     handleUiLoopTrackViewButton,
     handleUiMenuCoRunExitButton,
     handleUiMuteModifierButton,
+    handleUiNoteSessionButton,
     handleUiShiftButton
 } from './ui_button_cc_workflow.mjs';
 import {
@@ -5713,99 +5714,8 @@ function _onCC_buttons(d1, d2) {
     if (handleUiMenuCoRunExitButton(S, createButtonCcWorkflowDeps(), d1, d2)) return;
 
     /* Note/Session view toggle: Shift+press = open global menu (Track View only);
-     * tap = switch view; hold = session overview */
-    if (d1 === MoveNoteSession) {
-        /* Move co-run: Menu button is disabled — swallow press and release so it
-         * neither exits co-run nor toggles the view. Step 3 / Back are the exits. */
-        if (S.moveCoRunTrack >= 0) return;
-        if (d2 === 127) {
-            /* Co-run exit is the framework's job now — the shim catches Back
-             * during corun_active() and calls shadow_corun_end() itself, and
-             * pollDSP picks up target=NONE on the next frame and runs
-             * exitMoveNativeCoRun()/exitSchwungCoRun() for the JS cleanup.
-             * No Menu intercept needed here. */
-            if (S.snapshotPicker) {
-                /* Back out of a confirm to the list, else close the picker. */
-                if (S.snapshotPicker.confirm) S.snapshotPicker.confirm = null;
-                else closeSnapshotPicker();
-                forceRedraw();
-                return;
-            }
-            if (S.shiftHeld) {
-                if (S.globalMenuOpen) { S.globalMenuOpen = false; forceRedraw(); }
-                else { openGlobalMenu(); }
-            } else if (S.routeCheckOpen) {
-                S.routeCheckOpen = false;
-                forceRedraw();
-            } else if (S.tapTempoOpen) {
-                closeTapTempo();
-                forceRedraw();
-            } else if (S.confirmStateWipe) {
-                S.confirmStateWipe = false;
-                removeFlagsWrap();
-                clearAllLEDs();
-                if (typeof host_exit_module === 'function') host_exit_module();
-                forceRedraw();
-            } else if (S.recordBlockedDialog) {
-                S.recordBlockedDialog = false;
-                forceRedraw();
-            } else if (S.confirmLgto) {
-                S.confirmLgto = false;
-                forceRedraw();
-            } else if (S.confirmBake) {
-                S.confirmBake          = false;
-                S.confirmBakeWrapPhase = false;
-                forceRedraw();
-            } else if (S.globalMenuOpen && S.confirmClearSession) {
-                S.confirmClearSession = false;
-                forceRedraw();
-            } else if (S.globalMenuOpen && S.confirmSaveState) {
-                S.confirmSaveState = false;
-                forceRedraw();
-            } else if (S.globalMenuOpen && S.confirmConvertToDrum) {
-                closeConvertConfirm();
-                forceRedraw();
-            } else if (S.globalMenuOpen && S.exportDoneDialog) {
-                S.exportDoneDialog = false;
-                S.globalMenuOpen   = false;
-                forceRedraw();
-            } else if (S.globalMenuOpen && S.confirmExport) {
-                S.confirmExport = false;
-                forceRedraw();
-            } else if (S.globalMenuOpen) {
-                S.globalMenuOpen = false;
-                S.lastSentMenuEditValue = null;
-                forceRedraw();
-            } else if (S.stepIntervalMode && !S.sessionView) {
-                /* Arp Steps overlay: Note/Session exits the overlay without switching view. */
-                S.stepIntervalMode = false;
-                computePadNoteMap();
-                forceRedraw();
-            } else {
-                /* Switch immediately (like Loop entering perf); tap vs hold resolved on release */
-                S.noteSessionPressedTick = S.tickCount;
-                S.sessionViewMomentary   = true;
-                S.sessionView            = !S.sessionView;
-                _switchViewCleanup();
-                invalidateLEDCache();
-                S.screenDirty = true;
-            }
-        } else if (d2 === 0) {
-            if (S.noteSessionPressedTick >= 0 &&
-                    (S.tickCount - S.noteSessionPressedTick) < NOTE_SESSION_HOLD_TICKS) {
-                /* Tap release: make permanent (don't switch back) */
-                S.sessionViewMomentary = false;
-            } else if (S.sessionViewMomentary) {
-                /* Hold release: switch back to original view */
-                S.sessionViewMomentary = false;
-                S.sessionView          = !S.sessionView;
-                _switchViewCleanup();
-                invalidateLEDCache();
-                forceRedraw();
-            }
-            S.noteSessionPressedTick = -1;
-        }
-    }
+     * tap = switch view; hold = session overview. Also the universal dialog "out". */
+    if (handleUiNoteSessionButton(S, createButtonCcWorkflowDeps(), d1, d2)) return;
 
     /* Loop button (CC 58, Session View): enter/exit Performance Mode. */
     if (handleUiLoopPerfModeButton(S, createButtonCcWorkflowDeps(), d1, d2)) return;
@@ -7115,9 +7025,14 @@ function createTransportCcWorkflowDeps() {
 
 function createButtonCcWorkflowDeps() {
     return {
+        clearAllLEDs,
+        closeConvertConfirm,
+        closeSnapshotPicker,
+        closeTapTempo,
         computePadNoteMap,
         editSoundForTrack,
         effectiveClip,
+        exitModule: typeof host_exit_module === 'function' ? host_exit_module : null,
         exitSchwungCoRun,
         forceRedraw,
         handleDeleteLoopDrumRepeatStop: function (track) {
@@ -7137,8 +7052,12 @@ function createButtonCcWorkflowDeps() {
         moveLoop: MoveLoop,
         moveMenu: 50,
         moveMute: MoveMute,
+        moveNoteSession: MoveNoteSession,
         moveShift: MoveShift,
+        noteSessionHoldTicks: NOTE_SESSION_HOLD_TICKS,
         openClearAutoMenu,
+        openGlobalMenu,
+        removeFlagsWrap,
         prepareDrumRepeatLoopPress: function (track, isDrumTrack, liveActiveNoteCount) {
             return prepareDrumRepeatLoopPress(S, track, isDrumTrack, liveActiveNoteCount);
         },
@@ -7148,6 +7067,7 @@ function createButtonCcWorkflowDeps() {
         sendPerfMods,
         setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
         showActionPopup,
+        switchViewCleanup: _switchViewCleanup,
         padModeDrum: PAD_MODE_DRUM
     };
 }

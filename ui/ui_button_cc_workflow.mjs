@@ -314,3 +314,103 @@ export function handleUiLoopTrackViewButton(S, deps, d1, d2) {
     deps.forceRedraw();
     return true;
 }
+
+export function handleUiNoteSessionButton(S, deps, d1, d2) {
+    /* Note/Session view toggle: Shift+press = open global menu (Track View only);
+     * tap = switch view; hold = session overview. Press also acts as the
+     * universal dialog-dismissal "out" — closing whichever dialog/picker/menu
+     * is on top before any view change. */
+    if (d1 !== deps.moveNoteSession) return false;
+
+    /* Move co-run: Menu button is disabled — swallow press and release so it
+     * neither exits co-run nor toggles the view. Step 3 / Back are the exits. */
+    if (S.moveCoRunTrack >= 0) return true;
+    if (d2 === 127) {
+        /* Co-run exit is the framework's job now — the shim catches Back
+         * during corun_active() and calls shadow_corun_end() itself, and
+         * pollDSP picks up target=NONE on the next frame and runs
+         * exitMoveNativeCoRun()/exitSchwungCoRun() for the JS cleanup.
+         * No Menu intercept needed here. */
+        if (S.snapshotPicker) {
+            /* Back out of a confirm to the list, else close the picker. */
+            if (S.snapshotPicker.confirm) S.snapshotPicker.confirm = null;
+            else deps.closeSnapshotPicker();
+            deps.forceRedraw();
+            return true;
+        }
+        if (S.shiftHeld) {
+            if (S.globalMenuOpen) { S.globalMenuOpen = false; deps.forceRedraw(); }
+            else { deps.openGlobalMenu(); }
+        } else if (S.routeCheckOpen) {
+            S.routeCheckOpen = false;
+            deps.forceRedraw();
+        } else if (S.tapTempoOpen) {
+            deps.closeTapTempo();
+            deps.forceRedraw();
+        } else if (S.confirmStateWipe) {
+            S.confirmStateWipe = false;
+            deps.removeFlagsWrap();
+            deps.clearAllLEDs();
+            if (deps.exitModule) deps.exitModule();
+            deps.forceRedraw();
+        } else if (S.recordBlockedDialog) {
+            S.recordBlockedDialog = false;
+            deps.forceRedraw();
+        } else if (S.confirmLgto) {
+            S.confirmLgto = false;
+            deps.forceRedraw();
+        } else if (S.confirmBake) {
+            S.confirmBake          = false;
+            S.confirmBakeWrapPhase = false;
+            deps.forceRedraw();
+        } else if (S.globalMenuOpen && S.confirmClearSession) {
+            S.confirmClearSession = false;
+            deps.forceRedraw();
+        } else if (S.globalMenuOpen && S.confirmSaveState) {
+            S.confirmSaveState = false;
+            deps.forceRedraw();
+        } else if (S.globalMenuOpen && S.confirmConvertToDrum) {
+            deps.closeConvertConfirm();
+            deps.forceRedraw();
+        } else if (S.globalMenuOpen && S.exportDoneDialog) {
+            S.exportDoneDialog = false;
+            S.globalMenuOpen   = false;
+            deps.forceRedraw();
+        } else if (S.globalMenuOpen && S.confirmExport) {
+            S.confirmExport = false;
+            deps.forceRedraw();
+        } else if (S.globalMenuOpen) {
+            S.globalMenuOpen = false;
+            S.lastSentMenuEditValue = null;
+            deps.forceRedraw();
+        } else if (S.stepIntervalMode && !S.sessionView) {
+            /* Arp Steps overlay: Note/Session exits the overlay without switching view. */
+            S.stepIntervalMode = false;
+            deps.computePadNoteMap();
+            deps.forceRedraw();
+        } else {
+            /* Switch immediately (like Loop entering perf); tap vs hold resolved on release */
+            S.noteSessionPressedTick = S.tickCount;
+            S.sessionViewMomentary   = true;
+            S.sessionView            = !S.sessionView;
+            deps.switchViewCleanup();
+            deps.invalidateLEDCache();
+            S.screenDirty = true;
+        }
+    } else if (d2 === 0) {
+        if (S.noteSessionPressedTick >= 0 &&
+                (S.tickCount - S.noteSessionPressedTick) < deps.noteSessionHoldTicks) {
+            /* Tap release: make permanent (don't switch back) */
+            S.sessionViewMomentary = false;
+        } else if (S.sessionViewMomentary) {
+            /* Hold release: switch back to original view */
+            S.sessionViewMomentary = false;
+            S.sessionView          = !S.sessionView;
+            deps.switchViewCleanup();
+            deps.invalidateLEDCache();
+            deps.forceRedraw();
+        }
+        S.noteSessionPressedTick = -1;
+    }
+    return true;
+}
