@@ -121,6 +121,10 @@ import {
     renderSessionOverview
 } from './ui_session_overview_render.mjs';
 import {
+    handleSessionViewStepPress,
+    handleSessionViewStepRelease
+} from './ui_session_view_workflow.mjs';
+import {
     renderPerfModeOled
 } from './ui_perf_render.mjs';
 import {
@@ -8385,6 +8389,16 @@ function _doShiftStepCommon(idx) {
     else if (idx === 8) _jumpToMenuLabel('Scale');
 }
 
+function createSessionViewWorkflowDeps() {
+    return {
+        doShiftStepCommon: _doShiftStepCommon,
+        forceRedraw,
+        numTracks: NUM_TRACKS,
+        sendPerfMods,
+        showActionPopup
+    };
+}
+
 /* Loop+step gesture fire helpers — both the deferred fallback (length-only,
  * loop_start=0) and the active range gesture (loop_start=a*16, length=(b-a+1)*16)
  * route through the new atomic `*_loop_set` DSP keys so there is exactly one
@@ -8537,58 +8551,8 @@ function _onStepButtons(d1, d2) {
         forceRedraw();
         return;
     }
-    /* Delete+step in session view: clear perf preset or mute snapshot slot immediately. */
-    if (S.sessionView && S.deleteHeld) {
-        if (S.loopHeld || S.perfViewLocked) {
-            S.perfSnapshots[idx] = 0;
-            if (S.perfRecalledSlot === idx) { S.perfRecalledSlot = -1; S.perfModsToggled = 0; sendPerfMods(); }
-            showActionPopup('PERF PRESET', 'CLEARED');
-        } else if (S.muteHeld) {
-            S.snapshots[idx] = null;
-            S.pendingDefaultSetParams.push({ key: 'snap_delete', val: String(idx) });
-            showActionPopup('MUTE STATE', 'CLEARED');
-        }
-        forceRedraw();
+    if (handleSessionViewStepPress(S, createSessionViewWorkflowDeps(), idx)) {
         return;
-    }
-    /* Perf Mode: step buttons are preset snapshot slots — defer to release for tap/hold decision. */
-    if (S.sessionView && (S.loopHeld || S.perfViewLocked)) {
-        S.stepBtnPressedTick[idx] = S.tickCount;
-        S.sessionStepHeld         = idx;
-        S.sessionStepHeldCtx      = 1;  /* perf */
-        return;
-    }
-    if (S.sessionView) {
-        /* Scene-bake picker active (set by Session-View Capture tap): step
-         * press selects scene → straight to scene-bake confirm. */
-        if (S.pendingSceneBakePicker) {
-            S.pendingSceneBakePicker = false;
-            S.confirmBakeScene       = true;
-            S.confirmBakeSceneSel    = 1;
-            S.confirmBakeSceneClip   = idx;
-            S.screenDirty            = true;
-            return;
-        }
-        /* Multi-track live merge placement: step press picks destination row. */
-        if (S.pendingMergePlacement) {
-            S.pendingMergePlacement = false;
-            S.pendingDefaultSetParams.push({ key: 'merge_place_row', val: String(idx) });
-            S.screenDirty = true;
-            return;
-        }
-        if (S.muteHeld) {
-            /* All 16 step buttons are snapshot slots — defer to release for tap/hold decision. */
-            S.stepBtnPressedTick[idx] = S.tickCount;
-            S.sessionStepHeld         = idx;
-            S.sessionStepHeldCtx      = 2;  /* mute */
-            return;
-        } else if (S.shiftHeld) {
-            _doShiftStepCommon(idx);
-            forceRedraw();
-        } else if (!S.deleteHeld) {
-            S.pendingDefaultSetParams.push({ key: 'launch_scene', val: String(idx) });
-        }
-        /* S.deleteHeld (non-mute/shift) in Session View: swallow */
     } else if (S.loopHeld) {
         if (S.recordArmed && !S.recordCountingIn) {
             /* Block length changes during active recording */
@@ -9007,38 +8971,7 @@ function _onPadRelease(status, d1, d2) {
     if (d1 >= 16 && d1 <= 31) {
         S.stepOpTick = S.tickCount;
         const btn = d1 - 16;
-        /* Session view hold-to-save: if still pending (tick hasn't fired save yet) → tap recall */
-        if (S.sessionStepHeld === btn) {
-            const ctx = S.sessionStepHeldCtx;
-            S.sessionStepHeld    = -1;
-            S.sessionStepHeldCtx = 0;
-            S.stepBtnPressedTick[btn] = -1;
-            if (ctx === 1) {
-                /* Perf recall */
-                if (S.perfRecalledSlot === btn) {
-                    S.perfRecalledSlot = -1;
-                    S.perfModsToggled  = 0;
-                } else {
-                    S.perfRecalledSlot = btn;
-                    S.perfModsToggled  = S.perfSnapshots[btn];
-                }
-                sendPerfMods();
-            } else {
-                /* Mute recall */
-                if (S.snapshots[btn] !== null) {
-                    const snap = S.snapshots[btn];
-                    for (let _t = 0; _t < NUM_TRACKS; _t++) {
-                        S.trackMuted[_t]  = snap.mute[_t];
-                        S.trackSoloed[_t] = snap.solo[_t];
-                        if (snap.drumEffMute) {
-                            S.drumLaneMute[_t] = snap.drumEffMute[_t];
-                            S.drumLaneSolo[_t] = 0;
-                        }
-                    }
-                    S.pendingDefaultSetParams.push({ key: 'snap_load', val: String(btn) });
-                }
-            }
-            forceRedraw();
+        if (handleSessionViewStepRelease(S, createSessionViewWorkflowDeps(), btn)) {
             return;
         }
         if (btn === S.heldStepBtn) {
