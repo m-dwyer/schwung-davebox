@@ -60,6 +60,53 @@ export function editDrumRepeatGrooveStep(S, deps, track, lane, step, dir, editNu
     return true;
 }
 
+export function handleDrumRepeatPadPress(S, deps, track, padIdx, rawVelocity) {
+    if (S.trackPadMode[track] !== deps.PAD_MODE_DRUM) return false;
+    if (S.shiftHeld || S.copyHeld || S.muteHeld) return false;
+
+    const mode = S.drumPerformMode[track] | 0;
+    if (mode !== 1 && mode !== 2) return false;
+
+    const col = padIdx % 8;
+    const row = Math.floor(padIdx / 8);
+    if (col >= 4 && row < 2) {
+        const rateIdx = row * 4 + (col - 4);
+        const lane = S.activeDrumLane[track];
+        if (mode === 1)
+            return handleDrumRepeatRatePadPress(S, deps, track, padIdx, rateIdx, lane, rawVelocity);
+        return handleDrumRepeat2RatePadPress(S, deps, track, lane, rateIdx);
+    }
+    if (col >= 4 && row >= 2) {
+        const lane = S.activeDrumLane[track];
+        const step = (row - 2) * 4 + (col - 4);
+        return handleDrumRepeatGatePad(S, deps, track, lane, step);
+    }
+    if (mode === 2 && col < 4 && !S.deleteHeld) {
+        const lane = deps.drumPadToLane(padIdx);
+        return handleDrumRepeat2LanePadPress(S, deps, track, lane, padIdx, rawVelocity);
+    }
+    return false;
+}
+
+export function handleDrumRepeatPadRelease(S, deps, track, padIdx) {
+    if (S.trackPadMode[track] !== deps.PAD_MODE_DRUM) return false;
+
+    const col = padIdx % 8;
+    if (S.drumPerformMode[track] === 1 && col >= 4)
+        return handleDrumRepeatRatePadRelease(S, deps, track, padIdx, S.activeDrumLane[track]);
+
+    if (S.drumPerformMode[track] === 2 && col < 4) {
+        const lane = deps.drumPadToLane(padIdx);
+        handleDrumRepeat2LanePadRelease(S, deps, track, lane);
+        return true;
+    }
+
+    if (S.drumPerformMode[track] === 2 && col >= 4)
+        return handleDrumRepeat2RightGridPadRelease(S);
+
+    return false;
+}
+
 export function handleDrumRepeatRatePadPress(S, deps, track, padIdx, rateIdx, lane, velocity) {
     if (S.drumRepeatLatched[track] && S.drumRepeatHeldPad[track] === padIdx) {
         S.drumRepeatLatched[track]  = false;

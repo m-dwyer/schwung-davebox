@@ -124,20 +124,15 @@ import {
     handleDrumLaneMuteSolo
 } from './ui_drum_lane_workflows.mjs';
 import {
-    handleDrumRepeat2LanePadPress,
-    handleDrumRepeat2LanePadRelease,
-    handleDrumRepeat2RatePadPress,
-    handleDrumRepeat2RightGridPadRelease,
     handleDrumRepeat2LaneAftertouch,
-    handleDrumRepeatGatePad,
     handleDrumRepeatPadAftertouch,
-    handleDrumRepeatRatePadPress,
-    handleDrumRepeatRatePadRelease,
     resetDrumRepeatGrooveForLane,
     resetDrumRepeatGrooveMirrorsForLane,
     copyDrumRepeatGrooveMirrors,
     moveDrumRepeatGrooveMirrors,
     editDrumRepeatGrooveStep,
+    handleDrumRepeatPadPress,
+    handleDrumRepeatPadRelease,
     cycleDrumRepeatPerformMode,
     prepareDrumRepeatLoopPress,
     latchHeldDrumRepeatsOnLoopPress,
@@ -2088,7 +2083,9 @@ function createDrumLaneWorkflowDeps() {
 
 function createDrumRepeatWorkflowDeps() {
     return {
+        PAD_MODE_DRUM,
         DRUM_LANES,
+        drumPadToLane,
         setActiveDrumLane,
         syncDrumLaneSteps,
         refreshDrumLaneBankParams,
@@ -9392,61 +9389,8 @@ function _onPadPressTrackView(status, d1, d2) {
             });
             return;
         }
-        /* Drum Repeat mode pad handling (intercepts left 4 cols when S.drumPerformMode===1) */
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.drumPerformMode[S.activeTrack] === 1 &&
-                !S.shiftHeld && !S.copyHeld && !S.muteHeld) {
-            const t   = S.activeTrack;
-            const col = padIdx % 8;
-            const row = Math.floor(padIdx / 8);
-            if (col >= 4 && row < 2) {
-                /* Rate pad (right side, bottom 2 rows): start/retrigger repeat */
-                const rateIdx = row * 4 + (col - 4);
-                const lane    = S.activeDrumLane[t];
-                const vel     = d2;
-                handleDrumRepeatRatePadPress(S, createDrumRepeatWorkflowDeps(), t, padIdx, rateIdx, lane, vel);
-                return;
-            } else if (col >= 4 && row >= 2) {
-                /* Gate mask pad (right side, top 2 rows) */
-                const lane = S.activeDrumLane[t];
-                const step = (row - 2) * 4 + (col - 4);
-                handleDrumRepeatGatePad(S, createDrumRepeatWorkflowDeps(), t, lane, step);
-                return;
-            }
-        }
-        /* Drum Repeat 2 mode pad handling (multi-lane simultaneous repeat) */
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.drumPerformMode[S.activeTrack] === 2 &&
-                !S.shiftHeld && !S.copyHeld && !S.muteHeld) {
-            const t   = S.activeTrack;
-            const col = padIdx % 8;
-            const row = Math.floor(padIdx / 8);
-            if (col >= 4 && row < 2) {
-                /* Rate pad: assign rate to active lane.
-                 * Phase 1 / Bundle 2C-Rpt2: on patched Schwung drum_pad_event
-                 * already called drum_repeat2_rate_internal on the audio
-                 * thread; firing the set_param here would be redundant. */
-                const rateIdx = row * 4 + (col - 4);
-                const lane = S.activeDrumLane[t];
-                handleDrumRepeat2RatePadPress(S, createDrumRepeatWorkflowDeps(), t, lane, rateIdx);
-                return;
-            } else if (col >= 4 && row >= 2) {
-                /* Gate mask: same as Rpt mode */
-                const lane = S.activeDrumLane[t];
-                const step = (row - 2) * 4 + (col - 4);
-                handleDrumRepeatGatePad(S, createDrumRepeatWorkflowDeps(), t, lane, step);
-                return;
-            } else if (col < 4 && !S.deleteHeld) {
-                /* Lane pad: add/unlatch multi-lane repeat.
-                 * Phase 1 / Bundle 2C-Rpt2: on patched Schwung drum_pad_event
-                 * already toggled the lane via drum_repeat2_lane_on/off_internal
-                 * on the audio thread. The set_params here stay as the stock
-                 * Schwung path. JS-side bookkeeping (HeldLanes/LatchedLanes
-                 * Sets) is parallel state for OLED display — stays correct
-                 * because JS and DSP run the same toggle logic. */
-                const lane = drumPadToLane(padIdx);
-                handleDrumRepeat2LanePadPress(S, createDrumRepeatWorkflowDeps(), t, lane, padIdx, d2);
-                return;
-            }
-        }
+        if (handleDrumRepeatPadPress(S, createDrumRepeatWorkflowDeps(), S.activeTrack, padIdx, d2))
+            return;
         /* Capture + drum pad: silently select lane without playing a note */
         if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.captureHeld && !S.muteHeld && !S.copyHeld && !S.deleteHeld) {
             const t = S.activeTrack;
@@ -10678,25 +10622,8 @@ function _onPadRelease(status, d1, d2) {
     if (d1 >= TRACK_PAD_BASE && d1 < TRACK_PAD_BASE + 32) {
         const padIdx = d1 - TRACK_PAD_BASE;
         const t = S.activeTrack;
-        /* Repeat mode: swallow all right-grid (col 4-7) releases; stop or resume prior rate */
-        if (S.trackPadMode[t] === PAD_MODE_DRUM && S.drumPerformMode[t] === 1 &&
-                (padIdx % 8) >= 4) {
-            handleDrumRepeatRatePadRelease(S, createDrumRepeatWorkflowDeps(), t, padIdx, S.activeDrumLane[t]);
+        if (handleDrumRepeatPadRelease(S, createDrumRepeatWorkflowDeps(), t, padIdx))
             return;
-        }
-        /* Rpt2 mode: lane pad release — stop only if not latched */
-        if (S.trackPadMode[t] === PAD_MODE_DRUM && S.drumPerformMode[t] === 2 &&
-                (padIdx % 8) < 4) {
-            const lane = drumPadToLane(padIdx);
-            handleDrumRepeat2LanePadRelease(S, createDrumRepeatWorkflowDeps(), t, lane);
-            return;
-        }
-        /* Rpt2 mode: swallow all right-grid releases */
-        if (S.trackPadMode[t] === PAD_MODE_DRUM && S.drumPerformMode[t] === 2 &&
-                (padIdx % 8) >= 4) {
-            handleDrumRepeat2RightGridPadRelease(S);
-            return;
-        }
         const pitch = padPitch[padIdx] >= 0 ? padPitch[padIdx] : S.padNoteMap[padIdx];
         if (pitch === 0xFF) return; /* OOB pad — press was skipped, nothing to release */
         S.liveActiveNotes.delete(pitch);

@@ -525,6 +525,15 @@ Drum repeat workflows:
   mirror-only factory reset, copy/move mirror semantics, and repeat-groove knob
   clamp/write behavior in
   `web/tests/integration/drum-repeat-workflows.test.ts`.
+- Started the Drum Repeat Pad Router slice by moving Track View Rpt1/Rpt2 pad
+  press and release classification into `handleDrumRepeatPadPress()` and
+  `handleDrumRepeatPadRelease()`, preserving modifier exclusions,
+  Delete+lane precedence, right-grid release swallowing, Rpt2 lane release
+  swallowing, and stock-vs-patched Schwung behavior in the existing concrete
+  workflow helpers.
+- Added focused router coverage for Rpt1 rate/gate routing, Rpt2 rate/gate/lane
+  routing, Delete+lane fallthrough, and repeat-owned release swallowing in
+  `web/tests/integration/drum-repeat-workflows.test.ts`.
 
 Verification:
 
