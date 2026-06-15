@@ -291,6 +291,30 @@ export function handleSessionViewSideRowPress(S, deps, rowIdx) {
         return true;
     }
 
+    if (S.captureHeld) {
+        S.captureUsedAsModifier = true;
+        let scooped = 0;
+        for (let t = 0; t < deps.numTracks; t++) {
+            const isLive = (S.trackClipPlaying[t] && S.trackActiveClip[t] !== clipIdx)
+                        || (S.trackQueuedClip[t] >= 0 && S.trackQueuedClip[t] !== clipIdx);
+            if (!isLive) continue;
+            const srcC = S.trackQueuedClip[t] >= 0 ? S.trackQueuedClip[t] : S.trackActiveClip[t];
+            if (srcC === clipIdx) continue;
+            if (!deps.trackClipHasContent(t, srcC)) continue;
+            if (S.trackPadMode[t] === deps.padModeDrum) {
+                deps.copyDrumClip(t, srcC, t, clipIdx);
+            } else {
+                deps.copyClip(t, srcC, t, clipIdx);
+            }
+            scooped++;
+        }
+        deps.invalidateLEDCache();
+        deps.forceRedraw();
+        if (scooped > 0) deps.showActionPopup('CAPTURED', 'TO ROW ' + (clipIdx + 1));
+        else             deps.showActionPopup('NOTHING', 'TO CAPTURE');
+        return true;
+    }
+
     if (!S.sessionView) return false;
 
     S.sceneBtnFlashTick[3 - rowIdx] = S.tickCount;

@@ -6696,61 +6696,22 @@ function _onCC_side(d1, d2) {
     /* Track buttons CC40-43 */
     if (d1 >= 40 && d1 <= 43 && d2 === 127) {
         const idx     = d1 - 40;
-        const clipIdx = S.sceneRow + (3 - idx);
         if (handleSessionViewSideRowPress(S, createSessionViewWorkflowDeps(), 3 - idx)) {
             return;
         }
-        if (S.captureHeld) {
-            /* Capture + scene row: copy each track's currently *playing* or
-             * *queued* clip into this row. Inactive/focused-but-not-playing
-             * clips are skipped — only what's actually live participates in
-             * the capture. Mark Capture as consumed so the upcoming release
-             * doesn't open the
-             * scene-bake picker. */
-            S.captureUsedAsModifier = true;
-            let scooped = 0;
-            for (let t = 0; t < NUM_TRACKS; t++) {
-                /* Only tracks whose active clip is *playing* (sequencer running)
-                 * OR is currently queued contribute to the scene capture.
-                 * Inactive/focused-but-silent tracks don't paint into the row. */
-                const isLive = (S.trackClipPlaying[t] && S.trackActiveClip[t] !== clipIdx)
-                            || (S.trackQueuedClip[t] >= 0 && S.trackQueuedClip[t] !== clipIdx);
-                if (!isLive) continue;
-                const srcC = S.trackQueuedClip[t] >= 0 ? S.trackQueuedClip[t] : S.trackActiveClip[t];
-                if (srcC === clipIdx) continue;
-                if (!trackClipHasContent(t, srcC)) continue;
-                if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-                    copyDrumClip(t, srcC, t, clipIdx);
-                } else {
-                    copyClip(t, srcC, t, clipIdx);
-                }
-                scooped++;
-            }
-            invalidateLEDCache();
-            forceRedraw();
-            if (scooped > 0) showActionPopup('CAPTURED', 'TO ROW ' + (clipIdx + 1));
-            else             showActionPopup('NOTHING', 'TO CAPTURE');
-        } else if (S.sessionView) {
-            S.sceneBtnFlashTick[idx] = S.tickCount;
-            /* Shift+side-button forces next-bar boundary launch regardless of
-             * global launch_quant. Plain press honors launch_quant as before. */
-            const _scKey = S.shiftHeld ? 'launch_scene_quant' : 'launch_scene';
-            S.pendingDefaultSetParams.push({ key: _scKey, val: String(clipIdx) });
-        } else {
-            /* Track View (Change #1): side button SELECTS THE ACTIVE TRACK
-             * (was: clip switch — relocated to the hold-reveal overlay + Session
-             * pads). Reversed mapping (CC43=track 1 … CC40=track 4), matching the
-             * Shift+bottom-pad legacy gesture: trackInBank = 3 - idx. Shift banks
-             * to the upper four (tracks 5–8). */
-            const trackInBank = 3 - idx;
-            const target      = trackInBank + (S.shiftHeld ? 4 : 0);
-            selectTrackGesture(target);
-            /* Arm hold detection: a sustained hold promotes to the clips-reveal
-             * overlay in tick() (revealClipsTrack = the now-active track). A quick
-             * tap releases before the threshold and just leaves the track selected. */
-            S.sideHeldBtn        = idx;
-            S.sideBtnPressedTick = S.tickCount;
-        }
+        /* Track View (Change #1): side button SELECTS THE ACTIVE TRACK
+         * (was: clip switch — relocated to the hold-reveal overlay + Session
+         * pads). Reversed mapping (CC43=track 1 … CC40=track 4), matching the
+         * Shift+bottom-pad legacy gesture: trackInBank = 3 - idx. Shift banks
+         * to the upper four (tracks 5–8). */
+        const trackInBank = 3 - idx;
+        const target      = trackInBank + (S.shiftHeld ? 4 : 0);
+        selectTrackGesture(target);
+        /* Arm hold detection: a sustained hold promotes to the clips-reveal
+         * overlay in tick() (revealClipsTrack = the now-active track). A quick
+         * tap releases before the threshold and just leaves the track selected. */
+        S.sideHeldBtn        = idx;
+        S.sideBtnPressedTick = S.tickCount;
     }
 
 }
@@ -8206,6 +8167,7 @@ function createSessionViewWorkflowDeps() {
         setTrackSolo,
         sendPerfMods,
         showActionPopup,
+        trackClipHasContent,
         switchActiveTrack: _switchActiveTrack
     };
 }
