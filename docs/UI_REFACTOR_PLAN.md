@@ -817,6 +817,12 @@ Drum repeat workflows:
   rendering, and left bank reads/writes plus knob edit behavior unchanged.
 - Added focused dispatch/output coverage in
   `web/tests/integration/bank-render.test.ts`.
+- Continued the presentation path by moving the drum idle position bar into
+  `ui/ui_idle_render.mjs` and the Session Overview held-grid renderer into
+  `ui/ui_session_overview_render.mjs`. Kept `drawUI()` as the priority router
+  and left session navigation, clip state, and drum lane mirrors untouched.
+- Added focused output coverage in `web/tests/integration/idle-render.test.ts`
+  and `web/tests/integration/session-overview-render.test.ts`.
 
 Verification:
 

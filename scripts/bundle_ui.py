@@ -26,6 +26,7 @@ ORDER = [
     'ui/ui_motion.mjs',
     'ui/ui_bank_render.mjs',
     'ui/ui_idle_render.mjs',
+    'ui/ui_session_overview_render.mjs',
     'ui/ui_popup_render.mjs',
     'ui/ui_prompt_render.mjs',
     'ui/ui_param_peek_render.mjs',

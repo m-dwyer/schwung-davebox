@@ -48,7 +48,7 @@ export function renderDrumTrackIdleView(deps) {
     deps.drawMetroIndicator();
     deps.drawTrackRow(34);
     renderActiveClipLetters(deps);
-    deps.drawDrumPositionBar(t);
+    renderDrumPositionBar(deps, t);
 }
 
 export function renderMelodicTrackIdleView(deps) {
@@ -212,5 +212,50 @@ function renderActiveClipLetters(deps) {
         } else {
             deps.pixelPrint(cx, 46, SCENE_LETTERS[ac], 1);
         }
+    }
+}
+
+export function renderDrumPositionBar(deps, track) {
+    const loopStart = S.drumLaneLoopStart[track] | 0;
+    const length = S.drumLaneLength[track];
+    const startPage = loopStart >> 4;
+    const windowPages = Math.max(1, Math.ceil(length / 16));
+    const viewPage = Math.max(0, Math.min(S.drumStepPage[track] - startPage, windowPages - 1));
+    const currentStep = S.drumCurrentStep[track];
+    const playPage = (S.playing && S.trackClipPlaying[track] && currentStep >= loopStart && currentStep < loopStart + length)
+        ? Math.floor((currentStep - loopStart) / 16) : -1;
+    const barY = 57, barH = 5, segGap = 1;
+    const segW = Math.max(2, Math.floor((120 - (windowPages - 1) * segGap) / windowPages));
+    const startX = 4;
+    for (let page = 0; page < windowPages; page++) {
+        const x = startX + page * (segW + segGap);
+        if (page === viewPage) {
+            deps.fill_rect(x, barY, segW, barH, 1);
+        } else if (page === playPage) {
+            deps.fill_rect(x, barY, segW, 1, 1);
+            deps.fill_rect(x, barY + barH - 1, segW, 1, 1);
+            deps.fill_rect(x, barY, 1, barH, 1);
+            deps.fill_rect(x + segW - 1, barY, 1, barH, 1);
+        } else {
+            deps.fill_rect(x, barY + barH - 1, segW, 1, 1);
+        }
+    }
+    if (S.playing && S.trackClipPlaying[track] && currentStep >= loopStart && currentStep < loopStart + length) {
+        const winPxW = windowPages * (segW + segGap) - segGap;
+        const dotX = startX + Math.floor((currentStep - loopStart) * winPxW / Math.max(1, length));
+        const viewSegStart = startX + viewPage * (segW + segGap);
+        const onSolid = dotX >= viewSegStart && dotX < viewSegStart + segW;
+        deps.fill_rect(dotX, barY, 1, barH, onSolid ? 0 : 1);
+    }
+
+    const lane = S.activeDrumLane[track];
+    const steps = S.drumLaneSteps[track][lane];
+    let hasLeft = false, hasRight = false;
+    for (let step = 0; step < loopStart; step++) if (steps[step] !== '0') { hasLeft = true; break; }
+    for (let step = loopStart + length; step < 256; step++) if (steps[step] !== '0') { hasRight = true; break; }
+    if (hasLeft) deps.fill_rect(startX - 2, barY + 1, 1, barH - 2, 1);
+    if (hasRight) {
+        const xRight = startX + windowPages * (segW + segGap) - segGap + 1;
+        deps.fill_rect(xRight, barY + 1, 1, barH - 2, 1);
     }
 }

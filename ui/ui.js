@@ -111,6 +111,9 @@ import {
     renderMotionIdleView
 } from './ui_idle_render.mjs';
 import {
+    renderSessionOverview
+} from './ui_session_overview_render.mjs';
+import {
     renderSessionActionPopup,
     renderTrackActionPopup
 } from './ui_popup_render.mjs';
@@ -3335,54 +3338,6 @@ function forceRedraw() {
 /* Display                                                              */
 /* ------------------------------------------------------------------ */
 
-/* Pure graphical 8×16 grid (128×64 OLED). 8 columns = tracks, 16 rows = scenes.
- * Each cell is 16×4 px. Cell states:
- *   active clip on active track → blink (solid ↔ center bar)
- *   active clip on other track  → solid fill (16×4)
- *   has content, not active     → center bar (14×2 at x+1,y+1)
- *   empty                       → nothing */
-function drawSessionOverview() {
-    /* White background everywhere; current scene group band stays black. */
-    fill_rect(0, 0, 128, 64, 1);
-    const bandY = Math.floor(S.sceneRow / 4) * 16;
-    fill_rect(0, bandY, 128, 16, 0);
-
-    /* Horizontal grid lines: white inside band, black outside. */
-    for (let s = 0; s < NUM_CLIPS; s++) {
-        const ly = s * 4;
-        fill_rect(0, ly, 128, 1, (ly >= bandY && ly < bandY + 16) ? 1 : 0);
-    }
-
-    /* Vertical grid lines: three segments per column — black/white/black. */
-    for (let t = 0; t < NUM_TRACKS; t++) {
-        const lx = t * 16;
-        if (bandY > 0)        fill_rect(lx, 0,          1, bandY,             0);
-                              fill_rect(lx, bandY,      1, 16,                1);
-        if (bandY + 16 < 64) fill_rect(lx, bandY + 16, 1, 64 - bandY - 16,  0);
-    }
-
-    /* Cell content: white (1) inside band, black (0) outside. */
-    const blinkOn = S.flashEighth;
-    for (let t = 0; t < NUM_TRACKS; t++) {
-        const x  = t * 16 + 1;
-        const ac = S.trackActiveClip[t];
-        for (let s = 0; s < NUM_CLIPS; s++) {
-            const y      = s * 4 + 1;
-            const color  = (s >= S.sceneRow && s < S.sceneRow + 4) ? 1 : 0;
-            const hasData    = S.clipNonEmpty[t][s];
-            const isActive   = (s === ac);
-            const isPlaying  = (isActive && S.trackClipPlaying[t]);
-            if (isPlaying && hasData) {
-                if (blinkOn) fill_rect(x + 1, y + 1, 13, 1, color);
-            } else if (isActive && hasData) {
-                fill_rect(x + 1, y + 1, 13, 1, color);
-            } else if (S.overviewCache[t][s]) {
-                fill_rect(x + 6, y + 1, 2, 1, color);
-            }
-        }
-    }
-}
-
 /* Track-number row: active track has a box (1px border + 1px pad around number).
  * Muted = inverted. Soloed = blink. */
 function drawTrackRow(y) {
@@ -3548,7 +3503,6 @@ function createTrackIdleRenderDeps() {
         drawMetroIndicator,
         drawTrackRow,
         drawPositionBar,
-        drawDrumPositionBar
     };
 }
 
@@ -3559,6 +3513,12 @@ function createSessionIdleRenderDeps() {
         fill_rect,
         drawMetroIndicator,
         drawTrackRow
+    };
+}
+
+function createSessionOverviewRenderDeps() {
+    return {
+        fill_rect
     };
 }
 
@@ -3651,7 +3611,7 @@ function drawUI() {
     }
     S._altPrevBank  = S.activeBank;
     S._altPrevTrack = S.activeTrack;
-    if (S.sessionOverlayHeld) { drawSessionOverview(); return; }
+    if (S.sessionOverlayHeld) { renderSessionOverview(createSessionOverviewRenderDeps()); return; }
     if (S.pendingInheritPicker) { drawInheritPicker(); return; }
     if (S.snapshotPicker) { drawSnapshotPicker(); return; }
     if (S.clearAutoMenu) { drawClearAutoMenu(); return; }
@@ -3798,51 +3758,6 @@ function drawUI() {
     }
 }
 
-
-function drawDrumPositionBar(t) {
-    const lsBase = S.drumLaneLoopStart[t] | 0;
-    const len    = S.drumLaneLength[t];
-    const startPage = lsBase >> 4;
-    const winPages  = Math.max(1, Math.ceil(len / 16));
-    const viewPage  = Math.max(0, Math.min(S.drumStepPage[t] - startPage, winPages - 1));
-    const cs        = S.drumCurrentStep[t];
-    const playPage  = (S.playing && S.trackClipPlaying[t] && cs >= lsBase && cs < lsBase + len)
-                    ? Math.floor((cs - lsBase) / 16) : -1;
-    const barY = 57, barH = 5, segGap = 1;
-    const segW   = Math.max(2, Math.floor((120 - (winPages - 1) * segGap) / winPages));
-    const startX = 4;
-    for (let pg = 0; pg < winPages; pg++) {
-        const x = startX + pg * (segW + segGap);
-        if (pg === viewPage) {
-            fill_rect(x, barY, segW, barH, 1);
-        } else if (pg === playPage) {
-            fill_rect(x, barY, segW, 1, 1);
-            fill_rect(x, barY + barH - 1, segW, 1, 1);
-            fill_rect(x, barY, 1, barH, 1);
-            fill_rect(x + segW - 1, barY, 1, barH, 1);
-        } else {
-            fill_rect(x, barY + barH - 1, segW, 1, 1);
-        }
-    }
-    if (S.playing && S.trackClipPlaying[t] && cs >= lsBase && cs < lsBase + len) {
-        const winPxW = winPages * (segW + segGap) - segGap;
-        const dotX = startX + Math.floor((cs - lsBase) * winPxW / Math.max(1, len));
-        const viewSegStart = startX + viewPage * (segW + segGap);
-        const onSolid = dotX >= viewSegStart && dotX < viewSegStart + segW;
-        fill_rect(dotX, barY, 1, barH, onSolid ? 0 : 1);
-    }
-    /* Extent markers from the active lane's step mirror. */
-    const lane  = S.activeDrumLane[t];
-    const steps = S.drumLaneSteps[t][lane];
-    let hasLeft = false, hasRight = false;
-    for (let s = 0; s < lsBase; s++) if (steps[s] !== '0') { hasLeft = true; break; }
-    for (let s = lsBase + len; s < 256; s++) if (steps[s] !== '0') { hasRight = true; break; }
-    if (hasLeft)  fill_rect(startX - 2, barY + 1, 1, barH - 2, 1);
-    if (hasRight) {
-        const xRight = startX + winPages * (segW + segGap) - segGap + 1;
-        fill_rect(xRight, barY + 1, 1, barH - 2, 1);
-    }
-}
 
 function fmtHex(b) {
     return (b & 0xff).toString(16).padStart(2, '0').toUpperCase();
