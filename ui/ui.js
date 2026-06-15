@@ -105,6 +105,13 @@ import {
     renderTrackBankOverview
 } from './ui_bank_render.mjs';
 import {
+    drawAltArrow as renderDrawAltArrow,
+    drawBankHeaderRight as renderDrawBankHeaderRight,
+    drawBankHeading as renderDrawBankHeading,
+    drawBankHeadingInverted as renderDrawBankHeadingInverted,
+    drawBankStrip as renderDrawBankStrip
+} from './ui_bank_chrome_render.mjs';
+import {
     renderSessionIdleView,
     renderDrumTrackIdleView,
     renderMelodicTrackIdleView,
@@ -223,79 +230,24 @@ function bankHeader(bankIdx) {
     return '[ ' + BANKS[bankIdx].name + ' ]';
 }
 
-/* Bank position in the jog-cycle order, for the header position strip. Melodic
- * banks cycle 0..6 linearly; drum banks cycle in BANK_CYCLE_DRUM order. Returns
- * {idx, count} for the active track's chain — mirrors the jog nav in _onCC_jog. */
-const BANK_CYCLE_DRUM = [7, 0, 1, 3, 5, 6];
-function bankCyclePos() {
-    if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-        const i = BANK_CYCLE_DRUM.indexOf(S.activeBank);
-        return { idx: i < 0 ? 0 : i, count: BANK_CYCLE_DRUM.length };
-    }
-    return { idx: Math.max(0, Math.min(6, S.activeBank)), count: 7 };
-}
-
-/* Compact "you are here in the bank chain" strip, right-aligned on the header
- * bar (replaces the old ad-hoc '>>' name hints). Each bank = a 3px tick; the
- * active bank = a tall filled block. Returns the strip's left x so the caller
- * can tuck the alt-arrow to its left. hdrBgWhite picks ink (black on white bar). */
 function drawBankStrip(rightX, hdrBgWhite) {
-    const fg = hdrBgWhite ? 0 : 1;
-    const pos = bankCyclePos();
-    const segW = 3, pitch = 4;
-    const startX = rightX - (pos.count * pitch - 1);
-    for (let i = 0; i < pos.count; i++) {
-        const x = startX + i * pitch;
-        if (i === pos.idx) fill_rect(x, 1, segW, 6, fg);   /* active: full 6px block */
-        else               fill_rect(x, 5, segW, 2, fg);   /* others: 2px stub, baseline-aligned */
-    }
-    return startX;
+    return renderDrawBankStrip(createBankChromeRenderDeps(), rightX, hdrBgWhite);
 }
 
-/* Right side of the bank header. Resting overview (showTrack===false): the
- * position strip, with the alt-arrow tucked to its left. Deeper param banks:
- * alt-arrow alone at its legacy x=98 (the Tr indicator already sits at x=106). */
 function drawBankHeaderRight(showTrack, hdrBgWhite) {
-    if (S.sessionView) return;
-    const hasAlt = bankHasAltParams(S.activeTrack, S.activeBank);
-    if (showTrack === false) {
-        const sx = drawBankStrip(124, hdrBgWhite);
-        if (hasAlt) drawAltArrow(sx - 8, hdrBgWhite, altIndicatorActive(S.activeTrack, S.activeBank));
-    } else if (hasAlt) {
-        drawAltArrow(98, hdrBgWhite, altIndicatorActive(S.activeTrack, S.activeBank));
-    }
+    renderDrawBankHeaderRight(createBankChromeRenderDeps(), showTrack, hdrBgWhite);
 }
 
 function drawBankHeading(name, showTrack) {
-    fill_rect(0, 0, 128, 9, 1);
-    print(4, 1, name, 0);
-    /* Tr indicator: shown on deeper parameter banks, suppressed on the resting
-     * overview (the track row already names the active track). */
-    if (showTrack !== false) print(106, 1, 'Tr' + (S.activeTrack + 1), 0);
-    drawBankHeaderRight(showTrack, true);
+    renderDrawBankHeading(createBankChromeRenderDeps(), name, showTrack);
 }
 
 function drawBankHeadingInverted(name, showTrack) {
-    fill_rect(0, 0, 128, 9, 0);
-    fill_rect(0, 0, 128, 1, 1);
-    fill_rect(0, 8, 128, 1, 1);
-    print(4, 1, name, 1);
-    if (showTrack !== false) print(106, 1, 'Tr' + (S.activeTrack + 1), 1);
-    drawBankHeaderRight(showTrack, false);
+    renderDrawBankHeadingInverted(createBankChromeRenderDeps(), name, showTrack);
 }
 
-/* Down-arrow affordance for banks that expose alt params. Always drawn in the
- * header text color (steady) when alt mode is off; flashes on/off ~2x/sec when
- * alt mode is on. `hdrBgWhite` true = header background is white (so arrow draws
- * black); false = header background is black (so arrow draws white). The blink
- * phase is set in the tick loop (S._altBlinkPhase) which also marks the screen
- * dirty so the animation runs while idle. */
 function drawAltArrow(x, hdrBgWhite, on) {
-    if (on && S._altBlinkPhase === 1) return;   /* off-phase of the flash */
-    const fg = hdrBgWhite ? 0 : 1;
-    fill_rect(x,     2, 5, 1, fg);
-    fill_rect(x + 1, 3, 3, 1, fg);
-    fill_rect(x + 2, 4, 1, 1, fg);
+    renderDrawAltArrow(createBankChromeRenderDeps(), x, hdrBgWhite, on);
 }
 
 /* Iter knob list: 36 entries, raw byte at each position. Index 0 = default (1/1).
@@ -3097,6 +3049,15 @@ function createBankRenderDeps() {
         altIndicatorActive,
         bankHasAltParams,
         midiNoteName
+    };
+}
+
+function createBankChromeRenderDeps() {
+    return {
+        print,
+        fill_rect,
+        altIndicatorActive,
+        bankHasAltParams
     };
 }
 

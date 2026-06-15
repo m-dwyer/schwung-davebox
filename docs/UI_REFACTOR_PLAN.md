@@ -857,9 +857,25 @@ Drum repeat workflows:
   pad-map recompute, and deferred apply writes in `ui.js`.
 - Extended focused modal output coverage for transpose target text, fallback
   scale label, and selected YES/NO button inversion.
+- Continued the presentation path by moving bank/header chrome rendering into
+  `ui/ui_bank_chrome_render.mjs`: bank strip, right-side header chrome, normal
+  and inverted headings, and the alt-arrow affordance. Kept `drawUI()` priority
+  order, bank selection, knob behavior, bank read/write behavior, alt-mode state
+  mutation, and DSP reads/writes at their existing seams in `ui.js`.
+- Added focused output coverage in
+  `web/tests/integration/bank-chrome-render.test.ts` for normal and inverted
+  headings, track indicator suppression, melodic and drum overview strips,
+  alt-arrow blink visibility, and Session View right-side suppression.
 
 Verification:
 
+- `npm run test:node -- --run tests/integration/bank-chrome-render.test.ts`
+- `npm run test:node -- tests/integration/modal-render.test.ts tests/integration/loop-render.test.ts tests/integration/param-peek-render.test.ts tests/integration/prompt-render.test.ts tests/integration/popup-render.test.ts tests/integration/idle-render.test.ts tests/integration/bank-render.test.ts tests/integration/bank-chrome-render.test.ts tests/integration/perf-render.test.ts tests/integration/session-overview-render.test.ts tests/integration/step-edit-render.test.ts tests/integration/cc-step-edit-render.test.ts tests/integration/step-interval-render.test.ts tests/integration/ui-descriptors.test.ts`
+- `npm run test:node -- tests/integration`
+- `npm run test:node`
+- `python3 scripts/bundle_ui.py`
+- `node --check dist/overture/ui.js`
+- `npm run build`
 - `npm run test:node -- tests/integration/modal-render.test.ts`
 - `npm run test:node -- tests/integration/modal-render.test.ts tests/integration/loop-render.test.ts tests/integration/param-peek-render.test.ts tests/integration/prompt-render.test.ts tests/integration/popup-render.test.ts tests/integration/idle-render.test.ts tests/integration/bank-render.test.ts tests/integration/perf-render.test.ts tests/integration/session-overview-render.test.ts tests/integration/step-edit-render.test.ts tests/integration/cc-step-edit-render.test.ts tests/integration/step-interval-render.test.ts tests/integration/ui-descriptors.test.ts`
 - `npm run test:node -- tests/integration`
