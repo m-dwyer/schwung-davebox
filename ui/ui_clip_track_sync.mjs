@@ -41,3 +41,18 @@ export function readTargetedClipAutomationFromDsp(S, deps, track, clip) {
     const atHas = deps.host_module_get_param('t' + track + '_c' + clip + '_at_has');
     S.clipAtHas[track][clip] = (atHas !== null && parseInt(atHas, 10) === 1);
 }
+
+export function readTargetedClipRestorePairFromDsp(S, deps, track, clip, isDrum) {
+    if (isDrum) {
+        deps.syncDrumClipContent(track);
+        deps.syncDrumLanesMeta(track);
+        deps.syncDrumLaneSteps(track, S.activeDrumLane[track]);
+        deps.refreshDrumLaneBankParams(track, S.activeDrumLane[track]);
+    } else {
+        readMelodicClipFromDsp(S, deps, track, clip, {
+            preserveInactiveSteps: false,
+            refreshActiveBankParams: true
+        });
+    }
+    readTargetedClipAutomationFromDsp(S, deps, track, clip);
+}

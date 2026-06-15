@@ -695,6 +695,15 @@ Drum repeat workflows:
   ordering and interface.
 - Added focused coverage in `web/tests/integration/tick-tasks.test.ts` for the
   shared melodic readback behavior across targeted step reread and scene bake.
+- Continued the Track / Clip Sync module slice by moving targeted undo/redo
+  restore-pair readback into `readTargetedClipRestorePairFromDsp()` in
+  `ui_clip_track_sync.mjs`, preserving `syncClipsTargeted()` ownership of
+  `last_restore` parsing, malformed fallback-to-full-sync behavior, `DR` row
+  handling, screen-dirty timing, and loop control.
+- Added focused coverage in `web/tests/integration/clip-track-sync.test.ts` for
+  melodic targeted pair ordering and drum targeted pair ordering. The existing
+  malformed `last_restore` fallback coverage remains in
+  `web/tests/integration/tool.test.ts`.
 
 Verification:
 
@@ -702,4 +711,5 @@ Verification:
 - `pnpm test:node tests/integration/latch-workflows.test.ts`
 - `pnpm test:node tests/integration/drum-repeat-workflows.test.ts`
 - `pnpm test:node tests/integration`
+- `pnpm test:node`
 - `python3 scripts/bundle_ui.py`

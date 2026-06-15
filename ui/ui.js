@@ -143,8 +143,7 @@ import {
     unlatchAllTracks
 } from './ui_latch_workflows.mjs';
 import {
-    readMelodicClipFromDsp,
-    readTargetedClipAutomationFromDsp
+    readTargetedClipRestorePairFromDsp
 } from './ui_clip_track_sync.mjs';
 import {
     runDefaultSetParamDrain,
@@ -5255,24 +5254,17 @@ function syncClipsTargeted(infoStr) {
         const t = parseInt(parts[i], 10), c = parseInt(parts[i + 1], 10);
         i += 2;
         if (t < 0 || t >= NUM_TRACKS || c < 0 || c >= NUM_CLIPS) continue;
-        if (isDrum) {
-            syncDrumClipContent(t);
-            syncDrumLanesMeta(t);
-            syncDrumLaneSteps(t, S.activeDrumLane[t]);
-            refreshDrumLaneBankParams(t, S.activeDrumLane[t]);
-        } else {
-            readMelodicClipFromDsp(S, {
-                host_module_get_param,
-                NUM_STEPS,
-                TPS_VALUES,
-                clipHasContent,
-                refreshPerClipBankParams
-            }, t, c, {
-                preserveInactiveSteps: false,
-                refreshActiveBankParams: true
-            });
-        }
-        readTargetedClipAutomationFromDsp(S, { host_module_get_param }, t, c);
+        readTargetedClipRestorePairFromDsp(S, {
+            host_module_get_param,
+            NUM_STEPS,
+            TPS_VALUES,
+            clipHasContent,
+            refreshPerClipBankParams,
+            syncDrumClipContent,
+            syncDrumLanesMeta,
+            syncDrumLaneSteps,
+            refreshDrumLaneBankParams
+        }, t, c, isDrum);
     }
     /* Parse 'DR rowN' tokens — resync drum clip content for all tracks at those rows */
     while (i + 1 < parts.length) {
