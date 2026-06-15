@@ -179,6 +179,10 @@ import {
     handleUiSampleButton
 } from './ui_transport_cc_workflow.mjs';
 import {
+    handleUiPageNavButton,
+    handleUiSceneNavButton
+} from './ui_navigation_cc_workflow.mjs';
+import {
     renderTrackStepEditView
 } from './ui_step_edit_render.mjs';
 import {
@@ -6170,138 +6174,9 @@ function _onCC_transport(d1, d2) {
      * a modifier key (e.g. Mute+Play = metro toggle). */
     handleUiMuteButton(S, createTransportCcWorkflowDeps(), d1, d2);
 
-    /* Left/Right: page nav in Track View — clamp to the loop window so
-     * step-edit nav never lands on a page that won't play. */
-    if ((d1 === MoveLeft || d1 === MoveRight) && d2 === 127 && !S.sessionView) {
-        var _t_lr = S.activeTrack;
-        if (S.loopHeld && S.activeBank === 6 && S.trackPadMode[_t_lr] !== PAD_MODE_DRUM) {
-            var RES_TPS = [12, 24, 48, 96, 384];
-            var _ac_lr = effectiveClip(_t_lr);
-            var _ccL_lr = S.ccActiveLane[_t_lr];
-            var _dispTpsLr = S.ccLaneTps[_t_lr][_ac_lr][_ccL_lr] || (S.clipTPS[_t_lr][_ac_lr] || 24);
-            var _curTps = S.ccLaneResTps[_t_lr][_ac_lr][_ccL_lr] || _dispTpsLr;
-            var _ci = RES_TPS.indexOf(_curTps);
-            if (_ci < 0) _ci = 1;
-            if (d1 === MoveLeft && _ci > 0) _ci--;
-            else if (d1 === MoveRight && _ci < RES_TPS.length - 1) _ci++;
-            S.ccLaneResTps[_t_lr][_ac_lr][_ccL_lr] = RES_TPS[_ci];
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('t' + _t_lr + '_c' + _ac_lr + '_k' + _ccL_lr + '_cc_lane_res_tps',
-                                      String(RES_TPS[_ci]));
-            forceRedraw();
-            return;
-        }
-        if (S.trackPadMode[_t_lr] === PAD_MODE_DRUM) {
-            var lsBase = S.drumLaneLoopStart[_t_lr] | 0;
-            var startPage = lsBase >> 4;
-            var lastPage  = startPage + Math.max(1, Math.ceil(S.drumLaneLength[_t_lr] / 16)) - 1;
-            if (d1 === MoveLeft)
-                S.drumStepPage[_t_lr] = Math.max(startPage, S.drumStepPage[_t_lr] - 1);
-            else
-                S.drumStepPage[_t_lr] = Math.min(lastPage, S.drumStepPage[_t_lr] + 1);
-        } else {
-            var ac = effectiveClip(_t_lr);
-            var lsBase, startPage, lastPage;
-            if (S.activeBank === 6) {
-                var _ccL2 = S.ccActiveLane[_t_lr];
-                var _llen = S.ccLaneLength[_t_lr][ac][_ccL2];
-                if (_llen > 0) {
-                    lsBase = S.ccLaneLoopStart[_t_lr][ac][_ccL2] | 0;
-                    startPage = lsBase >> 4;
-                    lastPage = startPage + Math.max(1, Math.ceil(_llen / 16)) - 1;
-                }
-            }
-            if (lastPage === undefined) {
-                lsBase = S.clipLoopStart[_t_lr][ac] | 0;
-                startPage = lsBase >> 4;
-                lastPage = startPage + Math.max(1, Math.ceil(S.clipLength[_t_lr][ac] / 16)) - 1;
-            }
-            if (d1 === MoveLeft)
-                S.trackCurrentPage[_t_lr] = Math.max(startPage, S.trackCurrentPage[_t_lr] - 1);
-            else
-                S.trackCurrentPage[_t_lr] = Math.min(lastPage, S.trackCurrentPage[_t_lr] + 1);
-        }
-        /* Manual navigation disables SeqFollow so the view stays where the user navigated */
-        const _sfAc = effectiveClip(S.activeTrack);
-        if (S.clipSeqFollow[S.activeTrack][_sfAc]) {
-            S.clipSeqFollow[S.activeTrack][_sfAc] = false;
-            S.bankParams[S.activeTrack][0][7] = 0;
-        }
-        S.screenDirty = true;
-    }
-
-    /* Up/Down: scene group nav in Session View or while overview held; octave shift in Track View */
-    if (d1 === MoveDown && d2 === 127 && (S.sessionView || S.sessionOverlayHeld) && S.sceneRow < NUM_CLIPS - 4) { S.sceneRow = Math.min(NUM_CLIPS - 4, S.sceneRow + 4); forceRedraw(); }
-    if (d1 === MoveUp   && d2 === 127 && (S.sessionView || S.sessionOverlayHeld) && S.sceneRow > 0)              { S.sceneRow = Math.max(0, S.sceneRow - 4);              forceRedraw(); }
-    if ((d1 === MoveUp || d1 === MoveDown) && d2 > 0 && !S.sessionView && !S.sessionOverlayHeld &&
-            S.loopHeld && S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-        var RES_TPS = [12, 24, 48, 96, 384];
-        var _zt = S.activeTrack, _zac = effectiveClip(_zt), _zL = S.ccActiveLane[_zt];
-        var _zOldTps = S.ccLaneTps[_zt][_zac][_zL] || (S.clipTPS[_zt][_zac] || 24);
-        var _zci = RES_TPS.indexOf(_zOldTps);
-        if (_zci < 0) _zci = 1;
-        if (d1 === MoveDown && _zci > 0) _zci--;
-        else if (d1 === MoveUp && _zci < RES_TPS.length - 1) _zci++;
-        var _zNewTps = RES_TPS[_zci];
-        if (_zNewTps !== _zOldTps) {
-            var _zOldLen = S.ccLaneLength[_zt][_zac][_zL] || S.clipLength[_zt][_zac];
-            var _zOldTicks = _zOldLen * _zOldTps;
-            var _zNewLen = Math.ceil(_zOldTicks / _zNewTps);
-            if (_zNewLen <= 256) {
-                S.ccLaneTps[_zt][_zac][_zL] = _zNewTps;
-                S.ccLaneLength[_zt][_zac][_zL] = _zNewLen;
-                var _zOldRes = S.ccLaneResTps[_zt][_zac][_zL];
-                if (_zOldRes > 0) {
-                    var _zNewRes = Math.round(_zOldRes * _zNewTps / _zOldTps);
-                    var _zResValid = RES_TPS.indexOf(_zNewRes) >= 0;
-                    S.ccLaneResTps[_zt][_zac][_zL] = _zResValid ? _zNewRes : 0;
-                }
-                var _zPre = 't' + _zt + '_c' + _zac + '_k' + _zL;
-                S.pendingDefaultSetParams.push({ key: _zPre + '_cc_lane_tps', val: String(_zNewTps) });
-                S.pendingDefaultSetParams.push({ key: _zPre + '_cc_loop_set',
-                    val: String(((S.ccLaneLoopStart[_zt][_zac][_zL] | 0) << 16) | (_zNewLen & 0xFFFF)) });
-                if (_zOldRes > 0)
-                    S.pendingDefaultSetParams.push({ key: _zPre + '_cc_lane_res_tps',
-                        val: String(S.ccLaneResTps[_zt][_zac][_zL]) });
-                var _zMaxPage = Math.max(0, Math.ceil(_zNewLen / 16) - 1);
-                if (S.trackCurrentPage[_zt] > _zMaxPage) S.trackCurrentPage[_zt] = _zMaxPage;
-                forceRedraw();
-            }
-        }
-        return;
-    }
-    if (d1 === MoveUp   && d2 > 0 && !S.sessionView && !S.sessionOverlayHeld) {
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-            setDrumLanePage(S.activeTrack, 1);
-            syncDrumLanesMeta(S.activeTrack);
-            syncDrumLaneSteps(S.activeTrack, S.activeDrumLane[S.activeTrack]);
-            computePadNoteMap();  /* PHASE-1: drum page change shifts lane mapping; re-push */
-            forceRedraw();
-        } else {
-        for (const p of S.liveActiveNotes) queueLiveNoteOff(pendingLiveNotes, S.activeTrack, p);
-        S.liveActiveNotes.clear();
-        S.trackOctave[S.activeTrack] = Math.min(4, S.trackOctave[S.activeTrack] + 1);
-        computePadNoteMap();  /* PHASE-1: re-bake octave offset into DSP padmap */
-        S.screenDirty = true;
-        if (S.heldStep >= 0) forceRedraw();
-        }
-    }
-    if (d1 === MoveDown && d2 > 0 && !S.sessionView && !S.sessionOverlayHeld) {
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-            setDrumLanePage(S.activeTrack, 0);
-            syncDrumLanesMeta(S.activeTrack);
-            syncDrumLaneSteps(S.activeTrack, S.activeDrumLane[S.activeTrack]);
-            computePadNoteMap();  /* PHASE-1: drum page change shifts lane mapping; re-push */
-            forceRedraw();
-        } else {
-        for (const p of S.liveActiveNotes) queueLiveNoteOff(pendingLiveNotes, S.activeTrack, p);
-        S.liveActiveNotes.clear();
-        S.trackOctave[S.activeTrack] = Math.max(-4, S.trackOctave[S.activeTrack] - 1);
-        computePadNoteMap();  /* PHASE-1: re-bake octave offset into DSP padmap */
-        S.screenDirty = true;
-        if (S.heldStep >= 0) forceRedraw();
-        }
-    }
+    /* Left/Right page nav (Track View) + Up/Down scene/zoom/octave nav. */
+    handleUiPageNavButton(S, createNavigationCcWorkflowDeps(), d1, d2);
+    handleUiSceneNavButton(S, createNavigationCcWorkflowDeps(), d1, d2);
 
 }
 
@@ -7566,6 +7441,27 @@ function createTransportCcWorkflowDeps() {
         unlatchAllTracks: function () {
             return unlatchAllTracks(S, NUM_TRACKS);
         }
+    };
+}
+
+function createNavigationCcWorkflowDeps() {
+    return {
+        computePadNoteMap,
+        effectiveClip,
+        forceRedraw,
+        moveDown: MoveDown,
+        moveLeft: MoveLeft,
+        moveRight: MoveRight,
+        moveUp: MoveUp,
+        numClips: NUM_CLIPS,
+        padModeDrum: PAD_MODE_DRUM,
+        queueLiveNoteOff: function (track, pitch) {
+            return queueLiveNoteOff(pendingLiveNotes, track, pitch);
+        },
+        setDrumLanePage,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        syncDrumLanesMeta,
+        syncDrumLaneSteps
     };
 }
 
