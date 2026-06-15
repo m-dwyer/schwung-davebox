@@ -121,6 +121,10 @@ import {
     renderMelodicTrackIdleView
 } from './ui_idle_render.mjs';
 import {
+    renderSessionActionPopup,
+    renderTrackActionPopup
+} from './ui_popup_render.mjs';
+import {
     SCALE_INTERVALS,
     applyPadNoteMap,
     createLiveNoteQueues,
@@ -3592,6 +3596,13 @@ function createSessionIdleRenderDeps() {
     };
 }
 
+function createPopupRenderDeps() {
+    return {
+        print,
+        fill_rect
+    };
+}
+
 function drawUI() {
     /* CO-RUN: shadow_ui's chain editor owns the OLED while this is active.
      * Skip every Overture draw path so it doesn't fight the chain editor's
@@ -3689,22 +3700,7 @@ function drawUI() {
     clear_screen();
     if (S.sessionView) {
         if (S.actionPopupEndTick >= 0) {
-            const _n = S.actionPopupLines.length;
-            if (_n >= 4) {
-                print(4, 14, S.actionPopupLines[0], 1);
-                print(4, 25, S.actionPopupLines[1], 1);
-                print(4, 36, S.actionPopupLines[2], 1);
-                print(4, 47, S.actionPopupLines[3], 1);
-            } else if (_n === 3) {
-                print(4, 17, S.actionPopupLines[0], 1);
-                print(4, 29, S.actionPopupLines[1], 1);
-                print(4, 41, S.actionPopupLines[2], 1);
-            } else if (_n === 2) {
-                print(4, 22, S.actionPopupLines[0], 1);
-                print(4, 34, S.actionPopupLines[1], 1);
-            } else {
-                print(4, 28, S.actionPopupLines[0], 1);
-            }
+            renderSessionActionPopup(createPopupRenderDeps());
             return;
         }
         renderSessionIdleView(createSessionIdleRenderDeps());
@@ -3725,29 +3721,7 @@ function drawUI() {
 
     /* Action confirmation pop-up: ~500ms; defers to step edit and active-knob bank overview */
     if (S.actionPopupEndTick >= 0 && S.heldStep < 0 && S.knobTouched < 0) {
-        if (S.actionPopupHighlight >= 0 && S.actionPopupLines.length >= 3) {
-            const _title = S.actionPopupLines[0];
-            const _tw = _title.length * 6;
-            const _tx = Math.floor((128 - _tw) / 2);
-            print(_tx, 4, _title, 1);
-            fill_rect(_tx, 13, _tw, 1, 1);
-            for (let _li = 1; _li < S.actionPopupLines.length; _li++) {
-                const _ly = 12 + _li * 14;
-                const _lw = S.actionPopupLines[_li].length * 6;
-                const _lx = Math.floor((128 - _lw) / 2);
-                if (_li === S.actionPopupHighlight) {
-                    fill_rect(0, _ly - 1, 128, 13, 1);
-                    print(_lx, _ly, S.actionPopupLines[_li], 0);
-                } else {
-                    print(_lx, _ly, S.actionPopupLines[_li], 1);
-                }
-            }
-        } else if (S.actionPopupLines.length >= 2) {
-            print(4, 22, S.actionPopupLines[0], 1);
-            print(4, 34, S.actionPopupLines[1], 1);
-        } else {
-            print(4, 28, S.actionPopupLines[0], 1);
-        }
+        renderTrackActionPopup(createPopupRenderDeps());
         return;
     }
 
