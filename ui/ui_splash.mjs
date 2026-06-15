@@ -68,3 +68,14 @@ export function renderSplashFrame(deps, frame, width, height) {
         if (runStart >= 0) deps.fill_rect(runStart, y, w - runStart, 1, 1);
     }
 }
+
+export function renderSplashScreen(state, deps) {
+    const picker = deps.pickSplashIdx || pickSplashIdx;
+    if (!state.splashWasVisible) {
+        state.currentSplashIdx = picker();
+        state.splashWasVisible = true;
+    }
+    deps.clear_screen();
+    const frame = SPLASH_FRAMES[state.currentSplashIdx % SPLASH_COUNT];
+    renderSplashFrame(deps, frame);
+}

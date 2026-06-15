@@ -85,7 +85,7 @@ import { saveState, writeSidecar, doClearSession, showActionPopup, uuidToStatePa
 import { drawGlobalMenu } from './ui_dialogs.mjs';
 import { trackClipHasContent, sceneAllQueued, updateSceneMapLEDs } from './ui_scene.mjs';
 import { effectiveClip, updateStepLEDs, updateSessionLEDs, updateTrackLEDs, flashAtRate, drawPositionBar, invalidateLEDCache, paintCoRunSideButtons } from './ui_leds.mjs';
-import { SPLASH_FRAMES, SPLASH_COUNT, pickSplashIdx, renderSplashFrame } from './ui_splash.mjs';
+import { renderSplashScreen } from './ui_splash.mjs';
 import { requestExport, confirmExportStart, pollPendingExport } from './ui_export.mjs';
 import {
     canEditSoundRoute,
@@ -3050,6 +3050,7 @@ function createMetroIndicatorRenderDeps() {
 
 function createSplashRenderDeps() {
     return {
+        clear_screen,
         fill_rect
     };
 }
@@ -3209,16 +3210,7 @@ function drawUI() {
     /* Perf Mode OLED takeover (Session View + Loop held or locked) */
     if (S.sessionView && (S.loopHeld || S.perfViewLocked)) { renderPerfModeOled(createPerfModeRenderDeps()); return; }
     if (S.stateLoading || S.bootSplashTicks > 0) {
-        /* Reroll the splash on entry edge — picks one of SPLASH_FRAMES at
-         * random per splash session (boot, set load, etc.). Stays stable
-         * across the splash duration thanks to splashWasVisible. */
-        if (!S.splashWasVisible) {
-            S.currentSplashIdx = pickSplashIdx();
-            S.splashWasVisible = true;
-        }
-        clear_screen();
-        const _frame  = SPLASH_FRAMES[S.currentSplashIdx % SPLASH_COUNT];
-        renderSplashFrame(createSplashRenderDeps(), _frame);
+        renderSplashScreen(S, createSplashRenderDeps());
         return;
     }
     /* Not in splash mode — clear the entry-edge flag so the next splash rerolls. */

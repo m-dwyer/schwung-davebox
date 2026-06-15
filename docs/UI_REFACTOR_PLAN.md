@@ -882,9 +882,23 @@ Drum repeat workflows:
 - Added focused output coverage in `web/tests/integration/splash-render.test.ts`
   for MSB-first decoding, horizontal run coalescing, trailing run flushing,
   empty frames, multi-row y coordinates, and wider packed rows.
+- Continued the splash presentation path by moving active splash-screen
+  lifecycle/rendering into `renderSplashScreen()` in `ui/ui_splash.mjs`. Kept
+  the `drawUI()` priority branch and splash-exit `S.splashWasVisible` reset in
+  `ui.js`.
+- Extended focused output coverage in `web/tests/integration/splash-render.test.ts`
+  for first-entry frame selection, visible-frame reuse, clear-before-draw
+  ordering, and modulo frame-index wrapping.
 
 Verification:
 
+- `npm run test:node -- tests/integration/splash-render.test.ts`
+- `npm run test:node -- tests/integration/modal-render.test.ts tests/integration/loop-render.test.ts tests/integration/param-peek-render.test.ts tests/integration/prompt-render.test.ts tests/integration/popup-render.test.ts tests/integration/idle-render.test.ts tests/integration/bank-render.test.ts tests/integration/bank-chrome-render.test.ts tests/integration/perf-render.test.ts tests/integration/session-overview-render.test.ts tests/integration/splash-render.test.ts tests/integration/step-edit-render.test.ts tests/integration/cc-step-edit-render.test.ts tests/integration/step-interval-render.test.ts tests/integration/ui-descriptors.test.ts`
+- `npm run test:node -- tests/integration`
+- `npm run test:node`
+- `python3 scripts/bundle_ui.py`
+- `node --check dist/overture/ui.js`
+- `npm run build`
 - `npm run test:node -- tests/integration/splash-render.test.ts`
 - `npm run test:node -- tests/integration/modal-render.test.ts tests/integration/loop-render.test.ts tests/integration/param-peek-render.test.ts tests/integration/prompt-render.test.ts tests/integration/popup-render.test.ts tests/integration/idle-render.test.ts tests/integration/bank-render.test.ts tests/integration/bank-chrome-render.test.ts tests/integration/perf-render.test.ts tests/integration/session-overview-render.test.ts tests/integration/splash-render.test.ts tests/integration/step-edit-render.test.ts tests/integration/cc-step-edit-render.test.ts tests/integration/step-interval-render.test.ts tests/integration/ui-descriptors.test.ts`
 - `npm run test:node -- tests/integration`
