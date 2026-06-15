@@ -8,6 +8,29 @@
  *
  * Handlers take everything via deps so they can be unit-tested without the host. */
 
+export function handleUiCopyButton(S, deps, d1, d2) {
+    if (d1 !== deps.moveCopy) return;
+
+    S.copyHeld = d2 === 127;
+    if (!S.copyHeld) {
+        S.copySrc = null;
+        deps.invalidateLEDCache();
+    }
+    deps.computePadNoteMap();
+}
+
+export function handleUiMuteModifierButton(S, deps, d1, d2) {
+    if (d1 !== deps.moveMute) return;
+
+    /* Modifier-state tracking for the Mute button. The action half (clear-all,
+     * per-track mute/solo toggle) lives in handleUiMuteButton on the transport
+     * handler; both fire for the same CC. */
+    S.muteHeld = d2 === 127;
+    if (d2 === 127) S.muteUsedAsModifier = false;
+    if (S.sessionView) deps.invalidateLEDCache();
+    deps.computePadNoteMap();
+}
+
 export function handleUiCaptureButton(S, deps, d1, d2) {
     if (d1 !== deps.moveCapture) return;
 

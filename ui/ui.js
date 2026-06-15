@@ -185,7 +185,9 @@ import {
     handleUiSceneNavButton
 } from './ui_navigation_cc_workflow.mjs';
 import {
-    handleUiCaptureButton
+    handleUiCaptureButton,
+    handleUiCopyButton,
+    handleUiMuteModifierButton
 } from './ui_button_cc_workflow.mjs';
 import {
     renderTrackStepEditView
@@ -5735,21 +5737,12 @@ function _onCC_buttons(d1, d2) {
         computePadNoteMap();
     }
 
-    if (d1 === MoveCopy) {
-        S.copyHeld = d2 === 127;
-        if (!S.copyHeld) {
-            S.copySrc = null;
-            invalidateLEDCache();
-        }
-        computePadNoteMap();
-    }
+    /* Copy: modifier-state tracking (held + copy source). */
+    handleUiCopyButton(S, createButtonCcWorkflowDeps(), d1, d2);
 
-    if (d1 === MoveMute) {
-        S.muteHeld = d2 === 127;
-        if (d2 === 127) S.muteUsedAsModifier = false;
-        if (S.sessionView) invalidateLEDCache();
-        computePadNoteMap();
-    }
+    /* Mute: modifier-state tracking. The action half lives in handleUiMuteButton
+     * on the transport handler; both fire for the same CC. */
+    handleUiMuteModifierButton(S, createButtonCcWorkflowDeps(), d1, d2);
 
     /* Capture: press tracks held + cancels dialogs/pickers/merge; bare-tap
      * release opens the scene-bake picker (Session) or clip-bake confirm (Track). */
@@ -7328,7 +7321,10 @@ function createButtonCcWorkflowDeps() {
     return {
         computePadNoteMap,
         forceRedraw,
+        invalidateLEDCache,
         moveCapture: MoveCapture,
+        moveCopy: MoveCopy,
+        moveMute: MoveMute,
         padModeDrum: PAD_MODE_DRUM
     };
 }
