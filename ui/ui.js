@@ -176,7 +176,8 @@ import {
     renderMetroIndicator
 } from './ui_track_chrome_render.mjs';
 import {
-    handleTrackViewCopyStepPress
+    handleTrackViewCopyStepPress,
+    handleTrackViewDeleteStepPress
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -8136,10 +8137,14 @@ function createLoopGestureWorkflowDeps() {
 
 function createTrackViewStepWorkflowDeps() {
     return {
+        clearStep,
         copyStep,
         effectiveClip,
         forceRedraw,
-        invalidateLEDCache
+        invalidateLEDCache,
+        padModeDrum: PAD_MODE_DRUM,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        showActionPopup
     };
 }
 
@@ -8173,41 +8178,8 @@ function _onStepButtons(d1, d2) {
         return;
     } else if (handleTrackViewCopyStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
         return;
-    } else if (S.deleteHeld) {
-        /* Delete + step button (Track View): clear all notes from that step.
-         * On the CC bank (melodic), instead clear all knobs' points in the step. */
-        if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-            var t = S.activeTrack, ac = effectiveClip(t);
-            var absIdx = S.trackCurrentPage[t] * 16 + idx;
-            var _ccL_d = S.ccActiveLane[t];
-            var _ltps_d = S.ccLaneTps[t][ac][_ccL_d];
-            var tps = (_ltps_d > 0) ? _ltps_d : (S.clipTPS[t][ac] || 24);
-            var t1 = absIdx * tps, t2 = Math.min(65535, t1 + tps - 1);
-            S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('t' + t + '_cc_auto_clear_step', ac + ' ' + t1 + ' ' + t2);
-            /* DSP may have emptied some lanes — refresh auto bits / rest on next tick
-             * (get_param is null from this MIDI handler). */
-            S.pendingCCBitsRefresh = ac;
-            showActionPopup('CC STEP', 'CLEAR');
-            invalidateLEDCache();
-            forceRedraw();
-        } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-            /* Drum mode: clear step in active lane */
-            const t       = S.activeTrack;
-            const lane    = S.activeDrumLane[t];
-            const absStep = S.drumStepPage[t] * 16 + idx;
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('t' + t + '_l' + lane + '_step_' + absStep + '_clear', '1');
-            S.drumLaneSteps[t][lane][absStep] = '0';
-            S.drumLaneHasNotes[t][lane] = S.drumLaneSteps[t][lane].some(c => c !== '0');
-            forceRedraw();
-        } else {
-        const ac     = effectiveClip(S.activeTrack);
-        const absIdx = S.trackCurrentPage[S.activeTrack] * 16 + idx;
-        clearStep(S.activeTrack, ac, absIdx);
-        forceRedraw();
-        }
+    } else if (handleTrackViewDeleteStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
+        return;
     } else if (S.shiftHeld) {
         /* Shift+step shortcuts */
         _doShiftStepCommon(idx);

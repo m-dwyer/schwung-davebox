@@ -907,10 +907,21 @@ Drum repeat workflows:
   run before Track View Copy+step. Delete+step, Mute+step, held-step edit,
   Parameter Bank behavior, recording behavior, Session View Performance Mode,
   modal workflows, and unrelated DSP reads/writes remain in `ui.js`.
+- Continued the Track View Step Workflow seam with Delete+step. Moved melodic
+  normal-bank step clear dispatch, melodic CC automation-bank clear-step range
+  writes, and drum active-lane step clear mirror updates into
+  `handleTrackViewDeleteStepPress()`. Preserved `_onStepButtons()` ordering:
+  hold-reveal, Session View step behavior, Loop gesture, and Copy+step still
+  run before Delete+step. `ui.js` remains the adapter for `clearStep()`,
+  `effectiveClip()`, `host_module_set_param`, LED invalidation, redraw, and
+  action popups. Mute+step, held-step edit, Parameter Bank behavior, recording
+  behavior, Session View Performance Mode, modal workflows, and unrelated DSP
+  reads/writes remain in `ui.js`.
 
 Verification:
 
 - `npm run test:node -- track-view-step-workflow.test.ts`
+- `npm run test:node -- track-view-step-workflow.test.ts behaviour.test.ts`
 - `npm run test:node -- behaviour.test.ts`
 - `npm run test:node -- tests/integration/splash-render.test.ts`
 - `npm run test:node -- tests/integration/modal-render.test.ts tests/integration/loop-render.test.ts tests/integration/param-peek-render.test.ts tests/integration/prompt-render.test.ts tests/integration/popup-render.test.ts tests/integration/idle-render.test.ts tests/integration/bank-render.test.ts tests/integration/bank-chrome-render.test.ts tests/integration/perf-render.test.ts tests/integration/session-overview-render.test.ts tests/integration/splash-render.test.ts tests/integration/step-edit-render.test.ts tests/integration/cc-step-edit-render.test.ts tests/integration/step-interval-render.test.ts tests/integration/ui-descriptors.test.ts`
