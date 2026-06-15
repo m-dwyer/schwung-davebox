@@ -183,3 +183,22 @@ export function readTargetedClipRestorePairFromDsp(S, deps, track, clip, isDrum)
     }
     readTargetedClipAutomationFromDsp(S, deps, track, clip);
 }
+
+export function readTrackConfigFromDsp(S, deps, track) {
+    if (typeof deps.host_module_get_param !== 'function') return;
+    const ch = deps.host_module_get_param('t' + track + '_channel');
+    if (ch !== null && ch !== undefined) S.trackChannel[track] = parseInt(ch, 10) || 1;
+    const rt = deps.host_module_get_param('t' + track + '_route');
+    if (rt !== null && rt !== undefined) S.trackRoute[track] = rt === 'external' ? 2 : rt === 'move' ? 1 : 0;
+    const pm = deps.host_module_get_param('t' + track + '_pad_mode');
+    if (pm !== null && pm !== undefined) S.trackPadMode[track] = parseInt(pm, 10) | 0;
+    const tvo = deps.host_module_get_param('t' + track + '_track_vel_override');
+    if (tvo !== null && tvo !== undefined) S.trackVelOverride[track] = parseInt(tvo, 10) | 0;
+    const lpr = deps.host_module_get_param('t' + track + '_track_looper');
+    if (lpr !== null && lpr !== undefined) S.trackLooper[track] = parseInt(lpr, 10) | 0;
+    const diq = deps.host_module_get_param('t' + track + '_diq');
+    if (diq !== null && diq !== undefined) {
+        S.drumInpQuant[track] = Math.max(0, Math.min(8, parseInt(diq, 10) | 0));
+        S.bankParams[track][7][5] = S.drumInpQuant[track];
+    }
+}

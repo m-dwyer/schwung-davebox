@@ -144,6 +144,7 @@ import {
 } from './ui_latch_workflows.mjs';
 import {
     readDrumActiveLaneFromDsp,
+    readTrackConfigFromDsp,
     refreshDrumLaneBankParamsFromDsp,
     refreshPerClipBankParamsFromDsp,
     readTargetedClipRestorePairFromDsp
@@ -2945,22 +2946,9 @@ function readBankParams(t, bankIdx) {
 }
 
 function readTrackConfig(t) {
-    if (typeof host_module_get_param !== 'function') return;
-    const ch = host_module_get_param('t' + t + '_channel');
-    if (ch !== null && ch !== undefined) S.trackChannel[t] = parseInt(ch, 10) || 1;
-    const rt = host_module_get_param('t' + t + '_route');
-    if (rt !== null && rt !== undefined) S.trackRoute[t] = rt === 'external' ? 2 : rt === 'move' ? 1 : 0;
-    const pm = host_module_get_param('t' + t + '_pad_mode');
-    if (pm !== null && pm !== undefined) S.trackPadMode[t] = parseInt(pm, 10) | 0;
-    const tvo = host_module_get_param('t' + t + '_track_vel_override');
-    if (tvo !== null && tvo !== undefined) S.trackVelOverride[t] = parseInt(tvo, 10) | 0;
-    const lpr = host_module_get_param('t' + t + '_track_looper');
-    if (lpr !== null && lpr !== undefined) S.trackLooper[t] = parseInt(lpr, 10) | 0;
-    const diq = host_module_get_param('t' + t + '_diq');
-    if (diq !== null && diq !== undefined) {
-        S.drumInpQuant[t] = Math.max(0, Math.min(8, parseInt(diq, 10) | 0));
-        S.bankParams[t][7][5] = S.drumInpQuant[t];
-    }
+    readTrackConfigFromDsp(S, {
+        host_module_get_param: typeof host_module_get_param === 'function' ? host_module_get_param : undefined
+    }, t);
 }
 
 function applyTrackConfig(t, key, val) {

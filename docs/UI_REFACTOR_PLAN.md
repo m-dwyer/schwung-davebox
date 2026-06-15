@@ -713,6 +713,14 @@ Drum repeat workflows:
 - Added focused coverage in `web/tests/integration/clip-track-sync.test.ts` for
   melodic and drum bank snapshot read ordering, packed fallback/default
   behavior, and drum-track delegation through the per-clip refresh path.
+- Continued the narrow Parameter Bank / DSP Mirror read-only slice by moving
+  track config readback into `ui_clip_track_sync.mjs` as
+  `readTrackConfigFromDsp()`, preserving the `ui.js` wrapper and full-sync
+  caller timing. This keeps knob edit/write behavior, `readBankParams()`, and
+  CC-bank deferred default writes in `ui.js`.
+- Added focused coverage in `web/tests/integration/clip-track-sync.test.ts` for
+  track config DSP read ordering, route/default parsing, missing-value fallback
+  behavior, DIQ clamping, and the DIQ bank mirror update.
 
 Verification:
 
