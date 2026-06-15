@@ -247,9 +247,145 @@ stay outside the pad surface interface for now:
 - rendering, LED policy, and view priority;
 - full tick ordering and DSP mirror drains.
 
-Next likely module: `ui_drum_lane_workflows.mjs` for destructive or workflow-like
-drum lane actions. Its first phases should cover Copy/Cut/Paste lane,
-Mute/Solo lane, and Delete+lane clear separately, each with focused tests.
+## Next Larger Refactor Slices
+
+The small extraction phases have created useful seams, but future work should
+prefer larger cohesive workflow slices when they have a clear behavior concept
+and testable ordering invariants. Do not chase line count alone: the interface
+should hide real sequencing, mirror, and coalescing rules from `ui/ui.js`.
+
+### 1. Repeat Groove Workflow Module
+
+Recommended next slice.
+
+Files:
+
+- `ui/ui.js` around `_onCC_jog()` Delete+jog repeat-groove reset
+- `ui/ui.js` around `_onCC_knobs()` Rpt groove step edits
+- `ui/ui.js` around drum lane copy/move helper repeat-groove mirror sync
+- `ui/ui.js` around Shift+Delete+lane hard reset repeat defaults
+- `ui/ui_drum_repeat_workflows.mjs`
+- `web/tests/integration/drum-repeat-workflows.test.ts`
+
+Problem:
+
+Repeat-groove state is still spread across jog, pad, knob, lane copy/move, and
+hard-reset paths. Each path knows the same mirror defaults and DSP key shapes:
+gate mask, gate length, velocity scale, nudge, Rpt2 rate, and deferred reset
+queueing. This makes `ui.js` retain too much knowledge about repeat-groove
+invariants even though drum-repeat pad workflows already live behind a module
+interface.
+
+Solution:
+
+Deepen `ui_drum_repeat_workflows.mjs` around repeat-groove behavior. Keep the
+interface behavior-specific; likely functions include:
+
+- `resetDrumRepeatGrooveForLane(S, deps, track, lane)` for Delete+jog in Rpt
+  modes. It must reset `drumRepeatGate`, `drumRepeatGateLen`,
+  `drumRepeatVelScale`, and `drumRepeatNudge`, then queue
+  `t${track}_l${lane}_repeat_groove_reset=1` through
+  `pendingDefaultSetParams`, and show `RPT GROOVE` / `RESET`.
+- `resetDrumRepeatGrooveMirrorsForLane(S, track, lane)` for mirror-only factory
+  reset paths such as Shift+Delete+lane hard reset.
+- `copyDrumRepeatGrooveMirrors(S, track, srcLane, dstLane)` and
+  `moveDrumRepeatGrooveMirrors(S, track, srcLane, dstLane)` if the lane
+  copy/move helpers can delegate without pulling unrelated lane behavior into
+  the repeat module.
+- Consider moving knob edits for repeat nudge and velocity scale only if the
+  caller interface stays narrow and tests can cover clamp/write behavior without
+  dragging the whole bank-edit path into the module.
+
+Current behavior to preserve:
+
+- `activeBank === 6` automation clear in `_onCC_jog()` must keep precedence over
+  repeat-groove reset.
+- Delete+jog repeat-groove reset only applies in Track View when Delete+jog is
+  pressed, the active track is a drum track, and `drumPerformMode[track] > 0`.
+- Delete+jog reset queues the DSP reset through `pendingDefaultSetParams`, not
+  immediate `host_module_set_param`, to preserve one-per-tick coalescing
+  avoidance.
+- Gate-pad workflows that already live in `handleDrumRepeatGatePad()` preserve
+  their current immediate DSP writes and redraw behavior.
+- Lane hard reset preserves `midi_note` identity and its existing delayed
+  `pendingDrumLaneResync` ordering.
+
+Suggested focused tests:
+
+- Delete+jog reset updates active-lane repeat-groove mirrors and queues exactly
+  one deferred reset param after any existing pending entries.
+- Automation clear precedence remains outside the repeat-groove function; the
+  repeat function should not need to know about bank 6.
+- Mirror-only factory reset sets gate `0xFF`, gate length `8`, velocity scale
+  `100`, nudge `0`, and Rpt2 per-lane rate `0` without queuing a DSP reset.
+- Copy/move mirror helpers preserve source/destination semantics and reset the
+  move source to fresh defaults.
+- Knob edit extraction, if included, clamps nudge to `[-50, 50]`, velocity scale
+  to `[0, 200]`, and writes the same DSP payloads as today.
+
+### 2. Drum Repeat Pad Router
+
+Files:
+
+- `ui/ui.js` around `_onPadPressTrackView()`
+- `ui/ui.js` around `_onPadReleaseTrackView()`
+- `ui_drum_repeat_workflows.mjs`
+
+Problem:
+
+Most Rpt1/Rpt2 pad behavior is extracted, but `ui.js` still classifies repeat
+pad targets by mode, row, column, modifier state, and release grid. That routing
+knowledge is not pad-surface behavior and it obscures the live-pad path.
+
+Solution:
+
+Move only the Rpt1/Rpt2 classification and dispatch into a repeat-pad router
+function that calls the existing workflow functions. Keep ordinary drum pad
+preview/recording, lane clear/copy/mute, and Capture selection outside this
+interface.
+
+Preserve:
+
+- Rpt1 intercepts right-grid pads only when Shift/Copy/Mute are not held.
+- Rpt2 intercepts right-grid rate/gate pads and left-grid lane pads, but
+  Delete+lane must continue to go to destructive lane clear before repeat-lane
+  handling.
+- Release-side right-grid swallowing and Rpt2 lane-off behavior.
+- Patched-vs-stock Schwung set_param gates already encoded in the workflow
+  functions.
+
+Manual hardware validation is more valuable for this slice than for pure
+repeat-groove extraction because it touches the live pad press/release path.
+
+### 3. Drum Lane Factory Reset Workflow
+
+Files:
+
+- `ui/ui.js` around Shift+Delete+lane hard reset
+- `ui_drum_lane_workflows.mjs`
+- `ui_drum_repeat_workflows.mjs`
+
+Problem:
+
+Shift+Delete+lane hard reset is a larger workflow that mixes lane reset, repeat
+defaults, clip non-empty mirror recompute, delayed DSP resync setup, popup, and
+redraw. It is valuable to extract, but it crosses drum-lane and repeat-groove
+concepts.
+
+Solution:
+
+Extract after repeat-groove mirror helpers exist. The drum-lane workflow module
+can own the overall hard-reset operation while calling repeat-groove helpers for
+repeat-specific mirrors. Avoid making either module a broad catch-all.
+
+Preserve:
+
+- `t${track}_l${lane}_hard_reset=1` immediate DSP write.
+- Undo/redo mirror updates.
+- Lane length, steps, lane non-empty, clip non-empty recompute.
+- Repeat-groove defaults and Rpt2 lane rate reset.
+- `pendingDrumLaneResync` delayed refresh ordering.
+- Popup and redraw behavior.
 
 ## Progress Log
 
