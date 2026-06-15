@@ -102,7 +102,6 @@ import {
     PARAM_PEEK_DETAIL_TICKS,
     autoLaneLabel,
     motionIdleModel,
-    motionOverviewModel,
     paramPeekInfo
 } from './ui_motion.mjs';
 import {
@@ -111,7 +110,10 @@ import {
     renderDrumLaneBankOverview,
     renderDrumMidiDelayBankOverview,
     renderDrumNoteFxBankOverview,
-    renderDrumRepeatGrooveBankOverview
+    renderDrumRepeatGrooveBankOverview,
+    renderGenericBankOverview,
+    renderMelodicNoteFxBankOverview,
+    renderMotionBankOverview
 } from './ui_bank_render.mjs';
 import {
     SCALE_INTERVALS,
@@ -3554,6 +3556,7 @@ function createBankRenderDeps() {
         print,
         fill_rect,
         drawBankHeading,
+        drawBankHeadingInverted,
         drawAltArrow,
         altIndicatorActive,
         bankHasAltParams,
@@ -4191,113 +4194,14 @@ function drawUI() {
         syncDrumRepeatState(t, lane);
         renderDrumRepeatGrooveBankOverview(bankRenderDeps);
         } else if (bank === 6) {
-        /* CC PARAM bank overview: label = CC# or "AT" (aftertouch); value =
-         * stopped → clip resting value or "—"; playing → defined value at the
-         * playhead or "—". Active lane cell is always highlighted. */
-        const t  = S.activeTrack;
-        const ac = effectiveClip(t);
-        const motionModel = motionOverviewModel(t, ac);
-        drawBankHeadingInverted(motionModel.heading);
-        /* Automation-type indicators: inverted badge (white bg, black text) per
-         * type that has data in the focused clip; nothing if the type is empty. */
-        let bx = 60;
-        for (let bi = 0; bi < motionModel.badges.length; bi++) {
-            const txt = motionModel.badges[bi];
-            const w = txt.length * 6 + 3;
-            fill_rect(bx, 1, w, 7, 1);
-            print(bx + 1, 1, txt, 0);
-            bx += w + 2;
-        }
-        for (let k = 0; k < 8; k++) {
-            const colX = 4 + (k % 4) * 30;
-            const rowY = k < 4 ? 12 : 36;
-            const lane = motionModel.lanes[k];
-            /* In ASSIGN (altMode): highlight ONLY the label half of every cell so it
-             * is visually clear that turning the knob retargets the CC/AT, not the
-             * value. In normal mode, the touched/active lane gets the full-cell
-             * inversion as before. */
-            if (S.altMode) {
-                fill_rect(colX, rowY, 24, 12, 1);                /* label row only */
-                if (lane.valueInverted) fill_rect(colX, rowY + 12, 24, 12, 1);  /* value row only if touched */
-                print(colX, rowY,      col4(lane.label), 0);
-                print(colX, rowY + 12, col4(lane.value), lane.valueInverted ? 0 : 1);
-            } else {
-                if (lane.touched) fill_rect(colX, rowY, 24, 24, 1);
-                print(colX, rowY,      col4(lane.label), lane.touched ? 0 : 1);
-                print(colX, rowY + 12, col4(lane.value), lane.touched ? 0 : 1);
-            }
-        }
-        /* Bottom line: show full param name when a Sch knob is touched. */
-        if (motionModel.footer) print(0, 56, motionModel.footer, 1);
+        renderMotionBankOverview(bankRenderDeps);
         } else if (S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM && bank === 1) {
-        /* Melodic NOTE FX: K1=Oct, K2=Ofs, K3=Vel, K4=Qnt, K5=Len, K6=>Gate
-         * (widened cell for 5-char label), K7=blocked, K8=Rnd. */
-        const t     = S.activeTrack;
-        const knobs = BANKS[1].knobs;
-        const vals  = S.bankParams[t][1];
-        const RND_ALG_NAMES_NFX = ['Pure', 'Gaus', 'Walk'];
-        drawBankHeading(BANKS[1].name);
-        drawAltArrow(98, true, altIndicatorActive(S.activeTrack, S.activeBank));
-        for (let k = 0; k < 8; k++) {
-            if (k === 6) continue;  /* K7 blocked, no render */
-            const colX = 4 + (k % 4) * 30;
-            const rowY = k < 4 ? 12 : 36;
-            const hi   = (S.knobTouched === k);
-            const widen = (k === 5);
-            const cellW = widen ? 30 : 24;
-            if (hi) fill_rect(colX, rowY, cellW, 24, 1);
-            const _nfxAlt = S.altMode && k === 7;
-            if (widen) {
-                print(colX, rowY,      '>Gate',                       hi ? 0 : 1);
-                print(colX, rowY + 12, col4(knobs[k].fmt(vals[k])),   hi ? 0 : 1);
-            } else if (_nfxAlt) {
-                print(colX, rowY,      col4('Algo'),                   hi ? 0 : 1);
-                print(colX, rowY + 12, col4(RND_ALG_NAMES_NFX[S.noteFXRandomMode[t] || 0]), hi ? 0 : 1);
-            } else {
-                print(colX, rowY,      col4(knobs[k].abbrev),         hi ? 0 : 1);
-                print(colX, rowY + 12, col4(knobs[k].fmt(vals[k])),   hi ? 0 : 1);
-            }
-        }
+        renderMelodicNoteFxBankOverview(bankRenderDeps);
 
         } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 3) {
         renderDrumMidiDelayBankOverview(bankRenderDeps);
         } else {
-        /* Bank overview — 5 rows; touched knob column inverted */
-        const knobs = BANKS[bank].knobs;
-        const vals  = S.bankParams[S.activeTrack][bank];
-        const _isDrum = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM;
-        (bank === 5 ? drawBankHeadingInverted : drawBankHeading)(BANKS[bank].name);
-        for (let k = 0; k < 8; k++) {
-            const colX = 4 + (k % 4) * 30;
-            const rowY = k < 4 ? 12 : 36;
-            const hi   = (S.knobTouched === k);
-            if (hi) fill_rect(colX, rowY, 24, 24, 1);
-            let _lbl = knobs[k].abbrev || '-';
-            /* Shift+K1 on DELAY bank (melodic): label + value flip to
-             * delay_clock_fb. Drum: K6 already holds clock_fb directly via
-             * remap; no flip needed. */
-            const _delayShiftClkF = S.altMode && !_isDrum && bank === 3 && k === 0;
-            const _clipDirAlt    = S.altMode && !_isDrum && knobs[k].dspKey === 'clip_playback_dir';
-            const _rndAltAlgo    = S.altMode && !_isDrum && (bank === 1 || bank === 3) && k === 7;
-            const RND_ALG_NAMES  = ['Pure', 'Gaus', 'Walk'];
-            if (S.altMode) {
-                if      (knobs[k].dspKey === 'clock_shift')    _lbl = 'Nudg';
-                else if (knobs[k].dspKey === 'clip_resolution') _lbl = 'Zoom';
-                else if (knobs[k].dspKey === 'clip_playback_dir') _lbl = 'Rvrs';
-                else if (_delayShiftClkF)                       _lbl = 'ClkF';
-                else if (_rndAltAlgo)                           _lbl = 'Algo';
-            }
-            print(colX, rowY,      _lbl, hi ? 0 : 1);
-            /* Arp Rate (Rate knob in SEQ ARP / ARP IN) uses 5-char labels for
-             * triplets ('1/16t','1/32t'). Skip the 4-char padding so the 't'
-             * isn't truncated — the cell has ~24px and the raw string fits. */
-            const _rawVal = _rndAltAlgo   ? RND_ALG_NAMES[bank === 3 ? (S.midiDlyRandomMode[S.activeTrack] || 0) : (S.noteFXRandomMode[S.activeTrack] || 0)]
-                          : _delayShiftClkF ? fmtSign(S.delayClockFb[S.activeTrack])
-                          : _clipDirAlt     ? fmtRevStyle(S.clipPlaybackAudioReverse[S.activeTrack][effectiveClip(S.activeTrack)] | 0)
-                          : (knobs[k].abbrev ? knobs[k].fmt(vals[k]) : null);
-            const _txt    = (knobs[k].fmt === fmtArpRate && !_delayShiftClkF) ? (_rawVal || '-') : col4(_rawVal);
-            print(colX, rowY + 12, _txt, hi ? 0 : 1);
-        }
+        renderGenericBankOverview(bankRenderDeps, bank);
         }
 
     } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {

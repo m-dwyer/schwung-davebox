@@ -1,8 +1,10 @@
 import { S } from './ui_state.mjs';
 import {
     BANKS,
+    PAD_MODE_DRUM,
     TPS_VALUES,
     col4,
+    fmtArpRate,
     fmtBool,
     fmtGateMod,
     fmtLen,
@@ -15,6 +17,7 @@ import {
     fmtVelOverride
 } from './ui_constants.mjs';
 import { effectiveClip } from './ui_leds.mjs';
+import { motionOverviewModel } from './ui_motion.mjs';
 
 export function renderDrumLaneBankOverview(deps) {
     const t    = S.activeTrack;
@@ -164,6 +167,101 @@ export function renderDrumMidiDelayBankOverview(deps) {
         if (hi) deps.fill_rect(colX, rowY, 24, 24, 1);
         deps.print(colX, rowY,      col4(drumDlyLabels[k]), hi ? 0 : 1);
         deps.print(colX, rowY + 12, col4(drumDlyFmt[k](vals[k])), hi ? 0 : 1);
+    }
+}
+
+export function renderMotionBankOverview(deps) {
+    const t  = S.activeTrack;
+    const ac = effectiveClip(t);
+    const motionModel = motionOverviewModel(t, ac);
+    deps.drawBankHeadingInverted(motionModel.heading);
+    let bx = 60;
+    for (let bi = 0; bi < motionModel.badges.length; bi++) {
+        const txt = motionModel.badges[bi];
+        const w = txt.length * 6 + 3;
+        deps.fill_rect(bx, 1, w, 7, 1);
+        deps.print(bx + 1, 1, txt, 0);
+        bx += w + 2;
+    }
+    for (let k = 0; k < 8; k++) {
+        const colX = 4 + (k % 4) * 30;
+        const rowY = k < 4 ? 12 : 36;
+        const lane = motionModel.lanes[k];
+        if (S.altMode) {
+            deps.fill_rect(colX, rowY, 24, 12, 1);
+            if (lane.valueInverted) deps.fill_rect(colX, rowY + 12, 24, 12, 1);
+            deps.print(colX, rowY,      col4(lane.label), 0);
+            deps.print(colX, rowY + 12, col4(lane.value), lane.valueInverted ? 0 : 1);
+        } else {
+            if (lane.touched) deps.fill_rect(colX, rowY, 24, 24, 1);
+            deps.print(colX, rowY,      col4(lane.label), lane.touched ? 0 : 1);
+            deps.print(colX, rowY + 12, col4(lane.value), lane.touched ? 0 : 1);
+        }
+    }
+    if (motionModel.footer) deps.print(0, 56, motionModel.footer, 1);
+}
+
+export function renderMelodicNoteFxBankOverview(deps) {
+    const t     = S.activeTrack;
+    const knobs = BANKS[1].knobs;
+    const vals  = S.bankParams[t][1];
+    const RND_ALG_NAMES_NFX = ['Pure', 'Gaus', 'Walk'];
+    deps.drawBankHeading(BANKS[1].name);
+    deps.drawAltArrow(98, true, deps.altIndicatorActive(S.activeTrack, S.activeBank));
+    for (let k = 0; k < 8; k++) {
+        if (k === 6) continue;
+        const colX = 4 + (k % 4) * 30;
+        const rowY = k < 4 ? 12 : 36;
+        const hi   = (S.knobTouched === k);
+        const widen = (k === 5);
+        const cellW = widen ? 30 : 24;
+        if (hi) deps.fill_rect(colX, rowY, cellW, 24, 1);
+        const nfxAlt = S.altMode && k === 7;
+        if (widen) {
+            deps.print(colX, rowY,      '>Gate',                     hi ? 0 : 1);
+            deps.print(colX, rowY + 12, col4(knobs[k].fmt(vals[k])), hi ? 0 : 1);
+        } else if (nfxAlt) {
+            deps.print(colX, rowY,      col4('Algo'), hi ? 0 : 1);
+            deps.print(colX, rowY + 12, col4(RND_ALG_NAMES_NFX[S.noteFXRandomMode[t] || 0]), hi ? 0 : 1);
+        } else {
+            deps.print(colX, rowY,      col4(knobs[k].abbrev),       hi ? 0 : 1);
+            deps.print(colX, rowY + 12, col4(knobs[k].fmt(vals[k])), hi ? 0 : 1);
+        }
+    }
+}
+
+export function renderGenericBankOverview(deps, bank) {
+    const knobs = BANKS[bank].knobs;
+    const vals  = S.bankParams[S.activeTrack][bank];
+    const isDrum = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM;
+    (bank === 5 ? deps.drawBankHeadingInverted : deps.drawBankHeading)(BANKS[bank].name);
+    for (let k = 0; k < 8; k++) {
+        const colX = 4 + (k % 4) * 30;
+        const rowY = k < 4 ? 12 : 36;
+        const hi   = (S.knobTouched === k);
+        if (hi) deps.fill_rect(colX, rowY, 24, 24, 1);
+        let lbl = knobs[k].abbrev || '-';
+        const delayShiftClkF = S.altMode && !isDrum && bank === 3 && k === 0;
+        const clipDirAlt     = S.altMode && !isDrum && knobs[k].dspKey === 'clip_playback_dir';
+        const rndAltAlgo     = S.altMode && !isDrum && (bank === 1 || bank === 3) && k === 7;
+        const RND_ALG_NAMES  = ['Pure', 'Gaus', 'Walk'];
+        if (S.altMode) {
+            if      (knobs[k].dspKey === 'clock_shift')      lbl = 'Nudg';
+            else if (knobs[k].dspKey === 'clip_resolution')  lbl = 'Zoom';
+            else if (knobs[k].dspKey === 'clip_playback_dir') lbl = 'Rvrs';
+            else if (delayShiftClkF)                         lbl = 'ClkF';
+            else if (rndAltAlgo)                             lbl = 'Algo';
+        }
+        deps.print(colX, rowY, lbl, hi ? 0 : 1);
+        const rawVal = rndAltAlgo
+            ? RND_ALG_NAMES[bank === 3 ? (S.midiDlyRandomMode[S.activeTrack] || 0) : (S.noteFXRandomMode[S.activeTrack] || 0)]
+            : delayShiftClkF
+                ? fmtSign(S.delayClockFb[S.activeTrack])
+                : clipDirAlt
+                    ? fmtRevStyle(S.clipPlaybackAudioReverse[S.activeTrack][effectiveClip(S.activeTrack)] | 0)
+                    : (knobs[k].abbrev ? knobs[k].fmt(vals[k]) : null);
+        const txt = (knobs[k].fmt === fmtArpRate && !delayShiftClkF) ? (rawVal || '-') : col4(rawVal);
+        deps.print(colX, rowY + 12, txt, hi ? 0 : 1);
     }
 }
 
