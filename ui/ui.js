@@ -186,9 +186,7 @@ import {
     handleTrackViewStepHoldThreshold,
     handleTrackViewChordFirstStepTick,
     handleTrackViewMelodicStepNoteAssignment,
-    handleTrackViewMelodicStepKnob,
-    handleTrackViewDrumStepKnob,
-    handleTrackViewCcStepEditKnob
+    handleTrackViewStepEditKnob
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -6581,17 +6579,7 @@ function ccKnobDelta(d2, k) {
 }
 
 function _onCC_stepedit(d1, d2) {
-    if (handleTrackViewCcStepEditKnob(S, createTrackViewStepWorkflowDeps(), d1, d2)) {
-        return;
-    }
-
-    if (handleTrackViewDrumStepKnob(S, createTrackViewStepWorkflowDeps(), d1, d2)) {
-        return;
-    }
-    if (handleTrackViewMelodicStepKnob(S, createTrackViewStepWorkflowDeps(), d1, d2)) {
-        return;
-    }
-
+    handleTrackViewStepEditKnob(S, createTrackViewStepWorkflowDeps(), d1, d2);
 }
 
 function _onCC_knobs(d1, d2) {

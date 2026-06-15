@@ -810,3 +810,13 @@ export function handleTrackViewCcStepEditKnob(S, deps, d1, d2) {
     S.trackCCAutoBits[track][clip] |= (1 << knobIdx);
     return true;
 }
+
+export function handleTrackViewStepEditKnob(S, deps, d1, d2) {
+    if (handleTrackViewCcStepEditKnob(S, deps, d1, d2))
+        return true;
+    if (handleTrackViewDrumStepKnob(S, deps, d1, d2))
+        return true;
+    if (handleTrackViewMelodicStepKnob(S, deps, d1, d2))
+        return true;
+    return false;
+}
