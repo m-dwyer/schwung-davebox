@@ -133,6 +133,7 @@ import {
     handleDrumRepeatPadAftertouch,
     handleDrumRepeatRatePadPress,
     handleDrumRepeatRatePadRelease,
+    cycleDrumRepeatPerformMode,
     prepareDrumRepeatLoopPress,
     latchHeldDrumRepeatsOnLoopPress,
     handleDrumRepeatLoopTapRelease,
@@ -2103,7 +2104,9 @@ function createDrumRepeatWorkflowDeps() {
         refreshDrumLaneBankParams,
         host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
         forceRedraw,
-        padPitch
+        padPitch,
+        setDrumPerformMode,
+        showModePopup
     };
 }
 
@@ -10234,22 +10237,7 @@ function _onStepButtons(d1, d2) {
         if (idx === 7) {
             /* Step 8 (Track View only): drum=cycle perform mode; melodic=toggle chromatic */
             if (isDrum) {
-                if (S.drumPerformMode[t] === 1) {
-                    host_module_set_param('t' + t + '_drum_repeat_stop', '1');
-                    S.drumRepeatHeldPad[t] = -1;
-                    S.drumRepeatHeldPadsStack[t].length = 0;
-                }
-                if (S.drumPerformMode[t] === 2) {
-                    S.drumRepeat2HeldLanes[t].clear();
-                    S.drumRepeat2LatchedLanes[t].clear();
-                    host_module_set_param('t' + t + '_drum_repeat2_stop', '1');
-                }
-                S.drumRepeatLatched[t] = false;
-                setDrumPerformMode(t, (S.drumPerformMode[t] + 1) % 3);
-                if (S.drumPerformMode[t] > 0) S.activeBank = 5;
-                showModePopup('PERFORMANCE PADS',
-                    ['Velocity', 'Repeat Play (Rpt1)', 'Repeat Set (Rpt2)'],
-                    S.drumPerformMode[t]);
+                cycleDrumRepeatPerformMode(S, createDrumRepeatWorkflowDeps(), t);
             } else {
                 S.padLayoutChromatic[t] = !S.padLayoutChromatic[t];
                 computePadNoteMap();

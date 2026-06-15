@@ -163,6 +163,29 @@ export function handleDeleteLoopDrumRepeatStop(S, deps, track) {
     return true;
 }
 
+export function cycleDrumRepeatPerformMode(S, deps, track) {
+    if (S.drumPerformMode[track] === 1) {
+        if (typeof deps.host_module_set_param === 'function')
+            deps.host_module_set_param('t' + track + '_drum_repeat_stop', '1');
+        S.drumRepeatHeldPad[track] = -1;
+        S.drumRepeatHeldPadsStack[track].length = 0;
+    }
+    if (S.drumPerformMode[track] === 2) {
+        S.drumRepeat2HeldLanes[track].clear();
+        S.drumRepeat2LatchedLanes[track].clear();
+        if (typeof deps.host_module_set_param === 'function')
+            deps.host_module_set_param('t' + track + '_drum_repeat2_stop', '1');
+    }
+    S.drumRepeatLatched[track] = false;
+
+    deps.setDrumPerformMode(track, (S.drumPerformMode[track] + 1) % 3);
+    if (S.drumPerformMode[track] > 0) S.activeBank = 5;
+    deps.showModePopup('PERFORMANCE PADS',
+        ['Velocity', 'Repeat Play (Rpt1)', 'Repeat Set (Rpt2)'],
+        S.drumPerformMode[track]);
+    return true;
+}
+
 export function handleDrumRepeat2RightGridPadRelease(S) {
     S.screenDirty = true;
     return true;

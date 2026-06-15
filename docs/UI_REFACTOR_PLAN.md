@@ -371,6 +371,10 @@ Drum repeat workflows:
   stop mirror cleanup, Rpt2 per-lane unlatch queueing, TARP latch clearing, and
   per-track pendingDefaultSetParams ordering for one-per-tick drain behavior.
 - Added focused coverage in `web/tests/integration/latch-workflows.test.ts`.
+- Moved Track View Shift+Step 8 drum perform-mode cycling into
+  `cycleDrumRepeatPerformMode()`, preserving stop-before-mode-change ordering,
+  Rpt1 held-pad cleanup, Rpt2 held/latched lane cleanup, repeat-bank selection,
+  and the mode popup behavior.
 
 Verification:
 
