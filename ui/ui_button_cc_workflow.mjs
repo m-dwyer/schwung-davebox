@@ -28,6 +28,44 @@ export function handleUiShiftButton(S, deps, d1, d2) {
     if (!S.sessionView) deps.forceRedraw();
 }
 
+export function handleUiDeleteButton(S, deps, d1, d2) {
+    if (d1 !== deps.moveDelete) return false;
+
+    S.deleteHeld = d2 === 127;
+    /* Loop+Delete on auto bank: reset active lane's loop params */
+    if (d2 === 127 && S.loopHeld && S.activeBank === 6 &&
+            S.trackPadMode[S.activeTrack] !== deps.padModeDrum && !S.sessionView) {
+        var _rdt = S.activeTrack, _rdac = deps.effectiveClip(_rdt), _rdl = S.ccActiveLane[_rdt];
+        S.ccLaneLoopStart[_rdt][_rdac][_rdl] = 0;
+        S.ccLaneLength[_rdt][_rdac][_rdl] = 0;
+        S.ccLaneTps[_rdt][_rdac][_rdl] = 0;
+        S.ccLaneResTps[_rdt][_rdac][_rdl] = 0;
+        S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+        S.pendingDefaultSetParams.push({ key: 't' + _rdt + '_c' + _rdac + '_k' + _rdl + '_cc_lane_reset', val: '1' });
+        deps.showActionPopup('LANE LOOP', 'RESET');
+        deps.forceRedraw();
+        deps.computePadNoteMap();
+        return true;
+    }
+    /* AUTO-bank Delete-tap → CLEAR AUTOMATION menu. Arm on press (melodic
+     * AUTO bank only); a clean release (nothing happened while held, see the
+     * disqualify check at the top of this handler) opens the menu. */
+    if (d2 === 127) {
+        S.deleteTapArmed = (S.activeBank === 6 && !S.sessionView &&
+                            S.trackPadMode[S.activeTrack] !== deps.padModeDrum &&
+                            !S.clearAutoMenu);
+    } else if (S.deleteTapArmed) {
+        S.deleteTapArmed = false;
+        deps.openClearAutoMenu();
+    }
+    /* delete_held now rides as the 35th token in the tN_padmap payload
+     * (computePadNoteMap), so it shares the tick-based self-heal and
+     * avoids the onMidiMessage coalescing risk the old separate
+     * t0_delete_held push had. */
+    deps.computePadNoteMap();
+    return false;
+}
+
 export function handleUiCopyButton(S, deps, d1, d2) {
     if (d1 !== deps.moveCopy) return;
 
