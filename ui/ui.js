@@ -106,6 +106,14 @@ import {
     paramPeekInfo
 } from './ui_motion.mjs';
 import {
+    renderAllLanesBankOverview,
+    renderAllLanesConfirm,
+    renderDrumLaneBankOverview,
+    renderDrumMidiDelayBankOverview,
+    renderDrumNoteFxBankOverview,
+    renderDrumRepeatGrooveBankOverview
+} from './ui_bank_render.mjs';
+import {
     SCALE_INTERVALS,
     applyPadNoteMap,
     createLiveNoteQueues,
@@ -3541,6 +3549,18 @@ function drawPerfModeOled() {
     }
 }
 
+function createBankRenderDeps() {
+    return {
+        print,
+        fill_rect,
+        drawBankHeading,
+        drawAltArrow,
+        altIndicatorActive,
+        bankHasAltParams,
+        midiNoteName
+    };
+}
+
 function drawUI() {
     /* CO-RUN: shadow_ui's chain editor owns the OLED while this is active.
      * Skip every Overture draw path so it doesn't fight the chain editor's
@@ -4155,163 +4175,21 @@ function drawUI() {
             drawParamPeek();
             return;
         }
+        const bankRenderDeps = createBankRenderDeps();
         const isDrumLaneBank = (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 0);
         if (isDrumLaneBank) {
-            /* DRUM LANE bank overview: mirrors CLIP bank at lane level */
-            const t    = S.activeTrack;
-            const ac   = effectiveClip(t);
-            const lane = S.activeDrumLane[t];
-            const len  = S.drumLaneLength[t];
-            const tpsIdx = Math.max(0, TPS_VALUES.indexOf(S.drumLaneTPS[t]));
-            const sqfl   = S.clipSeqFollow[t][ac] ? 1 : 0;
-            const eucN = Math.min(S.drumLaneEuclidN[t][lane] | 0, len);
-            const drumLaneLabels = [S.altMode ? 'Zoom' : 'Res', 'Stch', S.altMode ? 'Nudg' : 'Shft', 'Lgto', 'Eucl', '-', S.altMode ? 'Rvrs' : 'Dir', 'SqFl'];
-            const drumLaneVals  = [
-                fmtRes(tpsIdx),
-                fmtStretch(S.bankParams[t][0][1]),
-                fmtSign(S.bankParams[t][0][2]),
-                '->',
-                String(eucN),
-                '-',
-                S.altMode ? fmtRevStyle(S.drumLanePlaybackAudioReverse[t][lane] | 0)
-                          : fmtPlayDir(S.drumLanePlaybackDir[t][lane] | 0),
-                fmtBool(sqfl),
-            ];
-            drawBankHeading('DRUM LANE');
-            for (let k = 0; k < 8; k++) {
-                if (!drumLaneLabels[k]) continue;
-                const colX = 4 + (k % 4) * 30;
-                const rowY = k < 4 ? 12 : 36;
-                const hi   = (S.knobTouched === k);
-                if (hi) fill_rect(colX, rowY, 24, 24, 1);
-                print(colX, rowY,      col4(drumLaneLabels[k]), hi ? 0 : 1);
-                print(colX, rowY + 12, col4(drumLaneVals[k]),   hi ? 0 : 1);
-            }
+            renderDrumLaneBankOverview(bankRenderDeps);
         } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 7 && !S.allLanesConfirmed) {
-            /* ALL LANES confirmation screen */
-            fill_rect(0, 0, 128, 9, 1);
-            print(4, 1, 'ALL LANES', 0);
-            print(106, 1, 'Tr' + (S.activeTrack + 1), 0);
-            print(10, 18, 'Edits will affect', 1);
-            print(10, 28, 'all lanes.', 1);
-            fill_rect(40, 44, 48, 16, 1);
-            print(52, 48, 'OK', 0);
+            renderAllLanesConfirm(bankRenderDeps);
         } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 7) {
-            /* ALL LANES bank overview */
-            const t = S.activeTrack;
-            const rv = S.bankParams[t][7][0];
-            const qv = S.bankParams[t][7][3];
-            const dv = S.bankParams[t][7][6];
-            const DIQ_LABELS = ['Off','1/64','1/32','1/16','1/16T','1/8','1/8T','1/4','1/4T'];
-            const allLabels = ['Res', 'Stch', S.altMode ? 'Nudg' : 'Shft', 'Qnt', 'VelIn', 'InQ', S.altMode ? 'Rvrs' : 'Dir', 'SyncRpt'];
-            const allVals = [
-                rv < 0 ? '--' : fmtRes(rv),
-                fmtStretch(S.bankParams[t][7][1]),
-                fmtSign(S.bankParams[t][7][2]),
-                qv <= 0 ? '--' : fmtPct(qv),
-                fmtVelOverride(S.trackVelOverride[t]),
-                DIQ_LABELS[S.drumInpQuant[t]] || 'Off',
-                dv < 0 ? '--' : (S.altMode ? fmtRevStyle(dv) : fmtPlayDir(dv)),
-                fmtBool(S.bankParams[t][7][7]),
-            ];
-            fill_rect(0, 0, 128, 9, 1);
-            print(4, 1, (Math.floor(S.tickCount / 24) % 2 === 0 ? 'ALL' : '   ') + ' LANES', 0);
-            print(106, 1, 'Tr' + (S.activeTrack + 1), 0);
-            drawAltArrow(98, true, altIndicatorActive(S.activeTrack, S.activeBank));
-            for (let k = 0; k < 8; k++) {
-                if (!allLabels[k]) continue;
-                const colX = 4 + (k % 4) * 30;
-                const rowY = k < 4 ? 12 : 36;
-                const hi   = (S.knobTouched === k);
-                if (hi) fill_rect(colX, rowY, 24, 24, 1);
-                const _lbl = allLabels[k];
-                print(colX, rowY,      _lbl.length > 4 ? _lbl : col4(_lbl), hi ? 0 : 1);
-                print(colX, rowY + 12, col4(allVals[k]),   hi ? 0 : 1);
-            }
+            renderAllLanesBankOverview(bankRenderDeps);
         } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 1) {
-        /* Drum NOTE/NOTEFX bank: K1=Gate K2=Vel K3=Qnt */
-        /* Drum NOTE FX: K1+K2=Oct/Note (merged), K3=Vel, K4=Qnt, K5=Len(placeholder), K6=Gate */
-        const t    = S.activeTrack;
-        const vals = S.bankParams[t][1];
-        drawBankHeading('NOTE FX');
-        /* K1+K2: merged Oct/Note box (per-lane MIDI note editor) */
-        {
-            const lane     = S.activeDrumLane[t];
-            const _dlNote  = S.drumLaneNote[t][lane];
-            const _noteStr = midiNoteName(_dlNote) + ' ' + _dlNote;
-            const hiLane   = (S.knobTouched === 0 || S.knobTouched === 1);
-            const LX = 4, LY = 12, LW = 54, LH = 24;
-            if (hiLane) {
-                fill_rect(LX, LY, LW, LH, 1);
-            } else {
-                /* single horizontal line under the Oct/Note labels */
-                fill_rect(LX, LY + 9, LW, 1, 1);
-            }
-            const _lc = hiLane ? 0 : 1;
-            print(LX + Math.floor((LW/2 - 18) / 2),                         LY + 1,  'Oct',  _lc);
-            print(LX + Math.floor(LW/2) + Math.floor((LW/2 - 24) / 2),      LY + 1,  'Note', _lc);
-            print(LX + Math.floor((LW - _noteStr.length * 6) / 2), LY + 13, _noteStr, _lc);
-        }
-        /* K3=Vel, K4=Qnt (row 1 right half); K5=Len, K6=Gate (row 2 left half) */
-        {
-            const _lane = S.activeDrumLane[t];
-            const nfxLabels = [null, null, 'Vel', 'Qnt', 'Len>', '>Gate', null, null];
-            const nfxVals   = [null, null, fmtSign(vals[1]), fmtPct(vals[2]),
-                               fmtLen(S.drumLaneLenMode[t][_lane] | 0), fmtPct(vals[0]),
-                               null, null];
-            for (let k = 2; k < 6; k++) {
-                const colX = 4 + (k % 4) * 30;
-                const rowY = k < 4 ? 12 : 36;
-                const hi   = (S.knobTouched === k);
-                /* K6 label ">Gate" is 5 chars (30px) — widen the cell so the label
-                 * and its highlight rect aren't clipped. K7/K8 are blocked on this
-                 * bank, so the extra column is free. */
-                const cellW = (k === 5) ? 30 : 24;
-                if (hi) fill_rect(colX, rowY, cellW, 24, 1);
-                const _lbl = nfxLabels[k];
-                print(colX, rowY,      _lbl.length > 4 ? _lbl : col4(_lbl), hi ? 0 : 1);
-                print(colX, rowY + 12, col4(nfxVals[k]),                    hi ? 0 : 1);
-            }
-        }
-
+        renderDrumNoteFxBankOverview(bankRenderDeps);
         } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 5) {
-        /* Drum RPT GROOVE bank overview — 8 steps, vel scale (unshifted) or nudge (Shift) */
         const t    = S.activeTrack;
         const lane = S.activeDrumLane[t];
         syncDrumRepeatState(t, lane);
-        /* Custom header: drop Tr# to clear the right side; arrow flash + per-step
-         * value format (vel% vs signed nudge%) signal the alt-mode state. */
-        fill_rect(0, 0, 128, 9, 0);
-        fill_rect(0, 0, 128, 1, 1);
-        fill_rect(0, 8, 128, 1, 1);
-        print(4, 1, 'REPEAT GROOVE', 1);
-        if (!S.sessionView && bankHasAltParams(S.activeTrack, S.activeBank)) {
-            drawAltArrow(98, false, altIndicatorActive(S.activeTrack, S.activeBank));
-        }
-        const _gLen = S.drumRepeatGateLen[t][lane];
-        for (let k = 0; k < 8; k++) {
-            const colX = 4 + (k % 4) * 30;
-            const rowY = k < 4 ? 12 : 36;
-            const hi   = (S.knobTouched === k);
-            if (hi) fill_rect(colX, rowY, 24, 24, 1);
-            if (k >= _gLen) continue;
-            const gateOn = !!(S.drumRepeatGate[t][lane] & (1 << k));
-            if (gateOn) {
-                fill_rect(colX, rowY + 1, 24, 4, hi ? 0 : 1);
-            } else {
-                const bc = hi ? 0 : 1;
-                fill_rect(colX, rowY + 1, 24, 1, bc);
-                fill_rect(colX, rowY + 4, 24, 1, bc);
-                fill_rect(colX, rowY + 1, 1, 4, bc);
-                fill_rect(colX + 23, rowY + 1, 1, 4, bc);
-            }
-            const vs   = S.drumRepeatVelScale[t][lane][k];
-            const ndg  = S.drumRepeatNudge[t][lane][k];
-            const disp = S.altMode
-                ? (ndg === 0 ? ' 0%' : (ndg > 0 ? '+' : '') + ndg + '%')
-                : vs + '%';
-            print(colX, rowY + 12, col4(disp), hi ? 0 : 1);
-        }
+        renderDrumRepeatGrooveBankOverview(bankRenderDeps);
         } else if (bank === 6) {
         /* CC PARAM bank overview: label = CC# or "AT" (aftertouch); value =
          * stopped → clip resting value or "—"; playing → defined value at the
@@ -4382,26 +4260,7 @@ function drawUI() {
         }
 
         } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 3) {
-        /* Drum MIDI DLY: K1-K4 same as melodic, K5=Gate, K6=Clk, K7=Retrg, K8 empty.
-         * Drum has no Pfb (no per-lane pitch) and no Rnd (no random pitch fb),
-         * so K5/K6 borrow those physical slots for Gate/Clk via the per-track
-         * remap in applyBankParam, and K7 hosts delay_retrig directly. */
-        const t    = S.activeTrack;
-        const vals = S.bankParams[t][3];
-        const knobs = BANKS[3].knobs;
-        const drumDlyLabels = [knobs[0].abbrev, knobs[1].abbrev, knobs[2].abbrev, knobs[3].abbrev, 'Gate', 'Clk', 'Retrg', null];
-        const drumDlyFmt    = [knobs[0].fmt, knobs[1].fmt, knobs[2].fmt, knobs[3].fmt, fmtGateMod, fmtSign, fmtBool, null];
-        drawBankHeading(BANKS[3].name);
-        for (let k = 0; k < 8; k++) {
-            if (!drumDlyLabels[k]) continue;
-            const colX = 4 + (k % 4) * 30;
-            const rowY = k < 4 ? 12 : 36;
-            const hi   = (S.knobTouched === k);
-            if (hi) fill_rect(colX, rowY, 24, 24, 1);
-            print(colX, rowY,      col4(drumDlyLabels[k]), hi ? 0 : 1);
-            print(colX, rowY + 12, col4(drumDlyFmt[k](vals[k])), hi ? 0 : 1);
-        }
-
+        renderDrumMidiDelayBankOverview(bankRenderDeps);
         } else {
         /* Bank overview — 5 rows; touched knob column inverted */
         const knobs = BANKS[bank].knobs;

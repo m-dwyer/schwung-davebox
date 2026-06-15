@@ -467,19 +467,18 @@ runtime concept, invariant, or presentation boundary. The practical balance is:
 ## Current Next Direction
 
 The Track / Clip Sync module is now established. Continue it only with narrow
-read-only mirror moves whose deletion test holds. Good immediate candidates are:
+read-only mirror moves whose deletion test holds. The most recent mirror
+candidates were completed:
 
 - `readTarpStepVel(t)` as `readTrackArpStepConfigFromDsp(S, deps, track)`;
 - `readDrumRepeatRates(t)` as `readDrumRepeatRatesFromDsp(S, deps, track)`.
 
-Both candidates are bounded DSP readbacks used by full sync. Preserve read
-ordering and fallback behavior exactly, keep existing `ui.js` wrappers/caller
-timing, and add focused tests in `web/tests/integration/clip-track-sync.test.ts`.
-
-After one or two more low-risk mirror slices, consider switching to the faster
-path for larger `ui.js` reduction: inspect view/render or modal-presentation
-regions and extract a cohesive display boundary with output-focused tests.
-Avoid broadening the sync module into a generic bank service.
+Stop doing sync mirror slices by default for now. The next preferred direction is
+the faster presentation path: extract cohesive view/render/modal boundaries with
+output-focused tests. Preserve `drawUI()` priority order, and keep DSP reads or
+write behavior at their current orchestration seams unless a deeper runtime
+concept clearly earns the move. Avoid broadening the sync module into a generic
+bank service.
 
 ## Track / Clip Sync Slice History
 
@@ -558,9 +557,11 @@ After this slice:
 - Once clip/track sync has a useful interface, revisit `ui_tick_tasks.mjs` and
   consider an explicit tick phase runner. Do not create a broad tick runner
   while its adapter would still need to expose most of `ui.js`.
-- The next large line-count candidate after sync is the Parameter Bank module:
-  `readBankParams()`, `readTrackConfig()`, `applyBankParam()`, and the knob
-  handler. Start with read-only bank mirrors before moving knob edit behavior.
+- The next large line-count candidate after sync is display presentation:
+  concrete bank/view renderers, modal presentation, and repeated formatting
+  helpers. Keep `readBankParams()`, `applyBankParam()`, and knob edit behavior
+  in `ui.js` until the pure mirror and deferred-write responsibilities can be
+  separated cleanly.
 
 ## Progress Log
 
@@ -766,7 +767,15 @@ Drum repeat workflows:
   CC-bank deferred default writes in `ui.js`.
 - Added focused coverage in `web/tests/integration/clip-track-sync.test.ts` for
   track config DSP read ordering, route/default parsing, missing-value fallback
-  behavior, DIQ clamping, and the DIQ bank mirror update.
+  behavior, DIQ clamping, the DIQ bank mirror update, track arp step config
+  readback, and Rpt2 per-lane repeat-rate readback.
+- Switched to the faster presentation path after reassessing `drawUI()`.
+  Added `ui/ui_bank_render.mjs` for the concrete drum bank-overview renderers:
+  DRUM LANE, ALL LANES confirm/overview, NOTE FX, REPEAT GROOVE, and drum DELAY.
+  Kept `drawUI()` priority/order and left the REPEAT GROOVE
+  `syncDrumRepeatState()` readback in `ui.js` immediately before rendering.
+- Added focused output coverage in `web/tests/integration/bank-render.test.ts`
+  for the moved presentation formatting.
 
 Verification:
 
