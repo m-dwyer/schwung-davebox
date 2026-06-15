@@ -187,7 +187,8 @@ import {
 import {
     handleUiCaptureButton,
     handleUiCopyButton,
-    handleUiMuteModifierButton
+    handleUiMuteModifierButton,
+    handleUiShiftButton
 } from './ui_button_cc_workflow.mjs';
 import {
     renderTrackStepEditView
@@ -5679,23 +5680,7 @@ function _onCC_jog(d1, d2) {
 }
 
 function _onCC_buttons(d1, d2) {
-    if (d1 === MoveShift) {
-        S.shiftHeld = d2 === 127;
-        S.shiftTrackLEDActive = d2 === 127;
-        /* PHASE-1: re-push padmap on Shift transitions so DSP on_midi sees
-         * all-0xFF while Shift is held (suppress pad-shortcut notes) and
-         * the real map again on release. See computePadNoteMap mute logic. */
-        computePadNoteMap();
-        if (!S.shiftHeld && S.jogTouched) S.jogTouched = false;
-        /* Deferred Shift+Step3 dispatch: fire on Shift release so the Shift
-         * held state doesn't leak into Move firmware / Schwung chain editor. */
-        if (!S.shiftHeld && S.pendingEditEntryTrack >= 0) {
-            const _t = S.pendingEditEntryTrack;
-            S.pendingEditEntryTrack = -1;
-            editSoundForTrack(_t);
-        }
-        if (!S.sessionView) forceRedraw();
-    }
+    handleUiShiftButton(S, createButtonCcWorkflowDeps(), d1, d2);
 
     /* Any non-Shift CC button press while Shift overlay is active clears the overlay */
     if (d1 !== MoveShift && d2 === 127 && S.shiftTrackLEDActive) {
@@ -7320,11 +7305,13 @@ function createTransportCcWorkflowDeps() {
 function createButtonCcWorkflowDeps() {
     return {
         computePadNoteMap,
+        editSoundForTrack,
         forceRedraw,
         invalidateLEDCache,
         moveCapture: MoveCapture,
         moveCopy: MoveCopy,
         moveMute: MoveMute,
+        moveShift: MoveShift,
         padModeDrum: PAD_MODE_DRUM
     };
 }

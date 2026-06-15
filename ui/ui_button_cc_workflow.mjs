@@ -8,6 +8,26 @@
  *
  * Handlers take everything via deps so they can be unit-tested without the host. */
 
+export function handleUiShiftButton(S, deps, d1, d2) {
+    if (d1 !== deps.moveShift) return;
+
+    S.shiftHeld = d2 === 127;
+    S.shiftTrackLEDActive = d2 === 127;
+    /* PHASE-1: re-push padmap on Shift transitions so DSP on_midi sees
+     * all-0xFF while Shift is held (suppress pad-shortcut notes) and
+     * the real map again on release. See computePadNoteMap mute logic. */
+    deps.computePadNoteMap();
+    if (!S.shiftHeld && S.jogTouched) S.jogTouched = false;
+    /* Deferred Shift+Step3 dispatch: fire on Shift release so the Shift
+     * held state doesn't leak into Move firmware / Schwung chain editor. */
+    if (!S.shiftHeld && S.pendingEditEntryTrack >= 0) {
+        const _t = S.pendingEditEntryTrack;
+        S.pendingEditEntryTrack = -1;
+        deps.editSoundForTrack(_t);
+    }
+    if (!S.sessionView) deps.forceRedraw();
+}
+
 export function handleUiCopyButton(S, deps, d1, d2) {
     if (d1 !== deps.moveCopy) return;
 
