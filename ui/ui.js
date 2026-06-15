@@ -179,7 +179,8 @@ import {
     handleTrackViewCopyStepPress,
     handleTrackViewDeleteStepPress,
     handleTrackViewMuteStepPress,
-    handleTrackViewShiftStepPress
+    handleTrackViewShiftStepPress,
+    handleTrackViewDrumStepPress
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -8152,9 +8153,11 @@ function createTrackViewStepWorkflowDeps() {
         doShiftStepCommon: _doShiftStepCommon,
         effectiveClip,
         forceRedraw,
+        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
         invalidateLEDCache,
         padModeDrum: PAD_MODE_DRUM,
         setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        stepEntryVelocity,
         showActionPopup
     };
 }
@@ -8195,86 +8198,8 @@ function _onStepButtons(d1, d2) {
         return;
     } else if (handleTrackViewShiftStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
         return;
-    } else if (!S.shiftHeld && S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-        /* Drum mode: tap toggles hit; hold enters step edit (Leng/Vel).
-         * Press records time and state; toggle/clear deferred to release. */
-        const t       = S.activeTrack;
-        const lane    = S.activeDrumLane[t];
-        const absStep = S.drumStepPage[t] * 16 + idx;
-        S.stepBtnPressedTick[idx] = S.tickCount;
-        if (S.heldStep < 0) {
-            S.heldStepBtn = idx;
-            S.heldStep    = absStep;
-            const cur   = S.drumLaneSteps[t][lane][absStep];
-            if (cur !== '0') {
-                S.stepWasEmpty  = false;
-                S.heldStepNotes = [S.drumLaneNote[t][lane]];
-                const rv = typeof host_module_get_param === 'function'
-                    ? host_module_get_param('t' + t + '_l' + lane + '_step_' + absStep + '_vel') : null;
-                const rg = typeof host_module_get_param === 'function'
-                    ? host_module_get_param('t' + t + '_l' + lane + '_step_' + absStep + '_gate') : null;
-                const rn = typeof host_module_get_param === 'function'
-                    ? host_module_get_param('t' + t + '_l' + lane + '_step_' + absStep + '_nudge') : null;
-                S.stepEditVel   = rv !== null ? parseInt(rv, 10) : 100;
-                S.stepEditGate  = rg !== null ? parseInt(rg, 10) : Math.max(1, Math.floor((S.drumLaneTPS[t] || 24) / 2));
-                S.stepEditNudge = rn !== null ? parseInt(rn, 10) : 0;
-                const ri = typeof host_module_get_param === 'function'
-                    ? host_module_get_param('t' + t + '_l' + lane + '_step_' + absStep + '_iter') : null;
-                const rr = typeof host_module_get_param === 'function'
-                    ? host_module_get_param('t' + t + '_l' + lane + '_step_' + absStep + '_rand') : null;
-                const rx = typeof host_module_get_param === 'function'
-                    ? host_module_get_param('t' + t + '_l' + lane + '_step_' + absStep + '_ratch') : null;
-                S.stepEditIter  = ri !== null ? parseInt(ri, 10) : 0;
-                S.stepEditRand  = rr !== null ? parseInt(rr, 10) : 0;
-                S.stepEditRatch = rx !== null ? parseInt(rx, 10) : 0;
-            } else {
-                S.stepWasEmpty  = true;
-                S.heldStepNotes = [];
-                S.stepEditVel   = stepEntryVelocity(t, -1, true);
-                S.stepEditGate  = Math.max(1, Math.floor((S.drumLaneTPS[t] || 24) / 2));
-                S.stepEditNudge = 0;
-                S.stepEditIter  = 0;
-                S.stepEditRand  = 0;
-                S.stepEditRatch = 0;
-            }
-            forceRedraw();
-        } else if (S.stepBtnPressedTick[S.heldStepBtn] >= 0) {
-            /* Primary still in tap window: multi-toggle this step immediately */
-            const absStep2 = S.drumStepPage[t] * 16 + idx;
-            const cur2     = S.drumLaneSteps[t][lane][absStep2];
-            if (typeof host_module_set_param === 'function') {
-                if (cur2 !== '1') {
-                    host_module_set_param('t' + t + '_l' + lane + '_step_' + absStep2 + '_toggle', String(stepEntryVelocity(t, -1, true)));
-                    S.drumLaneSteps[t][lane][absStep2] = '1';
-                    S.drumLaneHasNotes[t][lane] = true;
-                } else {
-                    host_module_set_param('t' + t + '_l' + lane + '_step_' + absStep2 + '_clear', '1');
-                    S.drumLaneSteps[t][lane][absStep2] = '0';
-                    S.drumLaneHasNotes[t][lane] = S.drumLaneSteps[t][lane].some(c => c !== '0');
-                }
-            }
-            S.stepBtnPressedTick[idx] = -1;
-            forceRedraw();
-        } else if (S.heldStepNotes.length > 0) {
-            /* Primary in step edit (past tap threshold): tap sets gate span */
-            S.stepBtnPressedTick[S.heldStepBtn] = -1;
-            S.stepWasHeld = true;
-            const tappedStep = S.drumStepPage[t] * 16 + idx;
-            if (tappedStep !== S.heldStep) {
-                const len     = S.drumLaneLength[t];
-                const tps     = S.drumLaneTPS[t] || 24;
-                /* Extend THROUGH the tapped step: gate spans up to the start
-                 * of (tappedStep + 1), not just up to tappedStep. */
-                const dist    = tappedStep > S.heldStep
-                    ? tappedStep - S.heldStep + 1
-                    : len - S.heldStep + tappedStep + 1;
-                const newGate = Math.max(1, Math.min(dist * tps, 65535));
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_gate', String(newGate));
-                S.stepEditGate = newGate;
-                forceRedraw();
-            }
-        }
+    } else if (handleTrackViewDrumStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
+        return;
     } else if (!S.shiftHeld) {
         /* Record press time for tap detection on release.
          * Enter step edit immediately — tap vs hold decided on release. */

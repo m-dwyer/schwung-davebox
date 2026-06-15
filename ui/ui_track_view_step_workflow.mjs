@@ -129,3 +129,80 @@ export function handleTrackViewShiftStepPress(S, deps, idx) {
     deps.forceRedraw();
     return true;
 }
+
+export function handleTrackViewDrumStepPress(S, deps, idx) {
+    if (S.shiftHeld || S.trackPadMode[S.activeTrack] !== deps.padModeDrum)
+        return false;
+
+    const track = S.activeTrack;
+    const lane = S.activeDrumLane[track];
+    const absStep = S.drumStepPage[track] * 16 + idx;
+    S.stepBtnPressedTick[idx] = S.tickCount;
+
+    if (S.heldStep < 0) {
+        S.heldStepBtn = idx;
+        S.heldStep = absStep;
+        const cur = S.drumLaneSteps[track][lane][absStep];
+        if (cur !== '0') {
+            S.stepWasEmpty = false;
+            S.heldStepNotes = [S.drumLaneNote[track][lane]];
+            const rv = deps.getParam ? deps.getParam('t' + track + '_l' + lane + '_step_' + absStep + '_vel') : null;
+            const rg = deps.getParam ? deps.getParam('t' + track + '_l' + lane + '_step_' + absStep + '_gate') : null;
+            const rn = deps.getParam ? deps.getParam('t' + track + '_l' + lane + '_step_' + absStep + '_nudge') : null;
+            S.stepEditVel = rv !== null ? parseInt(rv, 10) : 100;
+            S.stepEditGate = rg !== null ? parseInt(rg, 10) : Math.max(1, Math.floor((S.drumLaneTPS[track] || 24) / 2));
+            S.stepEditNudge = rn !== null ? parseInt(rn, 10) : 0;
+            const ri = deps.getParam ? deps.getParam('t' + track + '_l' + lane + '_step_' + absStep + '_iter') : null;
+            const rr = deps.getParam ? deps.getParam('t' + track + '_l' + lane + '_step_' + absStep + '_rand') : null;
+            const rx = deps.getParam ? deps.getParam('t' + track + '_l' + lane + '_step_' + absStep + '_ratch') : null;
+            S.stepEditIter = ri !== null ? parseInt(ri, 10) : 0;
+            S.stepEditRand = rr !== null ? parseInt(rr, 10) : 0;
+            S.stepEditRatch = rx !== null ? parseInt(rx, 10) : 0;
+        } else {
+            S.stepWasEmpty = true;
+            S.heldStepNotes = [];
+            S.stepEditVel = deps.stepEntryVelocity(track, -1, true);
+            S.stepEditGate = Math.max(1, Math.floor((S.drumLaneTPS[track] || 24) / 2));
+            S.stepEditNudge = 0;
+            S.stepEditIter = 0;
+            S.stepEditRand = 0;
+            S.stepEditRatch = 0;
+        }
+        deps.forceRedraw();
+    } else if (S.stepBtnPressedTick[S.heldStepBtn] >= 0) {
+        const absStep2 = S.drumStepPage[track] * 16 + idx;
+        const cur2 = S.drumLaneSteps[track][lane][absStep2];
+        if (deps.setParam) {
+            if (cur2 !== '1') {
+                deps.setParam('t' + track + '_l' + lane + '_step_' + absStep2 + '_toggle', String(deps.stepEntryVelocity(track, -1, true)));
+                S.drumLaneSteps[track][lane][absStep2] = '1';
+                S.drumLaneHasNotes[track][lane] = true;
+            } else {
+                deps.setParam('t' + track + '_l' + lane + '_step_' + absStep2 + '_clear', '1');
+                S.drumLaneSteps[track][lane][absStep2] = '0';
+                S.drumLaneHasNotes[track][lane] = S.drumLaneSteps[track][lane].some(c => c !== '0');
+            }
+        }
+        S.stepBtnPressedTick[idx] = -1;
+        deps.forceRedraw();
+    } else if (S.heldStepNotes.length > 0) {
+        S.stepBtnPressedTick[S.heldStepBtn] = -1;
+        S.stepWasHeld = true;
+        const tappedStep = S.drumStepPage[track] * 16 + idx;
+        if (tappedStep !== S.heldStep) {
+            const len = S.drumLaneLength[track];
+            const tps = S.drumLaneTPS[track] || 24;
+            /* Gate extends through the tapped step, up to tappedStep + 1. */
+            const dist = tappedStep > S.heldStep
+                ? tappedStep - S.heldStep + 1
+                : len - S.heldStep + tappedStep + 1;
+            const newGate = Math.max(1, Math.min(dist * tps, 65535));
+            if (deps.setParam)
+                deps.setParam('t' + track + '_l' + lane + '_step_' + S.heldStep + '_gate', String(newGate));
+            S.stepEditGate = newGate;
+            deps.forceRedraw();
+        }
+    }
+
+    return true;
+}

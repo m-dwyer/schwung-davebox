@@ -936,6 +936,18 @@ Drum repeat workflows:
   redraw, shared legacy `S`, and top-level MIDI/button routing. Held-step edit,
   Parameter Bank behavior, recording behavior, Session View Performance Mode,
   modal workflows, and unrelated DSP reads/writes remain in `ui.js`.
+- Continued the Track View Step Workflow seam with normal drum step presses.
+  Moved drum press-time step edit entry, empty/occupied edit-value seeding,
+  tap-window multi-toggle, and held-step gate-span taps into
+  `handleTrackViewDrumStepPress()`. Preserved `_onStepButtons()` priority:
+  hold-reveal, Session View step behavior, Loop gesture, Copy+step, Delete+step,
+  Mute+step fallthrough, and Shift+step all remain before normal drum step
+  handling. `ui.js` remains the adapter for host step reads/writes,
+  `stepEntryVelocity()`, redraw, shared legacy `S`, and top-level MIDI/button
+  routing. Drum hold-threshold auto-assign, drum step release/velocity confirm,
+  melodic step press/edit, Parameter Bank behavior, recording behavior, Session
+  View Performance Mode, modal workflows, and unrelated DSP reads/writes remain
+  in `ui.js`.
 
 Verification:
 
