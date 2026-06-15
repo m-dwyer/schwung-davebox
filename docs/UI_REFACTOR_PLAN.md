@@ -852,6 +852,11 @@ Drum repeat workflows:
   commit/cancel handling, DSP writes, and deferred resync behavior in `ui.js`.
 - Extended focused modal output coverage for scene-bake loop-count and
   wrap-tail subviews.
+- Continued the modal presentation path by moving `drawXposeConfirm()` into
+  `ui/ui_modal_render.mjs`. Kept transpose preview, commit/cancel handling,
+  pad-map recompute, and deferred apply writes in `ui.js`.
+- Extended focused modal output coverage for transpose target text, fallback
+  scale label, and selected YES/NO button inversion.
 
 Verification:
 

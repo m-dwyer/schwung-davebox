@@ -135,7 +135,8 @@ import {
     renderLgtoConfirm,
     renderRecordBlockedDialog,
     renderSnapshotPicker,
-    renderStateWipeConfirm
+    renderStateWipeConfirm,
+    renderXposeConfirm
 } from './ui_modal_render.mjs';
 import {
     renderParamPeek
@@ -1641,26 +1642,13 @@ function drawBakeSceneConfirm() {
 }
 
 function drawXposeConfirm() {
-    clear_screen();
-    function _btn(x, y, w, h, sel, label, labelOff) {
-        if (sel) {
-            fill_rect(x, y, w, h, 1);
-            print(x + labelOff, y + 3, label, 0);
-        } else {
-            fill_rect(x, y, w, 1, 1);
-            fill_rect(x, y + h - 1, w, 1, 1);
-            fill_rect(x, y, 1, h, 1);
-            fill_rect(x + w - 1, y, 1, h, 1);
-            print(x + labelOff, y + 3, label, 1);
-        }
-    }
-    drawMenuHeader('TRANSPOSE CLIPS?');
-    const tgt = NOTE_KEYS[S.confirmXposeKey] + ' ' + (SCALE_DISPLAY[S.confirmXposeScale] || '?');
-    print(4, 22, 'To ' + tgt, 1);
-    print(4, 33, 'All melodic clips', 1);
-    const mH = 11, bY = 50, bW = 50;
-    _btn(4,  bY, bW, mH, S.confirmXposeSel === 0, 'YES', 17);
-    _btn(74, bY, bW, mH, S.confirmXposeSel === 1, 'NO',  20);
+    renderXposeConfirm(createModalRenderDeps(), {
+        key: S.confirmXposeKey,
+        scale: S.confirmXposeScale,
+        sel: S.confirmXposeSel,
+        noteKeys: NOTE_KEYS,
+        scaleDisplay: SCALE_DISPLAY
+    });
 }
 
 function clipHasContent(t, c) {

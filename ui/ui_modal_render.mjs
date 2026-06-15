@@ -125,6 +125,20 @@ export function renderBakeSceneConfirm(deps, opts) {
     }
 }
 
+export function renderXposeConfirm(deps, opts) {
+    opts = opts || {};
+    const noteKeys = opts.noteKeys || [];
+    const scaleDisplay = opts.scaleDisplay || [];
+    deps.clear_screen();
+    deps.drawMenuHeader('TRANSPOSE CLIPS?');
+    const tgt = noteKeys[opts.key] + ' ' + (scaleDisplay[opts.scale] || '?');
+    deps.print(4, 22, 'To ' + tgt, 1);
+    deps.print(4, 33, 'All melodic clips', 1);
+    const mH = 11, bY = 50, bW = 50;
+    renderButton(deps, 4,  bY, bW, mH, opts.sel === 0, 'YES', 17);
+    renderButton(deps, 74, bY, bW, mH, opts.sel === 1, 'NO',  20);
+}
+
 export function renderInheritPicker(deps, picker) {
     deps.clear_screen();
     if (!picker) return;
