@@ -295,7 +295,7 @@ export function cycleDrumRepeatPerformMode(S, deps, track) {
     return true;
 }
 
-export function handleDrumRepeat2RightGridPadRelease(S) {
+function handleDrumRepeat2RightGridPadRelease(S) {
     S.screenDirty = true;
     return true;
 }

@@ -2051,6 +2051,10 @@ function drumPadToLane(padIdx) {
     return padSurfaceDrumPadToLane(padIdx, S.drumLanePage[S.activeTrack]);
 }
 
+function optionalHostModuleSetParam() {
+    return (typeof host_module_set_param === 'function') ? host_module_set_param : null;
+}
+
 function createDrumPadPressDeps() {
     return {
         setActiveDrumLane,
@@ -2059,7 +2063,7 @@ function createDrumPadPressDeps() {
         effectiveVelocity,
         liveSendNote,
         stepEntryVelocity,
-        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        host_module_set_param: optionalHostModuleSetParam(),
         forceRedraw,
         padPitch,
         padPressTick,
@@ -2076,7 +2080,7 @@ function createDrumLaneWorkflowDeps() {
         cutDrumLane,
         invalidateLEDCache,
         showActionPopup,
-        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        host_module_set_param: optionalHostModuleSetParam(),
         forceRedraw
     };
 }
@@ -2089,7 +2093,7 @@ function createDrumRepeatWorkflowDeps() {
         setActiveDrumLane,
         syncDrumLaneSteps,
         refreshDrumLaneBankParams,
-        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        host_module_set_param: optionalHostModuleSetParam(),
         forceRedraw,
         padPitch,
         setDrumPerformMode,

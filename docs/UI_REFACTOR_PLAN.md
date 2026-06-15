@@ -542,6 +542,11 @@ Drum repeat workflows:
   undo/redo mirrors, lane length/steps/has-notes reset, clip non-empty
   recompute, repeat-groove/Rpt2 rate defaults, delayed lane resync ordering,
   popup/redraw behavior, and invalid-lane no-op.
+- Consolidated the completed repeat/drum-lane workflow cluster:
+  `handleDrumRepeat2RightGridPadRelease()` is now private to
+  `ui_drum_repeat_workflows.mjs`, with right-grid release coverage moved to the
+  public repeat pad-release router, and the workflow adapters in `ui.js` now
+  share one private optional host `set_param` adapter helper.
 
 Verification:
 
