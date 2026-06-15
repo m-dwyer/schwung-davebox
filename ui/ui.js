@@ -178,7 +178,8 @@ import {
 import {
     handleTrackViewCopyStepPress,
     handleTrackViewDeleteStepPress,
-    handleTrackViewMuteStepPress
+    handleTrackViewMuteStepPress,
+    handleTrackViewShiftStepPress
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -8138,8 +8139,17 @@ function createLoopGestureWorkflowDeps() {
 
 function createTrackViewStepWorkflowDeps() {
     return {
+        applyBankParam,
+        applyTrackConfig,
         clearStep,
         copyStep,
+        computePadNoteMap,
+        cycleDrumRepeatPerformMode: function (track) {
+            return cycleDrumRepeatPerformMode(S, createDrumRepeatWorkflowDeps(), track);
+        },
+        doDoubleFill,
+        doLaneDoubleFill,
+        doShiftStepCommon: _doShiftStepCommon,
         effectiveClip,
         forceRedraw,
         invalidateLEDCache,
@@ -8183,63 +8193,8 @@ function _onStepButtons(d1, d2) {
         return;
     } else if (handleTrackViewMuteStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
         return;
-    } else if (S.shiftHeld) {
-        /* Shift+step shortcuts */
-        _doShiftStepCommon(idx);
-        const t      = S.activeTrack;
-        const isDrum = S.trackPadMode[t] === PAD_MODE_DRUM;
-        if (idx === 7) {
-            /* Step 8 (Track View only): drum=cycle perform mode; melodic=toggle chromatic */
-            if (isDrum) {
-                cycleDrumRepeatPerformMode(S, createDrumRepeatWorkflowDeps(), t);
-            } else {
-                S.padLayoutChromatic[t] = !S.padLayoutChromatic[t];
-                computePadNoteMap();
-                showActionPopup(S.padLayoutChromatic[t] ? 'CHROMATIC' : 'IN-SCALE');
-            }
-        } else if (idx === 9) {
-            /* Step 10: toggle VelIn between Live and 100 */
-            const curVel = S.trackVelOverride[t];
-            const nextVel = curVel === 0 ? 100 : 0;
-            applyTrackConfig(t, 'track_vel_override', nextVel);
-        } else if (idx === 10 && !isDrum) {
-            /* Step 11: toggle TRACK ARP style on/off (melodic only) */
-            const curStyle = S.bankParams[t][5][0] | 0;
-            const nextStyle = curStyle !== 0 ? 0 : S.lastTarpStyle[t];
-            S.bankParams[t][5][0] = nextStyle;
-            applyBankParam(t, 5, 0, nextStyle);
-        } else if (idx === 14) {
-            /* Step 15: double-and-fill */
-            if (S.activeBank === 6 && !isDrum) {
-                doLaneDoubleFill();
-            } else {
-                doDoubleFill();
-            }
-        } else if (idx === 15 && S.activeBank !== 6) {
-            /* Step 16: set quantize to 100% (not on auto bank) */
-            if (isDrum) {
-                if (S.activeBank === 7) {
-                    /* ALL LANES: quantize all drum lanes */
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_drum_lanes_qnt', '100');
-                    S.bankParams[t][7][3] = 100;
-                    S.drumLaneQnt[t] = 100;
-                    S.bankParams[t][1][2] = 100;
-                } else {
-                    const lane = S.activeDrumLane[t];
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_l' + lane + '_pfx_set', 'quantize 100');
-                    S.drumLaneQnt[t] = 100;
-                    S.bankParams[t][1][2] = 100;
-                }
-            } else {
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + t + '_quantize', '100');
-            }
-            if (!isDrum) S.bankParams[t][1][3] = 100;  /* K4 = Qnt (melodic NOTE FX) */
-            showActionPopup('QUANT 100%');
-        }
-        forceRedraw();
+    } else if (handleTrackViewShiftStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
+        return;
     } else if (!S.shiftHeld && S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
         /* Drum mode: tap toggles hit; hold enters step edit (Leng/Vel).
          * Press records time and state; toggle/clear deferred to release. */

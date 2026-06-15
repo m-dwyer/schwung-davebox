@@ -925,6 +925,17 @@ Drum repeat workflows:
   step behavior, Loop gesture, Copy+step, and Delete+step. Held-step edit,
   Parameter Bank behavior, recording behavior, Session View Performance Mode,
   modal workflows, and unrelated DSP reads/writes remain in `ui.js`.
+- Continued the Track View Step Workflow seam with Shift+step shortcuts. Moved
+  drum perform-mode cycling, melodic chromatic/in-scale toggle, VelIn toggle,
+  melodic TRACK ARP style toggle, double-fill dispatch, and quantize-100 writes
+  into `handleTrackViewShiftStepPress()`. Preserved `_onStepButtons()` priority:
+  hold-reveal, Session View step behavior, Loop gesture, Copy+step, Delete+step,
+  and Mute+step fallthrough all remain before Shift+step. `ui.js` remains the
+  adapter for common Shift shortcuts, host parameter writes, pad-map recompute,
+  drum repeat workflow dependencies, fill helpers, bank/track config application,
+  redraw, shared legacy `S`, and top-level MIDI/button routing. Held-step edit,
+  Parameter Bank behavior, recording behavior, Session View Performance Mode,
+  modal workflows, and unrelated DSP reads/writes remain in `ui.js`.
 
 Verification:
 

@@ -71,3 +71,61 @@ export function handleTrackViewMuteStepPress(S) {
     /* Track View Mute+step currently falls through to normal step editing. */
     return false;
 }
+
+export function handleTrackViewShiftStepPress(S, deps, idx) {
+    if (!S.shiftHeld) return false;
+
+    deps.doShiftStepCommon(idx);
+
+    const track = S.activeTrack;
+    const isDrum = S.trackPadMode[track] === deps.padModeDrum;
+
+    if (idx === 7) {
+        if (isDrum) {
+            deps.cycleDrumRepeatPerformMode(track);
+        } else {
+            S.padLayoutChromatic[track] = !S.padLayoutChromatic[track];
+            deps.computePadNoteMap();
+            deps.showActionPopup(S.padLayoutChromatic[track] ? 'CHROMATIC' : 'IN-SCALE');
+        }
+    } else if (idx === 9) {
+        const curVel = S.trackVelOverride[track];
+        const nextVel = curVel === 0 ? 100 : 0;
+        deps.applyTrackConfig(track, 'track_vel_override', nextVel);
+    } else if (idx === 10 && !isDrum) {
+        const curStyle = S.bankParams[track][5][0] | 0;
+        const nextStyle = curStyle !== 0 ? 0 : S.lastTarpStyle[track];
+        S.bankParams[track][5][0] = nextStyle;
+        deps.applyBankParam(track, 5, 0, nextStyle);
+    } else if (idx === 14) {
+        if (S.activeBank === 6 && !isDrum) {
+            deps.doLaneDoubleFill();
+        } else {
+            deps.doDoubleFill();
+        }
+    } else if (idx === 15 && S.activeBank !== 6) {
+        if (isDrum) {
+            if (S.activeBank === 7) {
+                if (deps.setParam)
+                    deps.setParam('t' + track + '_drum_lanes_qnt', '100');
+                S.bankParams[track][7][3] = 100;
+                S.drumLaneQnt[track] = 100;
+                S.bankParams[track][1][2] = 100;
+            } else {
+                const lane = S.activeDrumLane[track];
+                if (deps.setParam)
+                    deps.setParam('t' + track + '_l' + lane + '_pfx_set', 'quantize 100');
+                S.drumLaneQnt[track] = 100;
+                S.bankParams[track][1][2] = 100;
+            }
+        } else {
+            if (deps.setParam)
+                deps.setParam('t' + track + '_quantize', '100');
+            S.bankParams[track][1][3] = 100;
+        }
+        deps.showActionPopup('QUANT 100%');
+    }
+
+    deps.forceRedraw();
+    return true;
+}
