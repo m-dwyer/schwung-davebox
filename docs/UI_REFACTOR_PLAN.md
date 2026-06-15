@@ -387,6 +387,112 @@ Preserve:
 - `pendingDrumLaneResync` delayed refresh ordering.
 - Popup and redraw behavior.
 
+## Conceptual / Architectural Model
+
+The dAVEBOx fork in `tool/` should become easier to understand by making the
+runtime concepts explicit in modules with deep interfaces. The goal is not to
+split by line count. The goal is to hide sequencing, mirror, and coalescing rules
+behind named workflow and tick-pipeline interfaces so future changes can be made
+at the right seam.
+
+Target model:
+
+- `ui/ui.js`: hardware entry points and top-level orchestration. It should route
+  MIDI/button/tick events to named modules, but avoid owning workflow-specific
+  mirror updates or DSP command sequencing when a deeper module can own them.
+- `ui/ui_tick_tasks.mjs`: tick pipeline and DSP mirror scheduling. This module
+  should own tick-context work: delayed drains, DSP read-back, state-load settle,
+  hot-reload resync, deferred content sync, coalescing-sensitive queues, and
+  end-of-tick persistence.
+- `ui/ui_pad_surface.mjs`: non-destructive pad performance input and padmap
+  state. Keep modal workflows, destructive lane workflows, LED/rendering, and
+  full tick ordering outside this interface.
+- `ui/ui_drum_lane_workflows.mjs`: destructive drum-lane workflows such as lane
+  clear, mute/solo, copy/cut/paste, and factory reset.
+- `ui/ui_drum_repeat_workflows.mjs`: drum repeat performance, latch, pad routing,
+  and repeat-groove behavior.
+- `ui/ui_latch_workflows.mjs`: universal latch sweeps shared across transport
+  stop, Delete+Play, and workflows that clear latched musical intent.
+- Future `ui_clip_track_sync.mjs` or equivalent: track, clip, drum lane, and
+  sidecar mirror reads from DSP. This should only be introduced once two or more
+  tick/workflow call paths benefit from the same sync interface.
+
+Important architectural invariants:
+
+- `get_param` is only reliable from tick/render contexts, not MIDI callbacks.
+- `set_param` and `shadow_send_midi_to_dsp` can coalesce within an audio buffer;
+  order-sensitive writes must use one-per-tick queues where required.
+- `pendingDefaultSetParams` ordering is load-bearing. Do not reorder existing
+  pushes, and do not replace deferred queue writes with immediate
+  `host_module_set_param()` unless the existing behavior already does that.
+- Repeat pad routing precedence is load-bearing: Delete+lane destructive
+  workflows must win before Rpt2 lane handling, and Rpt1/Rpt2 right-grid release
+  swallowing must stay in the repeat router.
+- Delayed drum lane resync behavior is load-bearing. Preserve the current
+  `pendingDrumLaneResync` delays and the refresh order of lane steps, bank
+  params, and redraw.
+- Patched Schwung capability gates must remain runtime-gated. Stock Schwung
+  fallback behavior must keep working.
+
+## Next Recommended Slice
+
+Highest-value next refactor: deepen the Tick / DSP Mirror module into an
+explicit tick pipeline owner, starting with DSP hot-reload and pending state-load
+resync.
+
+Why this slice:
+
+- `_tickImpl()` is the architectural spine of the UI. It currently contains
+  unrelated-looking blocks whose ordering encodes the dAVEBOx runtime model.
+- `ui_tick_tasks.mjs` already has useful extracted functions, but the tick
+  ordering interface is still shallow: readers must understand `_tickImpl()` to
+  reason about DSP mirror freshness, state-load settle, and redraw invalidation.
+- DSP hot-reload and pending state-load resync are cohesive: both rebuild JS
+  mirrors from DSP, recompute pad maps, invalidate LEDs, and force redraw, but
+  they differ in sidecar restore and `stateLoading` behavior.
+
+Suggested implementation:
+
+1. Add focused tests in `web/tests/integration/tick-tasks.test.ts` for a new
+   tick-task function, likely `runDspMirrorResyncTasks(S, deps)`.
+2. Move only these `_tickImpl()` blocks into `ui_tick_tasks.mjs`, preserving
+   their exact position after `runDefaultSetParamDrain()` and before
+   `runMoveCoRunTickTasks()`:
+   - DSP hot-reload detection via `instance_id`;
+   - deferred state-load resync via `pendingDspSync`.
+3. Keep the function interface narrow and explicit. The deps adapter should
+   expose only the existing operations needed by those blocks: `pollDSP`,
+   `syncClipsFromDsp`, `syncMuteSoloFromDsp`, `restoreUiSidecar`,
+   `computePadNoteMap`, `invalidateLEDCache`, `forceRedraw`,
+   `host_module_get_param`, and `host_module_set_param`.
+4. Preserve behavior exactly:
+   - hot-reload polls every 100 ticks and requires both host get/set functions;
+   - hot-reload does not call `restoreUiSidecar(true)` and does not clear
+     `stateLoading`;
+   - pending DSP sync decrements first and fires only when it reaches zero;
+   - pending DSP sync calls `restoreUiSidecar(true)` and clears
+     `S.stateLoading`;
+   - both paths refresh `trackCurrentPage` from `trackCurrentStep`, sync clips,
+     sync mute/solo, recompute the pad map, invalidate LED cache, and redraw;
+   - `S.lastDspInstanceId` update behavior remains unchanged.
+5. After this slice, consider extracting the repeated "refresh mirrors from DSP"
+   implementation behind a private helper inside `ui_tick_tasks.mjs` only if the
+   tests show the interface remains simpler than the duplicated implementation.
+
+Suggested focused tests:
+
+- Hot-reload resync fires only on the 100-tick cadence, only when
+  `instance_id` changes from a non-empty previous ID, and updates
+  `S.lastDspInstanceId`.
+- Hot-reload calls `pollDSP`, page recompute, clip sync, mute/solo sync,
+  padmap recompute, LED invalidation, and redraw in the current order.
+- Hot-reload does not call `restoreUiSidecar(true)` and does not clear
+  `S.stateLoading`.
+- Pending DSP sync decrements from `1` to `0`, then performs the full resync,
+  calls `restoreUiSidecar(true)`, clears `S.stateLoading`, and redraws.
+- Pending DSP sync with value greater than `1` only decrements and performs no
+  sync work.
+
 ## Progress Log
 
 ### 2026-06-15
@@ -553,6 +659,13 @@ Drum repeat workflows:
   content resync drains and keeping repeat pad routing/lane workflows unchanged.
 - Added focused coverage in `web/tests/integration/tick-tasks.test.ts` for the
   active repeat-recording refresh and its record/play/session/drum/repeat gates.
+- Deepened the Tick / DSP Mirror module by moving DSP hot-reload detection and
+  pending state-load resync into `ui_tick_tasks.mjs` as
+  `runDspMirrorResyncTasks()`, preserving its position after
+  `runDefaultSetParamDrain()` and before `runMoveCoRunTickTasks()`.
+- Added focused coverage in `web/tests/integration/tick-tasks.test.ts` for
+  hot-reload cadence/nonce gates, refresh ordering, sidecar/state-loading
+  differences, and pending DSP sync countdown behavior.
 
 Verification:
 

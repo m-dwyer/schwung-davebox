@@ -109,6 +109,39 @@ export function runDefaultSetParamDrain(S, deps) {
     }
 }
 
+function refreshDspMirrorFromDsp(S, deps, opts) {
+    deps.pollDSP();
+    for (let t = 0; t < S.trackCurrentPage.length; t++)
+        S.trackCurrentPage[t] = Math.max(0, Math.floor(S.trackCurrentStep[t] / 16));
+    deps.syncClipsFromDsp();
+    deps.syncMuteSoloFromDsp();
+    if (opts.restoreSidecar) deps.restoreUiSidecar(true);
+    deps.computePadNoteMap();
+    if (opts.clearStateLoading) S.stateLoading = false;
+    deps.invalidateLEDCache();
+    deps.forceRedraw();
+}
+
+export function runDspMirrorResyncTasks(S, deps) {
+    /* Poll every 100 ticks (~0.5s): detect DSP hot-reload via instance nonce. */
+    if ((S.tickCount % 100) === 0 && typeof deps.host_module_get_param === 'function' &&
+            typeof deps.host_module_set_param === 'function') {
+        const newInstanceId = deps.host_module_get_param('instance_id');
+        if (newInstanceId && S.lastDspInstanceId !== '' && newInstanceId !== S.lastDspInstanceId) {
+            refreshDspMirrorFromDsp(S, deps, { restoreSidecar: false, clearStateLoading: false });
+        }
+        if (newInstanceId) S.lastDspInstanceId = newInstanceId;
+    }
+
+    /* Deferred resync after set change: wait ~5 ticks for state_load to land on audio thread. */
+    if (S.pendingDspSync > 0) {
+        S.pendingDspSync--;
+        if (S.pendingDspSync === 0) {
+            refreshDspMirrorFromDsp(S, deps, { restoreSidecar: true, clearStateLoading: true });
+        }
+    }
+}
+
 export function runMoveCoRunTickTasks(S, deps) {
     /* Deferred Move co-run entry inject — see enterMoveNativeCoRun(). Fire the
      * track-button press now that the shim's co-run path is active, so Move's

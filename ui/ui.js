@@ -146,6 +146,7 @@ import {
     runDefaultSetParamDrain,
     runDeferredContentResyncTasks,
     runDeferredDrumNoteOffDrain,
+    runDspMirrorResyncTasks,
     runEndOfTickPersistenceTasks,
     runExternalRouteQueueDrain,
     runLiveNoteDrain,
@@ -5750,39 +5751,17 @@ function _tickImpl() {
         host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null
     });
 
-    /* Poll every 100 ticks (~0.5s): detect DSP hot-reload via instance nonce. */
-    if ((S.tickCount % 100) === 0 && typeof host_module_get_param === 'function' &&
-            typeof host_module_set_param === 'function') {
-        const newInstanceId = host_module_get_param('instance_id');
-        if (newInstanceId && S.lastDspInstanceId !== '' && newInstanceId !== S.lastDspInstanceId) {
-            pollDSP();
-            for (let _t = 0; _t < NUM_TRACKS; _t++)
-                S.trackCurrentPage[_t] = Math.max(0, Math.floor(S.trackCurrentStep[_t] / 16));
-            syncClipsFromDsp();
-            syncMuteSoloFromDsp();
-            computePadNoteMap();
-            invalidateLEDCache();
-            forceRedraw();
-        }
-        if (newInstanceId) S.lastDspInstanceId = newInstanceId;
-    }
-
-    /* Deferred resync after set change: wait ~5 ticks for state_load to land on audio thread. */
-    if (S.pendingDspSync > 0) {
-        S.pendingDspSync--;
-        if (S.pendingDspSync === 0) {
-            pollDSP();
-            for (let _t = 0; _t < NUM_TRACKS; _t++)
-                S.trackCurrentPage[_t] = Math.max(0, Math.floor(S.trackCurrentStep[_t] / 16));
-            syncClipsFromDsp();
-            syncMuteSoloFromDsp();
-            restoreUiSidecar(true);
-            computePadNoteMap();
-            S.stateLoading = false;
-            invalidateLEDCache();
-            forceRedraw();
-        }
-    }
+    runDspMirrorResyncTasks(S, {
+        host_module_get_param: (typeof host_module_get_param === 'function') ? host_module_get_param : null,
+        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        pollDSP,
+        syncClipsFromDsp,
+        syncMuteSoloFromDsp,
+        restoreUiSidecar,
+        computePadNoteMap,
+        invalidateLEDCache,
+        forceRedraw
+    });
 
     runMoveCoRunTickTasks(S, {
         move_midi_inject_to_move: (typeof move_midi_inject_to_move === 'function') ? move_midi_inject_to_move : null
