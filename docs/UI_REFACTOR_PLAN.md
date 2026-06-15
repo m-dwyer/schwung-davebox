@@ -829,9 +829,21 @@ Drum repeat workflows:
   looper/DSP writes in `ui.js`.
 - Added focused output coverage in `web/tests/integration/idle-render.test.ts`
   and `web/tests/integration/perf-render.test.ts`.
+- Continued the presentation path by moving the inherit picker, snapshot picker,
+  and clear-automation menu into `ui/ui_modal_render.mjs`. Kept
+  `drawUI()` priority/order, modal open/close/commit/cancel input handling, and
+  deferred DSP/default writes in `ui.js`.
+- Added focused output coverage in `web/tests/integration/modal-render.test.ts`
+  for selected-row inversion, scroll indicators, snapshot confirm subviews, and
+  checkbox/action rows.
 
 Verification:
 
+- `npm run test:node -- tests/integration/modal-render.test.ts`
+- `npm run test:node -- tests/integration/modal-render.test.ts tests/integration/loop-render.test.ts tests/integration/param-peek-render.test.ts tests/integration/prompt-render.test.ts tests/integration/popup-render.test.ts tests/integration/idle-render.test.ts tests/integration/bank-render.test.ts tests/integration/perf-render.test.ts tests/integration/session-overview-render.test.ts tests/integration/step-edit-render.test.ts tests/integration/cc-step-edit-render.test.ts tests/integration/step-interval-render.test.ts tests/integration/ui-descriptors.test.ts`
+- `npm run test:node -- tests/integration`
+- `npm run test:node`
+- `npm run build`
 - `pnpm test:node tests/integration/drum-lane-workflows.test.ts`
 - `pnpm test:node tests/integration/latch-workflows.test.ts`
 - `pnpm test:node tests/integration/drum-repeat-workflows.test.ts`

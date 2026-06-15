@@ -128,6 +128,11 @@ import {
     renderShiftStepHelp
 } from './ui_prompt_render.mjs';
 import {
+    renderClearAutomationMenu,
+    renderInheritPicker,
+    renderSnapshotPicker
+} from './ui_modal_render.mjs';
+import {
     renderParamPeek
 } from './ui_param_peek_render.mjs';
 import {
@@ -1707,143 +1712,16 @@ function drawBakeConfirm() {
 
 
 function drawInheritPicker() {
-    clear_screen();
-    const p = S.pendingInheritPicker;
-    if (!p) return;
-    /* Header (two preamble lines + title wrapped to two lines; Move display
-     * is 128px wide which only fits ~21 chars at the standard 6px/char font).
-     * Tight 8-9px line stride to leave room for the list below. */
-    print(2, 2,  'Copied Move set', 1);
-    print(2, 10, 'detected',        1);
-    fill_rect(0, 18, 128, 1, 1);
-    print(2, 20, 'Inherit Overture', 1);
-    print(2, 28, 'state from?',     1);
-    fill_rect(0, 36, 128, 1, 1);
-
-    /* List: candidates + 'Start blank' sentinel. Scroll window of 3 around
-     * the selected index so 4+ entries still fit. Selection inverts the
-     * line; arrows hint at off-screen items. */
-    const total = p.candidates.length + 1;
-    const visible = 3;
-    const sel = p.selectedIndex;
-    let top = Math.max(0, Math.min(sel - 1, total - visible));
-    if (total <= visible) top = 0;
-    const lineH = 9;
-    const listTopY = 39;
-    for (let i = 0; i < visible && (top + i) < total; i++) {
-        const idx = top + i;
-        const y = listTopY + i * lineH;
-        const isBlank = (idx === p.candidates.length);
-        const label = isBlank ? 'Start blank' : p.candidates[idx].name;
-        const truncated = label.length > 20 ? label.substring(0, 19) + '…' : label;
-        if (idx === sel) {
-            fill_rect(2, y - 1, 124, lineH - 1, 1);
-            print(5, y, truncated, 0);
-        } else {
-            print(5, y, truncated, 1);
-        }
-    }
-    /* Scroll indicators */
-    if (top > 0)               print(120, listTopY, '^', 1);
-    if (top + visible < total) print(120, listTopY + (visible - 1) * lineH, 'v', 1);
-}
-
-function snapById(p, id) {
-    for (let i = 0; i < p.snaps.length; i++) if (p.snaps[i].id === id) return p.snaps[i];
-    return null;
-}
-
-/* Yes/No buttons matching the other confirm dialogs (No left, Yes right). */
-function drawSnapYesNo(sel) {
-    const noX = 6, yesX = 74, btnY = 46, btnW = 46, btnH = 13;
-    function btn(x, on, label, off) {
-        if (on) { fill_rect(x, btnY, btnW, btnH, 1); print(x + off, btnY + 3, label, 0); }
-        else {
-            fill_rect(x, btnY, btnW, 1, 1); fill_rect(x, btnY + btnH - 1, btnW, 1, 1);
-            fill_rect(x, btnY, 1, btnH, 1); fill_rect(x + btnW - 1, btnY, 1, btnH, 1);
-            print(x + off, btnY + 3, label, 1);
-        }
-    }
-    btn(noX, sel === 1, 'No', 17);
-    btn(yesX, sel === 0, 'Yes', 14);
+    renderInheritPicker(createModalRenderDeps(), S.pendingInheritPicker);
 }
 
 function drawSnapshotPicker() {
-    clear_screen();
-    const p = S.snapshotPicker;
-    if (!p) return;
-
-    if (p.confirm) {
-        const c = p.confirm;
-        if (c.kind === 'wipe') {
-            drawMenuHeader('STATES UPDATED');
-            print(4, 18, 'Delete ' + c.wipeIds.length + ' snapshot(s)', 1);
-            print(4, 27, 'from an older', 1);
-            print(4, 36, 'version?', 1);
-        } else if (c.kind === 'load') {
-            const s = snapById(p, c.targetId);
-            drawMenuHeader('LOAD STATE');
-            print(4, 18, 'Load ' + (s ? s.label : ''), 1);
-            print(4, 27, 'Unsaved changes', 1);
-            print(4, 36, 'will be lost.', 1);
-        } else {
-            const s = snapById(p, c.targetId);
-            drawMenuHeader('OVERWRITE');
-            print(4, 18, 'Replace', 1);
-            print(4, 27, (s ? s.label : '') + '?', 1);
-        }
-        drawSnapYesNo(c.sel);
-        return;
-    }
-
-    drawMenuHeader(p.mode === 'overwrite' ? 'OVERWRITE WHICH?' : 'LOAD STATE');
-    const total = p.snaps.length;
-    const visible = 4;
-    const sel = p.sel;
-    let top = Math.max(0, Math.min(sel - 1, total - visible));
-    if (total <= visible) top = 0;
-    const lineH = 9;
-    const listTopY = 20;
-    for (let i = 0; i < visible && (top + i) < total; i++) {
-        const idx = top + i;
-        const y = listTopY + i * lineH;
-        const s = p.snaps[idx];
-        let label = s.label || '';
-        if (p.mode === 'load' && s.sv !== STATE_VERSION) label += ' (old)';
-        const truncated = label.length > 20 ? label.substring(0, 19) + '…' : label;
-        if (idx === sel) {
-            fill_rect(2, y - 1, 124, lineH - 1, 1);
-            print(5, y, truncated, 0);
-        } else {
-            print(5, y, truncated, 1);
-        }
-    }
-    if (top > 0)               print(120, listTopY, '^', 1);
-    if (top + visible < total) print(120, listTopY + (visible - 1) * lineH, 'v', 1);
+    renderSnapshotPicker(createModalRenderDeps(), S.snapshotPicker);
 }
 
 /* CLEAR AUTOMATION modal — checkable AT / PB(disabled) / CC + a CLEAR action. */
 function drawClearAutoMenu() {
-    clear_screen();
-    const m = S.clearAutoMenu;
-    if (!m) return;
-    drawMenuHeader('CLEAR AUTOMATION');
-    const rows = [
-        { label: 'Aftertouch (AT)',     box: m.at ? '[x]' : '[ ]' },
-        { label: 'Pitch bend (PB)',     box: '( )' },   /* placeholder, not selectable */
-        { label: 'Control Change (CC)', box: m.cc ? '[x]' : '[ ]' },
-        { label: 'CLEAR',  action: true },
-        { label: 'Cancel', action: true }
-    ];
-    const lineH = 9, topY = 18;
-    for (let i = 0; i < rows.length; i++) {
-        const r = rows[i];
-        const y = topY + i * lineH;
-        const seld = (m.sel === i);
-        if (seld) fill_rect(2, y - 1, 124, lineH - 1, 1);
-        const txt = r.action ? r.label : (r.box + ' ' + r.label);
-        print(5, y, txt, seld ? 0 : 1);
-    }
+    renderClearAutomationMenu(createModalRenderDeps(), S.clearAutoMenu);
 }
 
 function drawBakeSceneConfirm() {
@@ -3405,6 +3283,15 @@ function createPromptRenderDeps() {
         clear_screen,
         fill_rect,
         print
+    };
+}
+
+function createModalRenderDeps() {
+    return {
+        clear_screen,
+        fill_rect,
+        print,
+        drawMenuHeader
     };
 }
 
