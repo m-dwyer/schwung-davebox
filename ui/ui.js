@@ -134,6 +134,9 @@ import {
     renderParamPeek
 } from './ui_param_peek_render.mjs';
 import {
+    renderLoopView
+} from './ui_loop_render.mjs';
+import {
     SCALE_INTERVALS,
     applyPadNoteMap,
     createLiveNoteQueues,
@@ -3595,6 +3598,14 @@ function createPromptRenderDeps() {
     };
 }
 
+function createLoopRenderDeps() {
+    return {
+        print,
+        pixelPrint,
+        fill_rect
+    };
+}
+
 function drawUI() {
     /* CO-RUN: shadow_ui's chain editor owns the OLED while this is active.
      * Skip every Overture draw path so it doesn't fight the chain editor's
@@ -3918,74 +3929,7 @@ function drawUI() {
 
     /* Loop view: own priority state so screen is fully cleared first */
     if (S.loopHeld) {
-        const _loopL2 = 'STEP BTN=by page';
-        const _loopL3 = 'JOG TURN=by step';
-        const _loopX2 = Math.floor((128 - _loopL2.length * 6) / 2);
-        const _loopX3 = Math.floor((128 - _loopL3.length * 6) / 2);
-        function _drawLoopSteps(steps) {
-            const _l4  = 'Steps: ' + steps + '/256';
-            const _l4x = Math.floor((128 - _l4.length * 6) / 2);
-            const _nvX = _l4x + 7 * 6;
-            const _nvW = (_l4.length - 7) * 6;
-            fill_rect(_nvX - 1, 50, _nvW + 2, 14, 1);
-            print(_l4x, 52, 'Steps: ', 1);
-            print(_nvX, 52, steps + '/256', 0);
-        }
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-            const t   = S.activeTrack;
-            const len = S.drumLaneLength[t];
-            if (S.activeBank === 7) {
-                const _allBlink = Math.floor(S.tickCount / 24) % 2 === 0;
-                const _l1 = 'Clip length-' + (_allBlink ? 'ALL' : '   ') + ' lanes';
-                print(Math.floor((128 - 21 * 6) / 2), 4, _l1, 1);
-            } else {
-                print(Math.floor((128 - 11 * 6) / 2), 4, 'Lane length', 1);
-            }
-            fill_rect(0, 15, 128, 1, 1);
-            print(_loopX2, 22, _loopL2, 1);
-            print(_loopX3, 34, _loopL3, 1);
-            _drawLoopSteps(len);
-        } else if (S.activeBank === 6) {
-            var _t_l = S.activeTrack;
-            var _ac_l = effectiveClip(_t_l);
-            var _ccL_l = S.ccActiveLane[_t_l];
-            var _llen_l = S.ccLaneLength[_t_l][_ac_l][_ccL_l];
-            var _ltps_l = S.ccLaneResTps[_t_l][_ac_l][_ccL_l] || S.ccLaneTps[_t_l][_ac_l][_ccL_l];
-            var _lbl_l = autoLaneLabel(_t_l, _ccL_l, true);
-            var _resN = _ltps_l === 12 ? '1/32' : _ltps_l === 48 ? '1/8'
-                      : _ltps_l === 96 ? '1/4' : _ltps_l === 384 ? '1bar' : '1/16';
-            var _lcHdr = 'Lane config: K' + (_ccL_l + 1) + '-' + _lbl_l;
-            pixelPrint(Math.floor((128 - _lcHdr.length * 6) / 2), 4, _lcHdr, 1);
-            fill_rect(0, 15, 128, 1, 1);
-            pixelPrint(1, 18, 'STEP BTN=Leng by page', 1);
-            pixelPrint(1, 25, 'JOG TURN=Leng by step', 1);
-            var _zoomTps_l = S.ccLaneTps[_t_l][_ac_l][_ccL_l] || (S.clipTPS[_t_l][_ac_l] || 24);
-            var _zoomN = _zoomTps_l === 12 ? '1/32' : _zoomTps_l === 48 ? '1/8'
-                       : _zoomTps_l === 96 ? '1/4' : _zoomTps_l === 384 ? '1bar' : '1/16';
-            var _resLabel = 'Resolution: <';
-            var _resValX = 1 + _resLabel.length * 6;
-            var _resValW = _resN.length * 6 + 2;
-            pixelPrint(1, 34, _resLabel, 1);
-            fill_rect(_resValX - 1, 33, _resValW, 7, 1);
-            pixelPrint(_resValX, 34, _resN, 0);
-            pixelPrint(_resValX + _resValW, 34, '>', 1);
-            var _zoomLabel = 'Zoom: +';
-            var _zoomValX = 1 + _zoomLabel.length * 6;
-            var _zoomValW = _zoomN.length * 6 + 2;
-            pixelPrint(1, 41, _zoomLabel, 1);
-            fill_rect(_zoomValX - 1, 40, _zoomValW, 7, 1);
-            pixelPrint(_zoomValX, 41, _zoomN, 0);
-            pixelPrint(_zoomValX + _zoomValW, 41, '-', 1);
-            _drawLoopSteps(_llen_l > 0 ? _llen_l : S.clipLength[_t_l][_ac_l]);
-        } else {
-            const ac_l    = effectiveClip(S.activeTrack);
-            const steps_l = S.clipLength[S.activeTrack][ac_l];
-            print(Math.floor((128 - 11 * 6) / 2), 4, 'Clip Length', 1);
-            fill_rect(0, 15, 128, 1, 1);
-            print(_loopX2, 22, _loopL2, 1);
-            print(_loopX3, 34, _loopL3, 1);
-            _drawLoopSteps(steps_l);
-        }
+        renderLoopView(createLoopRenderDeps());
         return;
     }
 

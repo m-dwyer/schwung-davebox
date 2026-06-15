@@ -776,6 +776,13 @@ Drum repeat workflows:
   `syncDrumRepeatState()` readback in `ui.js` immediately before rendering.
 - Added focused output coverage in `web/tests/integration/bank-render.test.ts`
   for the moved presentation formatting.
+- Continued the faster presentation path after reassessing the `loopHeld`
+  `drawUI()` branch. Added `ui/ui_loop_render.mjs` for the Loop-held drum lane,
+  AUTO lane config, and melodic clip-length render paths. Kept `drawUI()`
+  priority/order, loop state/timing, CC lane state, and all input/DSP/knob write
+  behavior at the existing seams.
+- Added focused output coverage in `web/tests/integration/loop-render.test.ts`
+  for the moved loop presentation formatting.
 
 Verification:
 
@@ -783,6 +790,8 @@ Verification:
 - `pnpm test:node tests/integration/latch-workflows.test.ts`
 - `pnpm test:node tests/integration/drum-repeat-workflows.test.ts`
 - `npm run test:node -- tests/integration/clip-track-sync.test.ts tests/integration/tick-tasks.test.ts`
+- `pnpm test:node tests/integration/loop-render.test.ts`
+- `pnpm test:node tests/integration/loop-render.test.ts tests/integration/param-peek-render.test.ts tests/integration/prompt-render.test.ts tests/integration/popup-render.test.ts tests/integration/idle-render.test.ts tests/integration/bank-render.test.ts tests/integration/ui-descriptors.test.ts`
 - `pnpm test:node tests/integration`
 - `pnpm test:node`
 - `python3 scripts/bundle_ui.py`
