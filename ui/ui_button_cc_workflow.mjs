@@ -220,3 +220,97 @@ export function handleUiLoopPerfModeButton(S, deps, d1, d2) {
     deps.forceRedraw();
     return true;
 }
+
+export function handleUiLoopTrackViewButton(S, deps, d1, d2) {
+    /* Loop button (CC 58, Track View): hold + step buttons sets clip length */
+    if (d1 !== deps.moveLoop || S.sessionView) return false;
+
+    S.loopHeld = d2 === 127;
+    deps.computePadNoteMap();
+    /* Arp Steps overlay: Loop is repurposed as a modifier for the pad-column
+     * loop-length gesture. Skip every other Loop side-effect (TARP unlatch,
+     * drum repeat latch, loop-window gesture) while the overlay is active. */
+    if (S.stepIntervalMode) {
+        if (!S.loopHeld && S.loopGestureStart >= 0) S.loopGestureStart = -1;
+        deps.forceRedraw();
+        return true;
+    }
+    if (S.loopHeld) {
+        /* Latch or clear drum repeat on the active track */
+        const _lrt = S.activeTrack;
+        S.loopPressTick = S.tickCount;
+        /* Tap-loop-alone unlatch eligibility (drum tracks only). Snapshot
+         * "no fresh physical pad press" at press time so the release path
+         * can distinguish a true alone-tap from a tap-while-latching
+         * gesture. For Rpt1, drumRepeatHeldPad doubles as the latched-pad
+         * reference once latched, so we must allow that case (latched +
+         * no fresh press = the unlatch gesture we want). Rpt2 uses two
+         * separate sets (held vs latched) so its check is simpler. */
+        deps.prepareDrumRepeatLoopPress(_lrt, S.trackPadMode[_lrt] === deps.padModeDrum, S.liveActiveNotes.size);
+        /* Delete+Loop on auto bank: reset active lane's loop/res/zoom to clip defaults */
+        if (S.deleteHeld && S.activeBank === 6 && S.trackPadMode[_lrt] !== deps.padModeDrum) {
+            var _rac = deps.effectiveClip(_lrt);
+            var _rl = S.ccActiveLane[_lrt];
+            S.ccLaneLoopStart[_lrt][_rac][_rl] = 0;
+            S.ccLaneLength[_lrt][_rac][_rl] = 0;
+            S.ccLaneTps[_lrt][_rac][_rl] = 0;
+            S.ccLaneResTps[_lrt][_rac][_rl] = 0;
+            S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+            S.pendingDefaultSetParams.push({ key: 't' + _lrt + '_c' + _rac + '_k' + _rl + '_cc_lane_reset', val: '1' });
+            deps.showActionPopup('LANE LOOP', 'RESET');
+            deps.forceRedraw();
+            return true;
+        }
+        /* Delete+Loop: unconditionally stop active drum repeat latch */
+        if (S.deleteHeld && S.trackPadMode[_lrt] === deps.padModeDrum) {
+            deps.handleDeleteLoopDrumRepeatStop(_lrt);
+            return true;
+        }
+        /* TARP latch shortcut: Loop press while holding a pad on a melodic track */
+        if (S.trackPadMode[_lrt] !== deps.padModeDrum && S.liveActiveNotes.size > 0) {
+            const _latchNow = (S.bankParams[_lrt][5][7] | 0) !== 0;
+            if (_latchNow) {
+                /* Latch ON: holding any pad + loop turns it off */
+                S.bankParams[_lrt][5][7] = 0;
+                if (deps.setParam)
+                    S.pendingDefaultSetParams.push({ key: 't' + _lrt + '_tarp_latch', val: '0' });
+            } else if ((S.bankParams[_lrt][5][0] | 0) !== 0) {
+                /* Latch OFF: turn it on (only when TARP style is set) */
+                S.bankParams[_lrt][5][7] = 1;
+                if (deps.setParam)
+                    S.pendingDefaultSetParams.push({ key: 't' + _lrt + '_tarp_latch', val: '1' });
+            }
+        } else if (S.trackPadMode[_lrt] !== deps.padModeDrum &&
+                   (S.bankParams[_lrt][5][7] | 0) !== 0 &&
+                   S.tarpHeldNotes[_lrt].size > 0) {
+            /* Loop press with no pads held + latch on + notes in buffer:
+             * clear the latched buffer without changing tarp_latch. */
+            if (deps.setParam)
+                deps.setParam('t' + _lrt + '_tarp_clear_latched', '1');
+            S.tarpHeldNotes[_lrt].clear();
+        }
+        deps.latchHeldDrumRepeatsOnLoopPress(_lrt);
+        S.heldStepBtn        = -1;
+        S.heldStep           = -1;
+        S.heldStepNotes      = [];
+        S.stepWasEmpty       = false;
+        S.stepWasHeld        = false;
+        S.stepBtnPressedTick.fill(-1);
+        S.sessionStepHeld    = -1;
+        S.sessionStepHeldCtx = 0;
+    } else {
+        S.loopJogActive = false;
+        /* Loop released before the held start step — treat as aborted
+         * gesture and fire the length-only fallback (single-tap semantics). */
+        if (S.loopGestureStart >= 0) {
+            deps.resolveLoopGesture(true);
+            S.loopTapUnlatchTrack = -1;
+        }
+        /* Tap-loop-alone: unlatch all latched repeats on active drum track.
+         * Eligibility was snapshotted at press (no pads/lanes held + drum
+         * track). A long hold disqualifies (treated like a gesture timeout). */
+        deps.handleDrumRepeatLoopTapRelease();
+    }
+    deps.forceRedraw();
+    return true;
+}

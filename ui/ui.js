@@ -189,6 +189,7 @@ import {
     handleUiCopyButton,
     handleUiDeleteButton,
     handleUiLoopPerfModeButton,
+    handleUiLoopTrackViewButton,
     handleUiMenuCoRunExitButton,
     handleUiMuteModifierButton,
     handleUiShiftButton
@@ -5810,95 +5811,7 @@ function _onCC_buttons(d1, d2) {
     if (handleUiLoopPerfModeButton(S, createButtonCcWorkflowDeps(), d1, d2)) return;
 
     /* Loop button (CC 58, Track View): hold + step buttons sets clip length */
-    if (d1 === MoveLoop && !S.sessionView) {
-        S.loopHeld = d2 === 127;
-        computePadNoteMap();
-        /* Arp Steps overlay: Loop is repurposed as a modifier for the pad-column
-         * loop-length gesture. Skip every other Loop side-effect (TARP unlatch,
-         * drum repeat latch, loop-window gesture) while the overlay is active. */
-        if (S.stepIntervalMode) {
-            if (!S.loopHeld && S.loopGestureStart >= 0) S.loopGestureStart = -1;
-            forceRedraw();
-            return;
-        }
-        if (S.loopHeld) {
-            /* Latch or clear drum repeat on the active track */
-            const _lrt = S.activeTrack;
-            S.loopPressTick = S.tickCount;
-            /* Tap-loop-alone unlatch eligibility (drum tracks only). Snapshot
-             * "no fresh physical pad press" at press time so the release path
-             * can distinguish a true alone-tap from a tap-while-latching
-             * gesture. For Rpt1, drumRepeatHeldPad doubles as the latched-pad
-             * reference once latched, so we must allow that case (latched +
-             * no fresh press = the unlatch gesture we want). Rpt2 uses two
-             * separate sets (held vs latched) so its check is simpler. */
-            prepareDrumRepeatLoopPress(S, _lrt, S.trackPadMode[_lrt] === PAD_MODE_DRUM, S.liveActiveNotes.size);
-            /* Delete+Loop on auto bank: reset active lane's loop/res/zoom to clip defaults */
-            if (S.deleteHeld && S.activeBank === 6 && S.trackPadMode[_lrt] !== PAD_MODE_DRUM) {
-                var _rac = effectiveClip(_lrt);
-                var _rl = S.ccActiveLane[_lrt];
-                S.ccLaneLoopStart[_lrt][_rac][_rl] = 0;
-                S.ccLaneLength[_lrt][_rac][_rl] = 0;
-                S.ccLaneTps[_lrt][_rac][_rl] = 0;
-                S.ccLaneResTps[_lrt][_rac][_rl] = 0;
-                S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-                S.pendingDefaultSetParams.push({ key: 't' + _lrt + '_c' + _rac + '_k' + _rl + '_cc_lane_reset', val: '1' });
-                showActionPopup('LANE LOOP', 'RESET');
-                forceRedraw();
-                return;
-            }
-            /* Delete+Loop: unconditionally stop active drum repeat latch */
-            if (S.deleteHeld && S.trackPadMode[_lrt] === PAD_MODE_DRUM) {
-                handleDeleteLoopDrumRepeatStop(S, createDrumRepeatWorkflowDeps(), _lrt);
-                return;
-            }
-            /* TARP latch shortcut: Loop press while holding a pad on a melodic track */
-            if (S.trackPadMode[_lrt] !== PAD_MODE_DRUM && S.liveActiveNotes.size > 0) {
-                const _latchNow = (S.bankParams[_lrt][5][7] | 0) !== 0;
-                if (_latchNow) {
-                    /* Latch ON: holding any pad + loop turns it off */
-                    S.bankParams[_lrt][5][7] = 0;
-                    if (typeof host_module_set_param === 'function')
-                        S.pendingDefaultSetParams.push({ key: 't' + _lrt + '_tarp_latch', val: '0' });
-                } else if ((S.bankParams[_lrt][5][0] | 0) !== 0) {
-                    /* Latch OFF: turn it on (only when TARP style is set) */
-                    S.bankParams[_lrt][5][7] = 1;
-                    if (typeof host_module_set_param === 'function')
-                        S.pendingDefaultSetParams.push({ key: 't' + _lrt + '_tarp_latch', val: '1' });
-                }
-            } else if (S.trackPadMode[_lrt] !== PAD_MODE_DRUM &&
-                       (S.bankParams[_lrt][5][7] | 0) !== 0 &&
-                       S.tarpHeldNotes[_lrt].size > 0) {
-                /* Loop press with no pads held + latch on + notes in buffer:
-                 * clear the latched buffer without changing tarp_latch. */
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + _lrt + '_tarp_clear_latched', '1');
-                S.tarpHeldNotes[_lrt].clear();
-            }
-            latchHeldDrumRepeatsOnLoopPress(S, { host_module_set_param }, _lrt);
-            S.heldStepBtn        = -1;
-            S.heldStep           = -1;
-            S.heldStepNotes      = [];
-            S.stepWasEmpty       = false;
-            S.stepWasHeld        = false;
-            S.stepBtnPressedTick.fill(-1);
-            S.sessionStepHeld    = -1;
-            S.sessionStepHeldCtx = 0;
-        } else {
-            S.loopJogActive = false;
-            /* Loop released before the held start step — treat as aborted
-             * gesture and fire the length-only fallback (single-tap semantics). */
-            if (S.loopGestureStart >= 0) {
-                resolveLoopGesture(S, createLoopGestureWorkflowDeps(), true);
-                S.loopTapUnlatchTrack = -1;
-            }
-            /* Tap-loop-alone: unlatch all latched repeats on active drum track.
-             * Eligibility was snapshotted at press (no pads/lanes held + drum
-             * track). A long hold disqualifies (treated like a gesture timeout). */
-            handleDrumRepeatLoopTapRelease(S, LOOP_TAP_TICKS);
-        }
-        forceRedraw();
-    }
+    if (handleUiLoopTrackViewButton(S, createButtonCcWorkflowDeps(), d1, d2)) return;
 
 }
 
@@ -7207,7 +7120,16 @@ function createButtonCcWorkflowDeps() {
         effectiveClip,
         exitSchwungCoRun,
         forceRedraw,
+        handleDeleteLoopDrumRepeatStop: function (track) {
+            return handleDeleteLoopDrumRepeatStop(S, createDrumRepeatWorkflowDeps(), track);
+        },
+        handleDrumRepeatLoopTapRelease: function () {
+            return handleDrumRepeatLoopTapRelease(S, LOOP_TAP_TICKS);
+        },
         invalidateLEDCache,
+        latchHeldDrumRepeatsOnLoopPress: function (track) {
+            return latchHeldDrumRepeatsOnLoopPress(S, { host_module_set_param }, track);
+        },
         loopTapTicks: LOOP_TAP_TICKS,
         moveCapture: MoveCapture,
         moveCopy: MoveCopy,
@@ -7217,6 +7139,12 @@ function createButtonCcWorkflowDeps() {
         moveMute: MoveMute,
         moveShift: MoveShift,
         openClearAutoMenu,
+        prepareDrumRepeatLoopPress: function (track, isDrumTrack, liveActiveNoteCount) {
+            return prepareDrumRepeatLoopPress(S, track, isDrumTrack, liveActiveNoteCount);
+        },
+        resolveLoopGesture: function (fireFallback) {
+            return resolveLoopGesture(S, createLoopGestureWorkflowDeps(), fireFallback);
+        },
         sendPerfMods,
         setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
         showActionPopup,
