@@ -128,7 +128,8 @@ import {
     renderCompressLimitNotice,
     renderMergePlacementPrompt,
     renderNoNoteFlashNotice,
-    renderSceneBakePickerPrompt
+    renderSceneBakePickerPrompt,
+    renderShiftStepHelp
 } from './ui_prompt_render.mjs';
 import {
     SCALE_INTERVALS,
@@ -749,16 +750,6 @@ function drawParamPeek() {
     print(4, 25, truncText(p.value, 20), 1);
     print(4, 38, truncText(p.detail, 20), 1);
     print(4, 52, truncText(p.route, 20), 1);
-}
-
-function drawShiftStepHelp() {
-    fill_rect(0, 0, 128, 9, 1);
-    print(4, 1, 'SHIFT SHORTCUTS', 0);
-    print(4, 12, 'S2 Global  S3 Edit', 1);
-    print(4, 22, 'S5 Tap     S6 Metro', 1);
-    print(4, 32, 'S7 Swing   S9 Scale', 1);
-    print(4, 42, 'S10 VelIn  S15 x2', 1);
-    print(4, 52, 'S16 Quant  S8 Mode', 1);
 }
 
 /* ------------------------------------------------------------------ */
@@ -3612,6 +3603,7 @@ function createPopupRenderDeps() {
 function createPromptRenderDeps() {
     return {
         clear_screen,
+        fill_rect,
         print
     };
 }
@@ -3736,7 +3728,7 @@ function drawUI() {
 
     if (S.shiftHeld && !S.sessionView && S.heldStep < 0 && S.knobTouched < 0 &&
             !S.deleteHeld && !S.copyHeld && !S.muteHeld && !S.loopHeld) {
-        drawShiftStepHelp();
+        renderShiftStepHelp(createPromptRenderDeps());
         return;
     }
 
