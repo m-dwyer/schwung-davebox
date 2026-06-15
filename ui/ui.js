@@ -102,15 +102,7 @@ import {
     PARAM_PEEK_DETAIL_TICKS
 } from './ui_motion.mjs';
 import {
-    renderAllLanesBankOverview,
-    renderAllLanesConfirm,
-    renderDrumLaneBankOverview,
-    renderDrumMidiDelayBankOverview,
-    renderDrumNoteFxBankOverview,
-    renderDrumRepeatGrooveBankOverview,
-    renderGenericBankOverview,
-    renderMelodicNoteFxBankOverview,
-    renderMotionBankOverview
+    renderTrackBankOverview
 } from './ui_bank_render.mjs';
 import {
     renderSessionIdleView,
@@ -3792,30 +3784,12 @@ function drawUI() {
             return;
         }
         const bankRenderDeps = createBankRenderDeps();
-        const isDrumLaneBank = (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 0);
-        if (isDrumLaneBank) {
-            renderDrumLaneBankOverview(bankRenderDeps);
-        } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 7 && !S.allLanesConfirmed) {
-            renderAllLanesConfirm(bankRenderDeps);
-        } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 7) {
-            renderAllLanesBankOverview(bankRenderDeps);
-        } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 1) {
-        renderDrumNoteFxBankOverview(bankRenderDeps);
-        } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 5) {
-        const t    = S.activeTrack;
-        const lane = S.activeDrumLane[t];
-        syncDrumRepeatState(t, lane);
-        renderDrumRepeatGrooveBankOverview(bankRenderDeps);
-        } else if (bank === 6) {
-        renderMotionBankOverview(bankRenderDeps);
-        } else if (S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM && bank === 1) {
-        renderMelodicNoteFxBankOverview(bankRenderDeps);
-
-        } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 3) {
-        renderDrumMidiDelayBankOverview(bankRenderDeps);
-        } else {
-        renderGenericBankOverview(bankRenderDeps, bank);
+        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 5) {
+            const t    = S.activeTrack;
+            const lane = S.activeDrumLane[t];
+            syncDrumRepeatState(t, lane);
         }
+        renderTrackBankOverview(bankRenderDeps, bank);
 
     } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
         renderDrumTrackIdleView(createTrackIdleRenderDeps());

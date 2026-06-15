@@ -810,6 +810,13 @@ Drum repeat workflows:
 - Added focused output/cache coverage in
   `web/tests/integration/idle-render.test.ts` for AUTO idle lane text, badges,
   graph refresh/cache reuse, and playing progress rendering.
+- Continued the faster presentation path by moving Track View bank-overview
+  presentation dispatch into `renderTrackBankOverview()` in
+  `ui/ui_bank_render.mjs`. Kept the `drawUI()` priority gate and the
+  REPEAT GROOVE `syncDrumRepeatState()` readback in `ui.js` immediately before
+  rendering, and left bank reads/writes plus knob edit behavior unchanged.
+- Added focused dispatch/output coverage in
+  `web/tests/integration/bank-render.test.ts`.
 
 Verification:
 

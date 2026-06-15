@@ -230,6 +230,29 @@ export function renderMelodicNoteFxBankOverview(deps) {
     }
 }
 
+export function renderTrackBankOverview(deps, bank) {
+    const isDrum = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM;
+    if (isDrum && bank === 0) {
+        renderDrumLaneBankOverview(deps);
+    } else if (isDrum && bank === 7 && !S.allLanesConfirmed) {
+        renderAllLanesConfirm(deps);
+    } else if (isDrum && bank === 7) {
+        renderAllLanesBankOverview(deps);
+    } else if (isDrum && bank === 1) {
+        renderDrumNoteFxBankOverview(deps);
+    } else if (isDrum && bank === 5) {
+        renderDrumRepeatGrooveBankOverview(deps);
+    } else if (bank === 6) {
+        renderMotionBankOverview(deps);
+    } else if (!isDrum && bank === 1) {
+        renderMelodicNoteFxBankOverview(deps);
+    } else if (isDrum && bank === 3) {
+        renderDrumMidiDelayBankOverview(deps);
+    } else {
+        renderGenericBankOverview(deps, bank);
+    }
+}
+
 export function renderGenericBankOverview(deps, bank) {
     const knobs = BANKS[bank].knobs;
     const vals  = S.bankParams[S.activeTrack][bank];
