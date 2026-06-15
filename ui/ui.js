@@ -121,6 +121,7 @@ import {
     renderSessionOverview
 } from './ui_session_overview_render.mjs';
 import {
+    handleSessionViewClipPadPress,
     handleSessionViewStepPress,
     handleSessionViewStepRelease
 } from './ui_session_view_workflow.mjs';
@@ -8203,154 +8204,8 @@ function _onPadPress(status, d1, d2) {
             forceRedraw();
             return;
         }
-        if (S.sessionView) {
-            for (let row = 0; row < 4; row++) {
-                const rowBase = 92 - row * 8;
-                if (d1 >= rowBase && d1 < rowBase + NUM_TRACKS) {
-                    const t = d1 - rowBase;
-                    if (S.muteHeld) {
-                        /* Mute-held + pad: toggle mute/solo on that track's column */
-                        if (S.shiftHeld) setTrackSolo(t, !S.trackSoloed[t]);
-                        else           setTrackMute(t, !S.trackMuted[t]);
-                    } else if (S.copyHeld) {
-                        /* Copy + clip pad (Session View): clip-to-clip copy */
-                        const clipIdx = S.sceneRow + row;
-                        const isDrumT = S.trackPadMode[t] === PAD_MODE_DRUM;
-                        if (S.copySrc && S.copySrc.kind === 'step') {
-                            /* step copy in progress: swallow */
-                        } else if (!S.copySrc) {
-                            if (isDrumT) {
-                                S.copySrc = S.shiftHeld
-                                    ? { kind: 'cut_drum_clip', track: t, clip: clipIdx }
-                                    : { kind: 'drum_clip',     track: t, clip: clipIdx };
-                            } else {
-                                S.copySrc = S.shiftHeld
-                                    ? { kind: 'cut_clip', track: t, clip: clipIdx }
-                                    : { kind: 'clip',     track: t, clip: clipIdx };
-                            }
-                            invalidateLEDCache();
-                            showActionPopup(S.shiftHeld ? 'CUT' : 'COPIED');
-                        } else if (S.copySrc.kind === 'clip') {
-                            copyClip(S.copySrc.track, S.copySrc.clip, t, clipIdx);
-                            invalidateLEDCache();
-                            forceRedraw();
-                            showActionPopup('PASTED');
-                        } else if (S.copySrc.kind === 'cut_clip') {
-                            cutClip(S.copySrc.track, S.copySrc.clip, t, clipIdx);
-                            S.copySrc = { kind: 'clip', track: t, clip: clipIdx };
-                            invalidateLEDCache();
-                            forceRedraw();
-                            showActionPopup('PASTED');
-                        } else if (S.copySrc.kind === 'drum_clip' && isDrumT) {
-                            copyDrumClip(S.copySrc.track, S.copySrc.clip, t, clipIdx);
-                            invalidateLEDCache();
-                            forceRedraw();
-                            showActionPopup('PASTED');
-                        } else if (S.copySrc.kind === 'cut_drum_clip' && isDrumT) {
-                            cutDrumClip(S.copySrc.track, S.copySrc.clip, t, clipIdx);
-                            S.copySrc = { kind: 'drum_clip', track: t, clip: clipIdx };
-                            invalidateLEDCache();
-                            forceRedraw();
-                            showActionPopup('PASTED');
-                        }
-                        /* row/cut_row kinds, drum→melodic or melodic→drum mismatch: swallow */
-                    } else if (S.shiftHeld && S.deleteHeld) {
-                        /* Shift+Delete + clip pad (Session View): hard reset that clip */
-                        const clipIdx = S.sceneRow + row;
-                        hardResetClip(t, clipIdx);
-                        forceRedraw();
-                        showActionPopup('CLIP', 'CLEARED');
-                    } else if (S.deleteHeld) {
-                        /* Delete + clip pad (Session View): clear that clip, keep transport */
-                        const clipIdx = S.sceneRow + row;
-                        clearClip(t, clipIdx, true);
-                        forceRedraw();
-                        showActionPopup('SEQUENCE', 'CLEARED');
-                    } else {
-                        const clipIdx      = S.sceneRow + row;
-                        const isActiveClip = S.trackActiveClip[t] === clipIdx;
-                        if (S.shiftHeld) {
-                            /* Shift+pad opens a clip for editing. A stopped clip
-                             * with notes must stay off, so launch only while
-                             * playing or when the selected clip is empty. */
-                            const isPlaying = S.trackClipPlaying[t] && isActiveClip;
-                            const isWR      = S.trackWillRelaunch[t] && isActiveClip;
-                            const isQueued  = S.trackQueuedClip[t] === clipIdx;
-                            if (!isPlaying && !isWR && !isQueued) {
-                                if (!S.playing) {
-                                    const prevClip = S.trackActiveClip[t];
-                                    S.trackActiveClip[t]  = clipIdx;
-                                    /* Snap to page containing loop_start so
-                                     * non-zero-start clips don't show OOB
-                                     * region on initial select. */
-                                    S.trackCurrentPage[t] = S.trackPadMode[t] === PAD_MODE_DRUM
-                                        ? 0
-                                        : Math.floor((S.clipLoopStart[t][clipIdx] | 0) / 16);
-                                    refreshPerClipBankParams(t);
-                                    if (S.trackPadMode[t] === PAD_MODE_DRUM && prevClip !== clipIdx) {
-                                        S.pendingDrumResync      = 2;
-                                        S.pendingDrumResyncTrack = t;
-                                    }
-                                }
-                                if ((S.playing || _clipIsEmpty(t, clipIdx))
-                                        && typeof host_module_set_param === 'function')
-                                    host_module_set_param('t' + t + '_launch_clip', String(clipIdx));
-                            }
-                            handoffRecordingToTrack(t);
-                            _switchActiveTrack(t);
-                            refreshPerClipBankParams(t);
-                            S.sessionView = false;
-                            S.shiftTrackLEDActive = false;
-                            invalidateLEDCache();
-                            forceRedraw();
-                        } else if (S.trackClipPlaying[t] && isActiveClip) {
-                            handoffRecordingToTrack(t);
-                            _switchActiveTrack(t);
-                            refreshPerClipBankParams(t);
-                            if (S.trackPendingPageStop[t]) {
-                                /* Pending stop → cancel by re-launching */
-                                if (typeof host_module_set_param === 'function')
-                                    host_module_set_param('t' + t + '_launch_clip', String(clipIdx));
-                            } else {
-                                /* Playing → arm stop at next page boundary */
-                                if (typeof host_module_set_param === 'function')
-                                    host_module_set_param('t' + t + '_stop_at_end', '1');
-                            }
-                        } else if (S.trackWillRelaunch[t] && isActiveClip) {
-                            /* Transport stopped, clip primed to restart → cancel */
-                            handoffRecordingToTrack(t);
-                            _switchActiveTrack(t);
-                            refreshPerClipBankParams(t);
-                            if (typeof host_module_set_param === 'function')
-                                host_module_set_param('t' + t + '_deactivate', '1');
-                        } else if (S.trackQueuedClip[t] === clipIdx) {
-                            /* Queued to launch → cancel */
-                            handoffRecordingToTrack(t);
-                            _switchActiveTrack(t);
-                            refreshPerClipBankParams(t);
-                            if (typeof host_module_set_param === 'function')
-                                host_module_set_param('t' + t + '_deactivate', '1');
-                        } else {
-                            /* Launch clip for this track */
-                            handoffRecordingToTrack(t);
-                            _switchActiveTrack(t);
-                            if (!S.playing) {
-                                const prevClip = S.trackActiveClip[t];
-                                S.trackActiveClip[t]  = clipIdx;
-                                S.trackCurrentPage[t] = 0;
-                                if (S.trackPadMode[t] === PAD_MODE_DRUM && prevClip !== clipIdx) {
-                                    S.pendingDrumResync      = 2;
-                                    S.pendingDrumResyncTrack = t;
-                                }
-                            }
-                            refreshPerClipBankParams(t);
-                            if (typeof host_module_set_param === 'function')
-                                host_module_set_param('t' + t + '_launch_clip', String(clipIdx));
-                        }
-                    }
-                    break;
-                }
-            }
+        if (handleSessionViewClipPadPress(S, createSessionViewWorkflowDeps(), d1)) {
+            return;
         } else {
             _onPadPressTrackView(status, d1, d2);
         }
@@ -8391,11 +8246,26 @@ function _doShiftStepCommon(idx) {
 
 function createSessionViewWorkflowDeps() {
     return {
+        clearClip,
+        clipIsEmpty: _clipIsEmpty,
+        copyClip,
+        copyDrumClip,
+        cutClip,
+        cutDrumClip,
         doShiftStepCommon: _doShiftStepCommon,
         forceRedraw,
+        handoffRecordingToTrack,
+        hardResetClip,
+        invalidateLEDCache,
         numTracks: NUM_TRACKS,
+        padModeDrum: PAD_MODE_DRUM,
+        refreshPerClipBankParams,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setTrackMute,
+        setTrackSolo,
         sendPerfMods,
-        showActionPopup
+        showActionPopup,
+        switchActiveTrack: _switchActiveTrack
     };
 }
 

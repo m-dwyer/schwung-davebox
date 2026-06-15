@@ -96,3 +96,132 @@ export function handleSessionViewStepRelease(S, deps, btn) {
     deps.forceRedraw();
     return true;
 }
+
+export function handleSessionViewClipPadPress(S, deps, padNote) {
+    if (!S.sessionView) return false;
+
+    for (let row = 0; row < 4; row++) {
+        const rowBase = 92 - row * 8;
+        if (padNote < rowBase || padNote >= rowBase + deps.numTracks) continue;
+
+        const t = padNote - rowBase;
+        const clipIdx = S.sceneRow + row;
+        if (S.muteHeld) {
+            if (S.shiftHeld) deps.setTrackSolo(t, !S.trackSoloed[t]);
+            else deps.setTrackMute(t, !S.trackMuted[t]);
+        } else if (S.copyHeld) {
+            const isDrumT = S.trackPadMode[t] === deps.padModeDrum;
+            if (S.copySrc && S.copySrc.kind === 'step') {
+                /* Step copy in progress: swallow. */
+            } else if (!S.copySrc) {
+                if (isDrumT) {
+                    S.copySrc = S.shiftHeld
+                        ? { kind: 'cut_drum_clip', track: t, clip: clipIdx }
+                        : { kind: 'drum_clip', track: t, clip: clipIdx };
+                } else {
+                    S.copySrc = S.shiftHeld
+                        ? { kind: 'cut_clip', track: t, clip: clipIdx }
+                        : { kind: 'clip', track: t, clip: clipIdx };
+                }
+                deps.invalidateLEDCache();
+                deps.showActionPopup(S.shiftHeld ? 'CUT' : 'COPIED');
+            } else if (S.copySrc.kind === 'clip') {
+                deps.copyClip(S.copySrc.track, S.copySrc.clip, t, clipIdx);
+                deps.invalidateLEDCache();
+                deps.forceRedraw();
+                deps.showActionPopup('PASTED');
+            } else if (S.copySrc.kind === 'cut_clip') {
+                deps.cutClip(S.copySrc.track, S.copySrc.clip, t, clipIdx);
+                S.copySrc = { kind: 'clip', track: t, clip: clipIdx };
+                deps.invalidateLEDCache();
+                deps.forceRedraw();
+                deps.showActionPopup('PASTED');
+            } else if (S.copySrc.kind === 'drum_clip' && isDrumT) {
+                deps.copyDrumClip(S.copySrc.track, S.copySrc.clip, t, clipIdx);
+                deps.invalidateLEDCache();
+                deps.forceRedraw();
+                deps.showActionPopup('PASTED');
+            } else if (S.copySrc.kind === 'cut_drum_clip' && isDrumT) {
+                deps.cutDrumClip(S.copySrc.track, S.copySrc.clip, t, clipIdx);
+                S.copySrc = { kind: 'drum_clip', track: t, clip: clipIdx };
+                deps.invalidateLEDCache();
+                deps.forceRedraw();
+                deps.showActionPopup('PASTED');
+            }
+        } else if (S.shiftHeld && S.deleteHeld) {
+            deps.hardResetClip(t, clipIdx);
+            deps.forceRedraw();
+            deps.showActionPopup('CLIP', 'CLEARED');
+        } else if (S.deleteHeld) {
+            deps.clearClip(t, clipIdx, true);
+            deps.forceRedraw();
+            deps.showActionPopup('SEQUENCE', 'CLEARED');
+        } else {
+            const isActiveClip = S.trackActiveClip[t] === clipIdx;
+            if (S.shiftHeld) {
+                const isPlaying = S.trackClipPlaying[t] && isActiveClip;
+                const isWR = S.trackWillRelaunch[t] && isActiveClip;
+                const isQueued = S.trackQueuedClip[t] === clipIdx;
+                if (!isPlaying && !isWR && !isQueued) {
+                    if (!S.playing) {
+                        const prevClip = S.trackActiveClip[t];
+                        S.trackActiveClip[t] = clipIdx;
+                        S.trackCurrentPage[t] = S.trackPadMode[t] === deps.padModeDrum
+                            ? 0
+                            : Math.floor((S.clipLoopStart[t][clipIdx] | 0) / 16);
+                        deps.refreshPerClipBankParams(t);
+                        if (S.trackPadMode[t] === deps.padModeDrum && prevClip !== clipIdx) {
+                            S.pendingDrumResync = 2;
+                            S.pendingDrumResyncTrack = t;
+                        }
+                    }
+                    if ((S.playing || deps.clipIsEmpty(t, clipIdx)) && deps.setParam)
+                        deps.setParam('t' + t + '_launch_clip', String(clipIdx));
+                }
+                deps.handoffRecordingToTrack(t);
+                deps.switchActiveTrack(t);
+                deps.refreshPerClipBankParams(t);
+                S.sessionView = false;
+                S.shiftTrackLEDActive = false;
+                deps.invalidateLEDCache();
+                deps.forceRedraw();
+            } else if (S.trackClipPlaying[t] && isActiveClip) {
+                deps.handoffRecordingToTrack(t);
+                deps.switchActiveTrack(t);
+                deps.refreshPerClipBankParams(t);
+                if (S.trackPendingPageStop[t]) {
+                    if (deps.setParam) deps.setParam('t' + t + '_launch_clip', String(clipIdx));
+                } else {
+                    if (deps.setParam) deps.setParam('t' + t + '_stop_at_end', '1');
+                }
+            } else if (S.trackWillRelaunch[t] && isActiveClip) {
+                deps.handoffRecordingToTrack(t);
+                deps.switchActiveTrack(t);
+                deps.refreshPerClipBankParams(t);
+                if (deps.setParam) deps.setParam('t' + t + '_deactivate', '1');
+            } else if (S.trackQueuedClip[t] === clipIdx) {
+                deps.handoffRecordingToTrack(t);
+                deps.switchActiveTrack(t);
+                deps.refreshPerClipBankParams(t);
+                if (deps.setParam) deps.setParam('t' + t + '_deactivate', '1');
+            } else {
+                deps.handoffRecordingToTrack(t);
+                deps.switchActiveTrack(t);
+                if (!S.playing) {
+                    const prevClip = S.trackActiveClip[t];
+                    S.trackActiveClip[t] = clipIdx;
+                    S.trackCurrentPage[t] = 0;
+                    if (S.trackPadMode[t] === deps.padModeDrum && prevClip !== clipIdx) {
+                        S.pendingDrumResync = 2;
+                        S.pendingDrumResyncTrack = t;
+                    }
+                }
+                deps.refreshPerClipBankParams(t);
+                if (deps.setParam) deps.setParam('t' + t + '_launch_clip', String(clipIdx));
+            }
+        }
+        return true;
+    }
+
+    return true;
+}
