@@ -9,7 +9,7 @@
 - **Branching** — create a new branch for each refactor / major feature addition / major revision (`git checkout -b <descriptive-name>` off `main` before any code changes). Small, isolated fixes can land directly on main. When in doubt, branch. One commit per logical change. Merge to main with fast-forward when the work is verified and approved.
 - **Deploy and verify on device before reporting done** — always build+install and confirm on Move.
 - **Reboot after every deploy** — Back suspends (JS stays in memory); Shift+Back fully exits but does NOT reload JS from disk. Full reboot required for JS changes.
-- **JS-only deploy**: `python3 scripts/bundle_ui.py && ./scripts/install.sh` then restart. `build.sh` required for DSP changes (also copies all JS).
+- **JS-only deploy**: `./scripts/bundle_ui.sh && ./scripts/install.sh` then restart. `build.sh` required for DSP changes (also copies all JS).
 - **Restart Move** (Armbian/systemd): `./scripts/install.sh` now does this automatically after deploy. Manual reload: `ssh root@move.local "systemctl stop move-launcher.service; for name in MoveOriginal Move MoveMessageDisplay shadow_ui schwung link-subscriber display-server schwung-manager; do pkill -9 -x \"\$name\" 2>/dev/null; done; sleep 1; systemctl start move-launcher.service"`. A bare `systemctl restart move-launcher.service` is NOT enough — the unit is `KillMode=process`, so it only bounces MoveLauncher/MoveOriginal while the Schwung stack (shadow_ui, schwung-manager, display-server) double-forks to PID 1 and survives stale → Move-native/Schwung desync (blank OLED). This is a service restart, not an OS `reboot` (reboot has caused a "move terminated" freeze).
 - **CLAUDE.md**: update at session end or after a major phase — not after routine task work.
 - **README.md is maintained on GitHub directly** — do not edit or commit it locally. If asked to update README, refuse and point the user to edit on GitHub. A pre-commit hook blocks accidental commits.
@@ -30,12 +30,12 @@ dAVEBOx is a Schwung **tool module** (`component_type: "tool"`) for Ableton Move
 
 ```sh
 ./scripts/build.sh && ./scripts/install.sh      # DSP change (also copies all JS)
-python3 scripts/bundle_ui.py && ./scripts/install.sh  # JS-only
+./scripts/bundle_ui.sh && ./scripts/install.sh  # JS-only
 nm -D dist/davebox/dsp.so | grep GLIBC             # verify ≤ 2.35
 ssh ableton@move.local "tail -f /data/UserData/schwung/seq8.log"
 ```
 
-**JS modules** live under `ui/` (`ui.js` + 6 `ui_*.mjs`) — bundled into `dist/davebox/ui.js` by `scripts/bundle_ui.py`. Always run the bundler before deploying JS changes. **DSP**: see `dsp/CLAUDE.md`.
+**JS modules** live under `ui/` (`ui.js` + many `ui_*.mjs`) — bundled into `dist/overture/ui.js` by `scripts/bundle_ui.sh` (esbuild, run on the HOST; `build.sh` invokes it outside Docker). esbuild resolves the dep graph itself, so there is **no manual ORDER list** and adding a new `ui_*.mjs` needs no bundler edit; it also renames colliding top-level names and honors aliased local imports, so the wrapper pattern (`pure(deps,…)` in a `.mjs` + same-named thin wrapper in `ui.js`) just works. The script then runs a **QuickJS parse gate** (the device's exact `qjs` from `schwung/libs/quickjs`) — this catches QuickJS-fatal issues the V8 tests and `node --check` miss, because those run against *source*, never the bundle. Needs `pnpm -C web install` (esbuild lives in the web workspace). Always run the bundler before deploying JS changes. **DSP**: see `dsp/CLAUDE.md`.
 
 ## State persistence
 
