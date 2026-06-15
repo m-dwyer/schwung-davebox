@@ -704,12 +704,22 @@ Drum repeat workflows:
   melodic targeted pair ordering and drum targeted pair ordering. The existing
   malformed `last_restore` fallback coverage remains in
   `web/tests/integration/tool.test.ts`.
+- Reassessed the next Parameter Bank / DSP Mirror pressure points and kept the
+  slice narrow: moved only packed bank snapshot readback into
+  `ui_clip_track_sync.mjs` as `refreshPerClipBankParamsFromDsp()`,
+  `refreshDrumLaneBankParamsFromDsp()`, and `readDrumRepeatStateFromDsp()`.
+  `readBankParams()` remains in `ui.js` because it still mixes track/global
+  reads, action state, and the CC bank's deferred default writes.
+- Added focused coverage in `web/tests/integration/clip-track-sync.test.ts` for
+  melodic and drum bank snapshot read ordering, packed fallback/default
+  behavior, and drum-track delegation through the per-clip refresh path.
 
 Verification:
 
 - `pnpm test:node tests/integration/drum-lane-workflows.test.ts`
 - `pnpm test:node tests/integration/latch-workflows.test.ts`
 - `pnpm test:node tests/integration/drum-repeat-workflows.test.ts`
+- `npm run test:node -- tests/integration/clip-track-sync.test.ts tests/integration/tick-tasks.test.ts`
 - `pnpm test:node tests/integration`
 - `pnpm test:node`
 - `python3 scripts/bundle_ui.py`

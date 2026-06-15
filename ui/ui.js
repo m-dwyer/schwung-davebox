@@ -144,6 +144,8 @@ import {
 } from './ui_latch_workflows.mjs';
 import {
     readDrumActiveLaneFromDsp,
+    refreshDrumLaneBankParamsFromDsp,
+    refreshPerClipBankParamsFromDsp,
     readTargetedClipRestorePairFromDsp
 } from './ui_clip_track_sync.mjs';
 import {
@@ -2279,56 +2281,10 @@ const PER_CLIP_BANKS  = [1, 2, 3, 4];
 /* Read per-clip bank params from DSP into S.bankParams for track t.
  * Reads from clip[active_clip].pfx_params directly — immune to pfx_sync timing. */
 function refreshDrumLaneBankParams(t, lane) {
-    if (typeof host_module_get_param !== 'function') return;
-    const snap = host_module_get_param('t' + t + '_l' + lane + '_pfx_snapshot');
-    if (snap) {
-        const v = snap.split(' ');
-        if (v.length >= 9) {
-            /* NOTE FX bank (1): gate_time, vel_offset, quantize */
-            S.bankParams[t][1][0] = parseInt(v[0], 10) | 0;  /* Gate */
-            S.bankParams[t][1][1] = parseInt(v[1], 10) | 0;  /* Vel  */
-            S.bankParams[t][1][2] = parseInt(v[2], 10) | 0;  /* Qnt  */
-            S.drumLaneQnt[t]      = S.bankParams[t][1][2];
-            /* MIDI DLY bank (3): delay_time_idx, delay_level, repeat_times,
-               fb_velocity, fb_gate_time, fb_clock at v[3..8]; delay_retrig at v[9]
-               (K6 of the drum delay bank layout). */
-            for (let k = 0; k < 6; k++) S.bankParams[t][3][k] = parseInt(v[3 + k], 10) | 0;
-            if (v.length >= 10) S.bankParams[t][3][6] = parseInt(v[9], 10) | 0;
-            /* NOTE FX K5 Len mode (v[10]) — per-lane mirror. */
-            if (v.length >= 11) S.drumLaneLenMode[t][lane] = parseInt(v[10], 10) | 0;
-        }
-    }
-    /* DRUM LANE bank (0): Res (K1=idx0), Eucl (K5=idx4), Dir (K7=idx6),
-     * SqFl (K8=idx7) per-lane meta. */
-    const tpsIdx = TPS_VALUES.indexOf(S.drumLaneTPS[t]);
-    S.bankParams[t][0][0] = tpsIdx >= 0 ? tpsIdx : 1;
-    S.bankParams[t][0][4] = S.drumLaneEuclidN[t][lane] | 0;
-    {
-        const _pd = host_module_get_param('t' + t + '_l' + lane + '_playback_dir');
-        const _pdv = parseInt(_pd, 10);
-        const _pdvi = (isFinite(_pdv) && _pdv >= 0 && _pdv <= 3) ? _pdv : 0;
-        S.drumLanePlaybackDir[t][lane] = _pdvi;
-        S.bankParams[t][0][6] = _pdvi;
-        const _par = host_module_get_param('t' + t + '_l' + lane + '_playback_audio_reverse');
-        const _parv = parseInt(_par, 10);
-        S.drumLanePlaybackAudioReverse[t][lane] = (isFinite(_parv) && _parv === 1) ? 1 : 0;
-    }
-    S.bankParams[t][0][7] = S.clipSeqFollow[t][S.trackActiveClip[t]] ? 1 : 0;
-    /* Repeat Groove state for this lane */
-    syncDrumRepeatState(t, lane);
-    S.screenDirty = true;
-}
-
-function syncDrumRepeatState(t, lane) {
-    if (typeof host_module_get_param !== 'function') return;
-    const raw = host_module_get_param('t' + t + '_l' + lane + '_repeat_state');
-    if (!raw) return;
-    const v = raw.split(' ');
-    if (v.length < 18) return;
-    S.drumRepeatGate[t][lane] = parseInt(v[0], 10) & 0xFF;
-    for (let s = 0; s < 8; s++) S.drumRepeatVelScale[t][lane][s] = parseInt(v[1 + s], 10) | 0;
-    for (let s = 0; s < 8; s++) S.drumRepeatNudge[t][lane][s]    = parseInt(v[9 + s], 10) | 0;
-    if (v.length >= 19) S.drumRepeatGateLen[t][lane] = parseInt(v[18], 10) || 8;
+    refreshDrumLaneBankParamsFromDsp(S, {
+        host_module_get_param: typeof host_module_get_param === 'function' ? host_module_get_param : undefined,
+        TPS_VALUES
+    }, t, lane);
 }
 
 /* Full drum-track resync after track switches. Side-button selection,
@@ -2342,68 +2298,11 @@ function resyncDrumTrack(t) {
 }
 
 function refreshPerClipBankParams(t) {
-    if (typeof host_module_get_param !== 'function') return;
-    if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-        refreshDrumLaneBankParams(t, S.activeDrumLane[t]);
-        return;
-    }
-    const ac   = S.trackActiveClip[t];
-    const snap = host_module_get_param('t' + t + '_c' + ac + '_pfx_snapshot');
-    if (!snap) return;
-    const v = snap.split(' ');
-    if (v.length < 17) return;
-    /* NOTE FX bank (1): K1=Oct K2=Ofs K3=Vel K4=Qnt K5=Len K6=Gate K7=blocked K8=Rnd
-     * (DSP snapshot still emits v[] in original order oct/ofs/gate/vel/qnt + rnd at v[31].) */
-    S.bankParams[t][1][0] = parseInt(v[0], 10) | 0;  /* K1 = Oct */
-    S.bankParams[t][1][1] = parseInt(v[1], 10) | 0;  /* K2 = Ofs */
-    S.bankParams[t][1][2] = parseInt(v[3], 10) | 0;  /* K3 = Vel */
-    S.bankParams[t][1][3] = parseInt(v[4], 10) | 0;  /* K4 = Qnt */
-    /* K5 = Len mode at v[43] (appended after seq_arp_step_loop_len at v[42]) */
-    S.bankParams[t][1][4] = v.length >= 44 ? (parseInt(v[43], 10) | 0) : 0;
-    S.bankParams[t][1][5] = parseInt(v[2], 10) | 0;  /* K6 = Gate */
-    /* K7 (idx 6) = blocked — leave at 0 */
-    /* NOTE FX random + modes packed at v[31..33] (right after step_vel[0..7] = v[23..30]) */
-    S.bankParams[t][1][7] = v.length >= 32 ? (parseInt(v[31], 10) | 0) : 0; /* K8 = Rnd */
-    S.noteFXRandomMode[t]  = v.length >= 33 ? (parseInt(v[32], 10) | 0) : 2;
-    S.midiDlyRandomMode[t] = v.length >= 34 ? (parseInt(v[33], 10) | 0) : 2;
-    /* HARMZ bank (2): K0=oct K1=hrm1 K2=hrm2 K3=hrm3 (Unis retired in state v=33) */
-    for (let k = 0; k < 4; k++) S.bankParams[t][2][k] = parseInt(v[5 + k], 10) | 0;
-    /* MIDI DLY bank (3): K0=dly K1=lvl K2=rep K3=vfb K4=pfb K5=gfb K6=retrg K7=rnd
-     * (delay_clock_fb moved to Shift+K1 alt — read separately via tN_delay_clock_fb). */
-    for (let k = 0; k < 8; k++) S.bankParams[t][3][k] = parseInt(v[9 + k], 10) | 0;
-    /* SEQ ARP bank (4): K0=style K1=rate K2=oct K3=gate K4=steps K5=retrigger (length-aware) */
-    if (v.length >= 23) {
-        for (let k = 0; k < 6; k++) S.bankParams[t][4][k] = parseInt(v[17 + k], 10) | 0;
-    }
-    /* step_vel[0..7] when present (length-aware) */
-    if (v.length >= 31) {
-        for (let s = 0; s < 8; s++) S.seqArpStepVel[t][ac][s] = parseInt(v[23 + s], 10) | 0;
-    }
-    /* step_int[0..7] at v[34..41] (scale-degree offsets for Arp Steps interval mode) */
-    if (v.length >= 42) {
-        for (let s = 0; s < 8; s++) S.seqArpStepInt[t][ac][s] = parseInt(v[34 + s], 10) | 0;
-    }
-    /* step_loop_len at v[42] (1..8) */
-    if (v.length >= 43) {
-        const _ll = parseInt(v[42], 10) | 0;
-        S.seqArpStepLoopLen[t][ac] = (_ll >= 1 && _ll <= 8) ? _ll : 8;
-    }
-    /* CLIP bank (0): Res (K1=idx0), Dir (K7=idx6), SqFl (K8=idx7) — all per-clip. */
-    const tps    = S.clipTPS[t][ac] || 24;
-    const tpsIdx = TPS_VALUES.indexOf(tps);
-    S.bankParams[t][0][0] = tpsIdx >= 0 ? tpsIdx : 1;
-    {
-        const _pd = host_module_get_param('t' + t + '_clip_playback_dir');
-        const _pdv = parseInt(_pd, 10);
-        const _pdvi = (isFinite(_pdv) && _pdv >= 0 && _pdv <= 3) ? _pdv : 0;
-        S.clipPlaybackDir[t][ac] = _pdvi;
-        S.bankParams[t][0][6] = _pdvi;
-        const _par = host_module_get_param('t' + t + '_clip_playback_audio_reverse');
-        const _parv = parseInt(_par, 10);
-        S.clipPlaybackAudioReverse[t][ac] = (isFinite(_parv) && _parv === 1) ? 1 : 0;
-    }
-    S.bankParams[t][0][7] = S.clipSeqFollow[t][ac] ? 1 : 0;
-    S.screenDirty = true;
+    refreshPerClipBankParamsFromDsp(S, {
+        host_module_get_param: typeof host_module_get_param === 'function' ? host_module_get_param : undefined,
+        PAD_MODE_DRUM,
+        TPS_VALUES
+    }, t);
 }
 
 /* Read TRACK ARP step_vel[8] from DSP for track t. Called on init and track switch. */
