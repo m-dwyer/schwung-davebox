@@ -185,6 +185,9 @@ import {
     handleUiSceneNavButton
 } from './ui_navigation_cc_workflow.mjs';
 import {
+    handleUiCaptureButton
+} from './ui_button_cc_workflow.mjs';
+import {
     renderTrackStepEditView
 } from './ui_step_edit_render.mjs';
 import {
@@ -5748,51 +5751,10 @@ function _onCC_buttons(d1, d2) {
         computePadNoteMap();
     }
 
-    if (d1 === MoveCapture) {
-        if (d2 === 127) {
-            S.captureHeld           = true;
-            S.captureUsedAsModifier = false;
-            /* Press also cancels in-flight dialogs/pickers/merge — symmetric
-             * with Sample's press behavior. */
-            if (S.pendingSceneBakePicker) { S.pendingSceneBakePicker = false; S.captureUsedAsModifier = true; }
-            if (S.pendingMergePlacement)  {
-                S.pendingMergePlacement = false;
-                S.captureUsedAsModifier = true;
-                S.pendingDefaultSetParams.push({ key: 'merge_cancel', val: '1' });
-            }
-            if (S.confirmBake)            { S.confirmBake            = false; S.captureUsedAsModifier = true;
-                                            S.confirmBakeDrumLoopOpen = false; S.confirmBakeWrapPhase = false; }
-            if (S.confirmBakeScene)       { S.confirmBakeScene       = false; S.captureUsedAsModifier = true; }
-            computePadNoteMap();
-            forceRedraw();
-        } else {
-            S.captureHeld = false;
-            /* Bare-tap release: open clip-bake (Track View) or scene-bake picker
-             * (Session View). Suppressed when Capture was used as a modifier
-             * (scene capture via Capture+row, drum-lane select via Capture+pad). */
-            if (!S.captureUsedAsModifier) {
-                if (S.sessionView) {
-                    S.pendingSceneBakePicker = true;
-                    S.screenDirty = true;
-                } else {
-                    const _bt = S.activeTrack, _bc = S.trackActiveClip[_bt];
-                    const _isDrum = S.trackPadMode[_bt] === PAD_MODE_DRUM;
-                    S.confirmBake             = true;
-                    S.confirmBakeIsDrum       = _isDrum;
-                    S.confirmBakeIsMultiLoop  = !_isDrum;
-                    S.confirmBakeSel          = _isDrum ? 2 : 1;
-                    S.confirmBakeTrack        = _bt;
-                    S.confirmBakeClip         = _bc;
-                    S.confirmBakeDrumLoopOpen = false;
-                    S.confirmBakeWrapPhase    = false;
-                    S.screenDirty             = true;
-                }
-            }
-            computePadNoteMap();
-            forceRedraw();
-        }
-        return;
-    }
+    /* Capture: press tracks held + cancels dialogs/pickers/merge; bare-tap
+     * release opens the scene-bake picker (Session) or clip-bake confirm (Track). */
+    handleUiCaptureButton(S, createButtonCcWorkflowDeps(), d1, d2);
+    if (d1 === MoveCapture) return;
 
     /* Move's Menu button (CC 50) is in CORUN_KEEP_DEFAULT so the shim routes
      * it to us during co-run. Charles's framework reserves Back as the
@@ -7359,6 +7321,15 @@ function createTransportCcWorkflowDeps() {
         unlatchAllTracks: function () {
             return unlatchAllTracks(S, NUM_TRACKS);
         }
+    };
+}
+
+function createButtonCcWorkflowDeps() {
+    return {
+        computePadNoteMap,
+        forceRedraw,
+        moveCapture: MoveCapture,
+        padModeDrum: PAD_MODE_DRUM
     };
 }
 
