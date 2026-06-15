@@ -143,6 +143,7 @@ import {
     unlatchAllTracks
 } from './ui_latch_workflows.mjs';
 import {
+    readDrumActiveLaneFromDsp,
     readTargetedClipRestorePairFromDsp
 } from './ui_clip_track_sync.mjs';
 import {
@@ -5192,10 +5193,12 @@ function syncClipsFromDsp() {
         readDrumRepeatRates(t);
         /* Drum track: sync clip content flags and active lane data */
         if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-            syncDrumClipContent(t);
-            syncDrumLanesMeta(t);
-            syncDrumLaneSteps(t, S.activeDrumLane[t]);
-            refreshDrumLaneBankParams(t, S.activeDrumLane[t]);
+            readDrumActiveLaneFromDsp(S, {
+                syncDrumClipContent,
+                syncDrumLanesMeta,
+                syncDrumLaneSteps,
+                refreshDrumLaneBankParams
+            }, t);
         }
         /* Clamp the visible page into the (possibly non-zero) window so that
          * the step LEDs aren't stuck at absolute page 0 on session load when
@@ -5273,11 +5276,15 @@ function syncClipsTargeted(infoStr) {
         i += 2;
         if (rowIdx < 0 || rowIdx >= NUM_CLIPS) continue;
         for (let t2 = 0; t2 < NUM_TRACKS; t2++) {
-            syncDrumClipContent(t2);
             if (rowIdx === S.trackActiveClip[t2]) {
-                syncDrumLanesMeta(t2);
-                syncDrumLaneSteps(t2, S.activeDrumLane[t2]);
-                refreshDrumLaneBankParams(t2, S.activeDrumLane[t2]);
+                readDrumActiveLaneFromDsp(S, {
+                    syncDrumClipContent,
+                    syncDrumLanesMeta,
+                    syncDrumLaneSteps,
+                    refreshDrumLaneBankParams
+                }, t2);
+            } else {
+                syncDrumClipContent(t2);
             }
         }
     }
