@@ -128,6 +128,7 @@ import {
     renderShiftStepHelp
 } from './ui_prompt_render.mjs';
 import {
+    renderBakeConfirm,
     renderClearAutomationMenu,
     renderInheritPicker,
     renderLgtoConfirm,
@@ -1604,64 +1605,16 @@ function drawLgtoConfirm() {
 }
 
 function drawBakeConfirm() {
-    clear_screen();
-    function _btn(x, y, w, h, sel, label, labelOff) {
-        if (sel) {
-            fill_rect(x, y, w, h, 1);
-            print(x + labelOff, y + 3, label, 0);
-        } else {
-            fill_rect(x, y, w, 1, 1);
-            fill_rect(x, y + h - 1, w, 1, 1);
-            fill_rect(x, y, 1, h, 1);
-            fill_rect(x + w - 1, y, 1, h, 1);
-            print(x + labelOff, y + 3, label, 1);
-        }
-    }
-    if (S.confirmBakeWrapPhase) {
-        drawMenuHeader('WRAP TAILS?');
-        print(4, 16, 'Wrap delay echoes', 1);
-        print(4, 25, 'past clip end back', 1);
-        print(4, 34, 'to the beginning?', 1);
-        const bW = 38, bH = 13, bY = 50;
-        _btn(4,  bY, bW, bH, S.confirmBakeWrapSel === 0, 'YES',    9);
-        _btn(45, bY, bW, bH, S.confirmBakeWrapSel === 1, 'NO',    14);
-        _btn(86, bY, bW, bH, S.confirmBakeWrapSel === 2, 'CANCEL', 1);
-    } else if (S.confirmBakeIsMultiLoop) {
-        drawMenuHeader('BAKE FX?');
-        print(4, 14, 'Bake N loops of FX', 1);
-        print(4, 23, 'chain to clip?', 1);
-        const bH = 12, bY = 38;
-        _btn(2,  bY, 27, bH, S.confirmBakeSel === 1, '1x',     9);
-        _btn(31, bY, 27, bH, S.confirmBakeSel === 2, '2x',     9);
-        _btn(60, bY, 27, bH, S.confirmBakeSel === 3, '4x',     9);
-        _btn(89, bY, 37, bH, S.confirmBakeSel === 0, 'CANCEL', 3);
-    } else if (!S.confirmBakeIsDrum) {
-        drawMenuHeader('BAKE FX?');
-        print(4, 16, 'Apply effects chain', 1);
-        print(4, 25, 'to clip notes and', 1);
-        print(4, 34, 'clear the settings.', 1);
-        _btn(6,  46, 46, 13, S.confirmBakeSel === 1, 'No',  17);
-        _btn(74, 46, 46, 13, S.confirmBakeSel === 0, 'Yes', 14);
-    } else if (S.confirmBakeDrumLoopOpen) {
-        /* Step 2: loop count selection */
-        const modeLabel = S.confirmBakeDrumMode === 1 ? 'LANE' : 'CLIP';
-        drawMenuHeader('BAKE DRUMS?');
-        print(4, 13, modeLabel + ' — loop count:', 1);
-        const mH = 11;
-        _btn(14, 33, 100, mH, S.confirmBakeDrumLoopSel === 0, 'CANCEL', 31);
-        _btn(4,  47, 36,  mH, S.confirmBakeDrumLoopSel === 1, '1x', 12);
-        _btn(46, 47, 36,  mH, S.confirmBakeDrumLoopSel === 2, '2x', 12);
-        _btn(88, 47, 36,  mH, S.confirmBakeDrumLoopSel === 3, '4x', 12);
-    } else {
-        drawMenuHeader('BAKE DRUMS?');
-        print(4, 16, 'Bake FX to clip', 1);
-        print(4, 25, '(all lanes) or lane?', 1);
-        /* 3 buttons: CLIP(0) | LANE(1) | CANCEL(2, default) */
-        const bW = 38, bH = 13, bY = 50;
-        _btn(4,  bY, bW, bH, S.confirmBakeSel === 0, 'CLIP',   7);
-        _btn(45, bY, bW, bH, S.confirmBakeSel === 1, 'LANE',   7);
-        _btn(86, bY, bW, bH, S.confirmBakeSel === 2, 'CANCEL', 1);
-    }
+    renderBakeConfirm(createModalRenderDeps(), {
+        wrapPhase: S.confirmBakeWrapPhase,
+        wrapSel: S.confirmBakeWrapSel,
+        isMultiLoop: S.confirmBakeIsMultiLoop,
+        isDrum: S.confirmBakeIsDrum,
+        drumLoopOpen: S.confirmBakeDrumLoopOpen,
+        drumMode: S.confirmBakeDrumMode,
+        drumLoopSel: S.confirmBakeDrumLoopSel,
+        sel: S.confirmBakeSel
+    });
 }
 
 

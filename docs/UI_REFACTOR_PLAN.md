@@ -842,6 +842,11 @@ Drum repeat workflows:
   `ui.js`.
 - Extended focused modal output coverage for simple confirm title/body text and
   selected button inversion.
+- Continued the modal presentation path by moving `drawBakeConfirm()` into
+  `ui/ui_modal_render.mjs`. Kept bake target selection, commit/cancel handling,
+  and DSP/deferred write behavior in `ui.js`.
+- Extended focused modal output coverage for bake wrap tails, multi-loop,
+  melodic confirm, drum clip/lane choice, and drum loop-count subviews.
 
 Verification:
 
