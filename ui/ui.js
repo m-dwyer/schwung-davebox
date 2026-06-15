@@ -143,6 +143,9 @@ import {
     unlatchAllTracks
 } from './ui_latch_workflows.mjs';
 import {
+    readMelodicClipFromDsp
+} from './ui_clip_track_sync.mjs';
+import {
     runDefaultSetParamDrain,
     runDeferredContentResyncTasks,
     runDeferredLaneEditReadbackTasks,
@@ -5257,20 +5260,16 @@ function syncClipsTargeted(infoStr) {
             syncDrumLaneSteps(t, S.activeDrumLane[t]);
             refreshDrumLaneBankParams(t, S.activeDrumLane[t]);
         } else {
-            const bulk = host_module_get_param('t' + t + '_c' + c + '_steps');
-            if (bulk && bulk.length >= NUM_STEPS) {
-                for (let s = 0; s < NUM_STEPS; s++)
-                    S.clipSteps[t][c][s] = bulk[s] === '1' ? 1 : 0;
-                S.clipNonEmpty[t][c] = clipHasContent(t, c);
-            }
-            const len = host_module_get_param('t' + t + '_c' + c + '_length');
-            if (len !== null && len !== undefined) S.clipLength[t][c] = parseInt(len, 10) || 16;
-            const tpsRaw = host_module_get_param('t' + t + '_c' + c + '_tps');
-            if (tpsRaw !== null && tpsRaw !== undefined) {
-                const tpsVal = parseInt(tpsRaw, 10);
-                S.clipTPS[t][c] = TPS_VALUES.indexOf(tpsVal) >= 0 ? tpsVal : 24;
-            }
-            if (c === S.trackActiveClip[t]) refreshPerClipBankParams(t);
+            readMelodicClipFromDsp(S, {
+                host_module_get_param,
+                NUM_STEPS,
+                TPS_VALUES,
+                clipHasContent,
+                refreshPerClipBankParams
+            }, t, c, {
+                preserveInactiveSteps: false,
+                refreshActiveBankParams: true
+            });
         }
         const _abits = host_module_get_param('t' + t + '_c' + c + '_cc_auto_bits');
         S.trackCCAutoBits[t][c] = _abits !== null ? (parseInt(_abits, 10) || 0) : 0;

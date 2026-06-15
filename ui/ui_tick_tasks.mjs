@@ -1,22 +1,10 @@
-function rereadMelodicClip(S, deps, track, clip) {
-    const bulk = deps.host_module_get_param('t' + track + '_c' + clip + '_steps');
-    if (bulk && bulk.length >= deps.NUM_STEPS) {
-        for (let rs = 0; rs < deps.NUM_STEPS; rs++)
-            S.clipSteps[track][clip][rs] = bulk[rs] === '1' ? 1 : (bulk[rs] === '2' ? 2 : 0);
-        S.clipNonEmpty[track][clip] = deps.clipHasContent(track, clip);
-    }
-    const len = deps.host_module_get_param('t' + track + '_c' + clip + '_length');
-    if (len !== null && len !== undefined) S.clipLength[track][clip] = parseInt(len, 10) || 16;
-    const tps = deps.host_module_get_param('t' + track + '_c' + clip + '_tps');
-    if (tps !== null && tps !== undefined) {
-        const tv = parseInt(tps, 10);
-        S.clipTPS[track][clip] = deps.TPS_VALUES.indexOf(tv) >= 0 ? tv : 24;
-    }
-}
+import { readMelodicClipFromDsp } from './ui_clip_track_sync.mjs';
 
 function resyncMelodicClipReadback(S, deps, track, clip) {
-    rereadMelodicClip(S, deps, track, clip);
-    if (clip === S.trackActiveClip[track]) deps.refreshPerClipBankParams(track);
+    readMelodicClipFromDsp(S, deps, track, clip, {
+        preserveInactiveSteps: true,
+        refreshActiveBankParams: true
+    });
 }
 
 export function runLiveNoteDrain(S, deps) {
