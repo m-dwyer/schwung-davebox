@@ -413,10 +413,10 @@ Target model:
   and repeat-groove behavior.
 - `ui/ui_latch_workflows.mjs`: universal latch sweeps shared across transport
   stop, Delete+Play, and workflows that clear latched musical intent.
-- Future `ui_clip_track_sync.mjs` or equivalent: track, clip, drum lane, and
-  sidecar mirror reads from DSP. This module now has enough pressure to earn its
-  seam: deferred tick readbacks, undo/redo targeted sync, full state-load sync,
-  sidecar restore, and track conversion all need overlapping mirror behavior.
+- `ui/ui_clip_track_sync.mjs`: track, clip, drum lane, and sidecar mirror reads
+  from DSP. This module has earned its seam: deferred tick readbacks, undo/redo
+  targeted sync, full state-load sync, sidecar restore, and track conversion all
+  need overlapping mirror behavior.
 
 Important architectural invariants:
 
@@ -435,7 +435,53 @@ Important architectural invariants:
 - Patched Schwung capability gates must remain runtime-gated. Stock Schwung
   fallback behavior must keep working.
 
-## Next Recommended Slice
+## Refactor Pace And Risk
+
+Use two refactor speeds instead of treating all of `ui.js` the same.
+
+Slow path: use small slices with exact ordering tests for runtime behavior whose
+bugs are subtle or hardware-dependent. This includes DSP mirror reads, tick
+pipeline work, deferred queues, pad input, bank writes, track conversion, and
+anything that touches `pendingDefaultSetParams`, `host_module_set_param()`, or
+`shadow_send_midi_to_dsp()`. Preserve caller timing and wrappers until the
+module interface has clearly earned more ownership.
+
+Faster path: allow larger extractions for lower-risk presentation code where
+the main failure mode is visual or structural rather than DSP state corruption.
+This includes view-model construction, display rendering branches, labels,
+menu/modal presentation helpers, and repeated UI formatting code. These slices
+should still follow runtime concepts, but they can be broader when tests or
+render-output checks cover the behavior.
+
+Do not chase line count by creating generic helper/pass-through modules. A
+smaller `ui.js` is only an improvement when the extracted module hides a real
+runtime concept, invariant, or presentation boundary. The practical balance is:
+
+- keep the deletion test strict for DSP/tick/write/input paths;
+- move read-only DSP mirror code in narrow, testable slices;
+- use larger slices to remove view/render/modal bulk once the target boundary is
+  clear;
+- leave mixed read/write areas such as `readBankParams()` in `ui.js` until the
+  pure mirror and deferred-write responsibilities can be separated cleanly.
+
+## Current Next Direction
+
+The Track / Clip Sync module is now established. Continue it only with narrow
+read-only mirror moves whose deletion test holds. Good immediate candidates are:
+
+- `readTarpStepVel(t)` as `readTrackArpStepConfigFromDsp(S, deps, track)`;
+- `readDrumRepeatRates(t)` as `readDrumRepeatRatesFromDsp(S, deps, track)`.
+
+Both candidates are bounded DSP readbacks used by full sync. Preserve read
+ordering and fallback behavior exactly, keep existing `ui.js` wrappers/caller
+timing, and add focused tests in `web/tests/integration/clip-track-sync.test.ts`.
+
+After one or two more low-risk mirror slices, consider switching to the faster
+path for larger `ui.js` reduction: inspect view/render or modal-presentation
+regions and extract a cohesive display boundary with output-focused tests.
+Avoid broadening the sync module into a generic bank service.
+
+## Track / Clip Sync Slice History
 
 Highest-value next refactor: start the Track / Clip Sync module by moving shared
 DSP mirror readback behavior out of `ui.js` and `ui_tick_tasks.mjs` into
