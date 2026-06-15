@@ -547,6 +547,12 @@ Drum repeat workflows:
   `ui_drum_repeat_workflows.mjs`, with right-grid release coverage moved to the
   public repeat pad-release router, and the workflow adapters in `ui.js` now
   share one private optional host `set_param` adapter helper.
+- Continued Candidate 1 with a small tick/DSP mirror cleanup: moved the
+  drum-repeat recording active-lane refresh into `ui_tick_tasks.mjs` as
+  `runRepeatRecordingLaneRefreshTask()`, preserving its position after deferred
+  content resync drains and keeping repeat pad routing/lane workflows unchanged.
+- Added focused coverage in `web/tests/integration/tick-tasks.test.ts` for the
+  active repeat-recording refresh and its record/play/session/drum/repeat gates.
 
 Verification:
 

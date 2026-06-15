@@ -151,7 +151,8 @@ import {
     runLiveNoteDrain,
     runMetroNoteOffTask,
     runMoveCoRunTickTasks,
-    runPadMapSelfHealTask
+    runPadMapSelfHealTask,
+    runRepeatRecordingLaneRefreshTask
 } from './ui_tick_tasks.mjs';
 
 /* ------------------------------------------------------------------ */
@@ -5856,13 +5857,11 @@ function _tickImpl() {
      * needed. The pendingClearLengthTrack/Clip fields are kept in ui_state
      * defaults (-1) but no setter remains. */
 
-    /* Refresh step LEDs while drum repeat is recording into the active lane */
-    if (S.recordArmed && S.playing && !S.sessionView &&
-            S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM &&
-            (S.drumRepeatHeldPad[S.activeTrack] >= 0 || S.drumRepeat2HeldLanes[S.activeTrack].size > 0 || S.drumRepeat2LatchedLanes[S.activeTrack].size > 0)) {
-        syncDrumLaneSteps(S.activeTrack, S.activeDrumLane[S.activeTrack]);
-        forceRedraw();
-    }
+    runRepeatRecordingLaneRefreshTask(S, {
+        PAD_MODE_DRUM,
+        syncDrumLaneSteps,
+        forceRedraw
+    });
 
     /* Real-time preview while editing any global menu parameter.
      * Only send set_param when the edit value actually changes — avoids flooding

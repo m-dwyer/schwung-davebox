@@ -207,6 +207,20 @@ export function runDeferredContentResyncTasks(S, deps) {
     }
 }
 
+export function runRepeatRecordingLaneRefreshTask(S, deps) {
+    if (!S.recordArmed || !S.playing || S.sessionView) return false;
+    const track = S.activeTrack;
+    if (S.trackPadMode[track] !== deps.PAD_MODE_DRUM) return false;
+    if (S.drumRepeatHeldPad[track] < 0 &&
+            S.drumRepeat2HeldLanes[track].size === 0 &&
+            S.drumRepeat2LatchedLanes[track].size === 0)
+        return false;
+
+    deps.syncDrumLaneSteps(track, S.activeDrumLane[track]);
+    deps.forceRedraw();
+    return true;
+}
+
 export function runEndOfTickPersistenceTasks(S, deps) {
     /* Suspend save: fires last so no subsequent set_param can overwrite it.
      * Quit/Shift+Back use the else-if branches below so the exit/hide call
