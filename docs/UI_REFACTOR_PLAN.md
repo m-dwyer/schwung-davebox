@@ -414,8 +414,9 @@ Target model:
 - `ui/ui_latch_workflows.mjs`: universal latch sweeps shared across transport
   stop, Delete+Play, and workflows that clear latched musical intent.
 - Future `ui_clip_track_sync.mjs` or equivalent: track, clip, drum lane, and
-  sidecar mirror reads from DSP. This should only be introduced once two or more
-  tick/workflow call paths benefit from the same sync interface.
+  sidecar mirror reads from DSP. This module now has enough pressure to earn its
+  seam: deferred tick readbacks, undo/redo targeted sync, full state-load sync,
+  sidecar restore, and track conversion all need overlapping mirror behavior.
 
 Important architectural invariants:
 
@@ -436,62 +437,84 @@ Important architectural invariants:
 
 ## Next Recommended Slice
 
-Highest-value next refactor: deepen the Tick / DSP Mirror module into an
-explicit tick pipeline owner, starting with DSP hot-reload and pending state-load
-resync.
+Highest-value next refactor: start the Track / Clip Sync module by moving shared
+DSP mirror readback behavior out of `ui.js` and `ui_tick_tasks.mjs` into
+`ui/ui_clip_track_sync.mjs`.
 
 Why this slice:
 
-- `_tickImpl()` is the architectural spine of the UI. It currently contains
-  unrelated-looking blocks whose ordering encodes the dAVEBOx runtime model.
-- `ui_tick_tasks.mjs` already has useful extracted functions, but the tick
-  ordering interface is still shallow: readers must understand `_tickImpl()` to
-  reason about DSP mirror freshness, state-load settle, and redraw invalidation.
-- DSP hot-reload and pending state-load resync are cohesive: both rebuild JS
-  mirrors from DSP, recompute pad maps, invalidate LEDs, and force redraw, but
-  they differ in sidecar restore and `stateLoading` behavior.
+- `ui.js` is still large partly because it owns DSP mirror knowledge in several
+  places: `restoreUiSidecar()`, `syncClipsFromDsp()`, `syncClipsTargeted()`,
+  track conversion, and session/clip workflows.
+- `ui_tick_tasks.mjs` now has deferred melodic readback behavior that overlaps
+  with `syncClipsTargeted()`. Keeping the same readback rules in both places
+  weakens locality.
+- The important concept is not "clip helper functions"; it is "JS mirrors DSP
+  track/clip state now". That seam has leverage across hot reload, state load,
+  undo/redo, scene bake, targeted step reread, sidecar restore, and track-type
+  conversion.
+- A sync module gives later tick-pipeline work a smaller adapter: tick tasks can
+  ask for mirror operations instead of carrying every low-level DSP key shape.
 
 Suggested implementation:
 
-1. Add focused tests in `web/tests/integration/tick-tasks.test.ts` for a new
-   tick-task function, likely `runDspMirrorResyncTasks(S, deps)`.
-2. Move only these `_tickImpl()` blocks into `ui_tick_tasks.mjs`, preserving
-   their exact position after `runDefaultSetParamDrain()` and before
-   `runMoveCoRunTickTasks()`:
-   - DSP hot-reload detection via `instance_id`;
-   - deferred state-load resync via `pendingDspSync`.
-3. Keep the function interface narrow and explicit. The deps adapter should
-   expose only the existing operations needed by those blocks: `pollDSP`,
-   `syncClipsFromDsp`, `syncMuteSoloFromDsp`, `restoreUiSidecar`,
-   `computePadNoteMap`, `invalidateLEDCache`, `forceRedraw`,
-   `host_module_get_param`, and `host_module_set_param`.
-4. Preserve behavior exactly:
-   - hot-reload polls every 100 ticks and requires both host get/set functions;
-   - hot-reload does not call `restoreUiSidecar(true)` and does not clear
-     `stateLoading`;
-   - pending DSP sync decrements first and fires only when it reaches zero;
-   - pending DSP sync calls `restoreUiSidecar(true)` and clears
-     `S.stateLoading`;
-   - both paths refresh `trackCurrentPage` from `trackCurrentStep`, sync clips,
-     sync mute/solo, recompute the pad map, invalidate LED cache, and redraw;
-   - `S.lastDspInstanceId` update behavior remains unchanged.
-5. After this slice, consider extracting the repeated "refresh mirrors from DSP"
-   implementation behind a private helper inside `ui_tick_tasks.mjs` only if the
-   tests show the interface remains simpler than the duplicated implementation.
+1. Add focused tests in `web/tests/integration/clip-track-sync.test.ts` or keep
+   the first tests in `tick-tasks.test.ts` if the module is initially exercised
+   only through deferred tick readbacks.
+2. Add `ui/ui_clip_track_sync.mjs` and register it in `scripts/bundle_ui.py`.
+3. Move only the shared melodic clip readback first. It should preserve the
+   current behavior from `ui_tick_tasks.mjs` and `syncClipsTargeted()`:
+   - read `t${track}_c${clip}_steps`;
+   - update `S.clipSteps` using the existing `1`/`2`/empty mapping where that
+     path currently supports it;
+   - recompute `S.clipNonEmpty` via `clipHasContent(track, clip)`;
+   - read and parse clip length;
+   - read and validate TPS through `TPS_VALUES`, falling back to `24`;
+   - refresh per-clip bank params only when the read clip is active and the
+     caller currently does so.
+4. Use the new helper from `runDeferredContentResyncTasks()` and
+   `syncClipsTargeted()` without changing their external behavior. Keep
+   `runDeferredContentResyncTasks()` ordering exactly as-is.
+5. Only after the first slice is proven, consider moving adjacent sync behavior:
+   targeted CC automation readback, aftertouch presence, full melodic clip sync,
+   drum clip/lane sync, and sidecar restore defaults. Do not combine these into
+   the first extraction.
+6. Keep the interface narrow and explicit. Prefer a small host adapter containing
+   `host_module_get_param`, `NUM_STEPS`, `TPS_VALUES`, `clipHasContent`, and
+   optionally `refreshPerClipBankParams`. Avoid passing general UI operations
+   such as `forceRedraw`; callers should keep redraw timing at their current
+   tick/workflow seam.
+7. Preserve behavior exactly:
+   - `get_param` use remains in tick/render-safe paths only;
+   - scene-bake, pending-step reread, and undo/redo ordering do not change;
+   - active-clip bank refresh happens in the same places as today;
+   - drum lane resync ordering remains inside deferred content resync;
+   - `pendingDefaultSetParams` ordering is untouched.
 
 Suggested focused tests:
 
-- Hot-reload resync fires only on the 100-tick cadence, only when
-  `instance_id` changes from a non-empty previous ID, and updates
-  `S.lastDspInstanceId`.
-- Hot-reload calls `pollDSP`, page recompute, clip sync, mute/solo sync,
-  padmap recompute, LED invalidation, and redraw in the current order.
-- Hot-reload does not call `restoreUiSidecar(true)` and does not clear
-  `S.stateLoading`.
-- Pending DSP sync decrements from `1` to `0`, then performs the full resync,
-  calls `restoreUiSidecar(true)`, clears `S.stateLoading`, and redraws.
-- Pending DSP sync with value greater than `1` only decrements and performs no
-  sync work.
+- Shared melodic readback updates steps, `clipNonEmpty`, length, and TPS with
+  the same fallback behavior as today.
+- Active-clip readback refreshes per-clip bank params; inactive-clip readback
+  does not.
+- `pendingStepsReread` and `pendingSceneBakeResync` keep their current call
+  ordering, including redraw timing.
+- `syncClipsTargeted()` keeps fallback-to-full-sync behavior for missing or
+  malformed restore info.
+- Targeted undo/redo sync keeps CC automation and aftertouch readback behavior
+  unchanged if those reads remain in `ui.js` during the first slice.
+
+After this slice:
+
+- Continue deepening `ui_clip_track_sync.mjs` only where two or more call paths
+  benefit. The deletion test should hold: deleting the module should push DSP
+  key-shape and mirror-update rules back into multiple callers.
+- Once clip/track sync has a useful interface, revisit `ui_tick_tasks.mjs` and
+  consider an explicit tick phase runner. Do not create a broad tick runner
+  while its adapter would still need to expose most of `ui.js`.
+- The next large line-count candidate after sync is the Parameter Bank module:
+  `readBankParams()`, `readTrackConfig()`, `applyBankParam()`, and the knob
+  handler. Start with read-only bank mirrors before moving knob edit behavior.
 
 ## Progress Log
 
@@ -666,6 +689,12 @@ Drum repeat workflows:
 - Added focused coverage in `web/tests/integration/tick-tasks.test.ts` for
   hot-reload cadence/nonce gates, refresh ordering, sidecar/state-loading
   differences, and pending DSP sync countdown behavior.
+- Extracted a private melodic content readback helper inside
+  `ui_tick_tasks.mjs`, shared by `pendingStepsReread` and
+  `pendingSceneBakeResync`, preserving `runDeferredContentResyncTasks()`
+  ordering and interface.
+- Added focused coverage in `web/tests/integration/tick-tasks.test.ts` for the
+  shared melodic readback behavior across targeted step reread and scene bake.
 
 Verification:
 
