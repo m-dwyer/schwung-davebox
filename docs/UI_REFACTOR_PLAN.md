@@ -1014,6 +1014,14 @@ Drum repeat workflows:
   state, host writes, `effectiveClip()`, `ccKnobDelta()`, `scaleNudgeNote()`,
   `STEP_ITER_LIST`, top-level CC routing, drum held-step knobs, CC-bank
   step-edit, Parameter Bank behavior, and recording behavior.
+- Continued the Track View Step Workflow seam with drum held-step knob handling.
+  Moved K1 gate, K2 velocity, K3 nudge, ignored K4/K8 touch behavior, K5 iter,
+  K6 probability, K7 ratchet, knob touch state, and screen-dirty updates into
+  `handleTrackViewDrumStepKnob()`. Preserved priority by keeping CC-bank
+  step-edit knobs ahead of this handler in `_onCC_stepedit()`. `ui.js` remains
+  the adapter for shared state, host writes, `ccKnobDelta()`,
+  `STEP_ITER_LIST`, top-level CC routing, CC-bank step-edit, Parameter Bank
+  behavior, and recording behavior.
 
 Verification:
 

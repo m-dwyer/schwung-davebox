@@ -186,7 +186,8 @@ import {
     handleTrackViewStepHoldThreshold,
     handleTrackViewChordFirstStepTick,
     handleTrackViewMelodicStepNoteAssignment,
-    handleTrackViewMelodicStepKnob
+    handleTrackViewMelodicStepKnob,
+    handleTrackViewDrumStepKnob
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -6627,77 +6628,7 @@ function _onCC_stepedit(d1, d2) {
         return;
     }
 
-    /* Drum step edit: K1 Leng, K2 Vel, K3 Nudg, K4 —, K5 Iter, K6 Prob, K7 Ratch, K8 — */
-    if (S.heldStep >= 0 && S.heldStepNotes.length > 0 && d1 >= 71 && d1 <= 78 &&
-            S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-        const knobIdx = d1 - 71;
-        const dir     = (d2 >= 1 && d2 <= 63) ? 1 : -1;
-        const t       = S.activeTrack;
-        const lane    = S.activeDrumLane[t];
-        S.knobTouched          = knobIdx;
-        S.knobTurnedTick[knobIdx] = S.tickCount;
-        S.screenDirty = true;
-        if (knobIdx === 3 || knobIdx === 7) return;
-        if (knobIdx === 0) {
-            const _tpsD = S.drumLaneTPS[t] || 24;
-            const _gmaxD = Math.min(65535, 256 * _tpsD);
-            const _acc = ccKnobDelta(d2, knobIdx);
-            if (_acc === 0) return;
-            const _steps = S.stepEditGate / _tpsD;
-            const _inc = _steps <= 16 ? Math.round(_tpsD / 4)
-                       : _steps <= 64 ? _tpsD
-                       :                 _tpsD * 8;
-            let _nv = S.stepEditGate + _acc * _inc;
-            if (_inc > 1) _nv = Math.round(_nv / _inc) * _inc;
-            S.stepEditGate = Math.max(1, Math.min(_gmaxD, _nv));
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_gate', String(S.stepEditGate));
-        } else if (knobIdx === 1) {
-            S.stepEditVel = Math.max(0, Math.min(127, S.stepEditVel + dir));
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_vel', String(S.stepEditVel));
-        } else if (knobIdx === 2) {
-            S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
-            S.knobLastDir[knobIdx] = dir;
-            if (S.knobAccum[knobIdx] >= 8) {
-                S.knobAccum[knobIdx] = 0;
-                const _tpsN1 = (S.drumLaneTPS[t] || 24) - 1;
-                S.stepEditNudge = Math.max(-_tpsN1, Math.min(_tpsN1, S.stepEditNudge + dir));
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_nudge', String(S.stepEditNudge));
-            }
-        } else if (knobIdx === 4) {
-            /* K5 Iter: one entry per detent (no accel — 36-entry list, ~1 turn end-to-end) */
-            S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
-            S.knobLastDir[knobIdx] = dir;
-            if (S.knobAccum[knobIdx] >= 3) {
-                S.knobAccum[knobIdx] = 0;
-                let idx = STEP_ITER_LIST.indexOf(S.stepEditIter);
-                if (idx < 0) idx = 0;
-                idx = Math.max(0, Math.min(STEP_ITER_LIST.length - 1, idx + dir));
-                S.stepEditIter = STEP_ITER_LIST[idx];
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_iter', String(S.stepEditIter));
-            }
-        } else if (knobIdx === 5) {
-            /* K6 Prob: 0..100 with accel */
-            const acc = ccKnobDelta(d2, knobIdx);
-            if (acc !== 0) {
-                S.stepEditRand = Math.max(0, Math.min(100, S.stepEditRand + acc));
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_rand', String(S.stepEditRand));
-            }
-        } else if (knobIdx === 6) {
-            /* K7 Ratch: 0..4, sens=8 (10 detents per step at low gain) */
-            S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
-            S.knobLastDir[knobIdx] = dir;
-            if (S.knobAccum[knobIdx] >= 8) {
-                S.knobAccum[knobIdx] = 0;
-                S.stepEditRatch = Math.max(0, Math.min(4, S.stepEditRatch + dir));
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_ratch', String(S.stepEditRatch));
-            }
-        }
+    if (handleTrackViewDrumStepKnob(S, createTrackViewStepWorkflowDeps(), d1, d2)) {
         return;
     }
     if (handleTrackViewMelodicStepKnob(S, createTrackViewStepWorkflowDeps(), d1, d2)) {

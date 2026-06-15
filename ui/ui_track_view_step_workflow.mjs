@@ -683,3 +683,81 @@ export function handleTrackViewMelodicStepKnob(S, deps, d1, d2) {
 
     return true;
 }
+
+export function handleTrackViewDrumStepKnob(S, deps, d1, d2) {
+    if (S.heldStep < 0 || S.heldStepNotes.length === 0 || d1 < 71 || d1 > 78)
+        return false;
+    if (S.trackPadMode[S.activeTrack] !== deps.padModeDrum)
+        return false;
+
+    const knobIdx = d1 - 71;
+    const dir = (d2 >= 1 && d2 <= 63) ? 1 : -1;
+    const track = S.activeTrack;
+    const lane = S.activeDrumLane[track];
+    const prefix = 't' + track + '_l' + lane + '_step_' + S.heldStep;
+    S.knobTouched = knobIdx;
+    S.knobTurnedTick[knobIdx] = S.tickCount;
+    S.screenDirty = true;
+
+    if (knobIdx === 3 || knobIdx === 7) {
+        return true;
+    } else if (knobIdx === 0) {
+        const tps = S.drumLaneTPS[track] || 24;
+        const gateMax = Math.min(65535, 256 * tps);
+        const acc = deps.ccKnobDelta(d2, knobIdx);
+        if (acc === 0) return true;
+        const steps = S.stepEditGate / tps;
+        const inc = steps <= 16 ? Math.round(tps / 4)
+                  : steps <= 64 ? tps
+                  :               tps * 8;
+        let nextGate = S.stepEditGate + acc * inc;
+        if (inc > 1) nextGate = Math.round(nextGate / inc) * inc;
+        S.stepEditGate = Math.max(1, Math.min(gateMax, nextGate));
+        if (deps.setParam)
+            deps.setParam(prefix + '_gate', String(S.stepEditGate));
+    } else if (knobIdx === 1) {
+        S.stepEditVel = Math.max(0, Math.min(127, S.stepEditVel + dir));
+        if (deps.setParam)
+            deps.setParam(prefix + '_vel', String(S.stepEditVel));
+    } else if (knobIdx === 2) {
+        S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
+        S.knobLastDir[knobIdx] = dir;
+        if (S.knobAccum[knobIdx] >= 8) {
+            S.knobAccum[knobIdx] = 0;
+            const tpsMinusOne = (S.drumLaneTPS[track] || 24) - 1;
+            S.stepEditNudge = Math.max(-tpsMinusOne, Math.min(tpsMinusOne, S.stepEditNudge + dir));
+            if (deps.setParam)
+                deps.setParam(prefix + '_nudge', String(S.stepEditNudge));
+        }
+    } else if (knobIdx === 4) {
+        S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
+        S.knobLastDir[knobIdx] = dir;
+        if (S.knobAccum[knobIdx] >= 3) {
+            S.knobAccum[knobIdx] = 0;
+            let idx = deps.stepIterList.indexOf(S.stepEditIter);
+            if (idx < 0) idx = 0;
+            idx = Math.max(0, Math.min(deps.stepIterList.length - 1, idx + dir));
+            S.stepEditIter = deps.stepIterList[idx];
+            if (deps.setParam)
+                deps.setParam(prefix + '_iter', String(S.stepEditIter));
+        }
+    } else if (knobIdx === 5) {
+        const acc = deps.ccKnobDelta(d2, knobIdx);
+        if (acc !== 0) {
+            S.stepEditRand = Math.max(0, Math.min(100, S.stepEditRand + acc));
+            if (deps.setParam)
+                deps.setParam(prefix + '_rand', String(S.stepEditRand));
+        }
+    } else if (knobIdx === 6) {
+        S.knobAccum[knobIdx] = (dir === S.knobLastDir[knobIdx]) ? S.knobAccum[knobIdx] + 1 : 1;
+        S.knobLastDir[knobIdx] = dir;
+        if (S.knobAccum[knobIdx] >= 8) {
+            S.knobAccum[knobIdx] = 0;
+            S.stepEditRatch = Math.max(0, Math.min(4, S.stepEditRatch + dir));
+            if (deps.setParam)
+                deps.setParam(prefix + '_ratch', String(S.stepEditRatch));
+        }
+    }
+
+    return true;
+}
