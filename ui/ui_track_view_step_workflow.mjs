@@ -206,3 +206,111 @@ export function handleTrackViewDrumStepPress(S, deps, idx) {
 
     return true;
 }
+
+export function handleTrackViewMelodicStepPress(S, deps, idx) {
+    if (S.shiftHeld || S.trackPadMode[S.activeTrack] === deps.padModeDrum)
+        return false;
+
+    S.stepBtnPressedTick[idx] = S.tickCount;
+
+    if (S.heldStep < 0) {
+        const clip = deps.effectiveClip(S.activeTrack);
+        const absStep = S.trackCurrentPage[S.activeTrack] * 16 + idx;
+        S.heldStepBtn = idx;
+        S.heldStep = absStep;
+
+        const stepState = S.clipSteps[S.activeTrack][clip][absStep];
+        if (stepState === 0) {
+            S.stepWasEmpty = true;
+            S.heldStepNotes = [];
+            if (S.activeBank === 6) {
+                S.ccStepEditActive = true;
+            } else {
+                S.stepEditVel = 100;
+                S.stepEditGate = (S.clipTPS[S.activeTrack][clip] || 24);
+                S.stepEditNudge = 0;
+                S.stepEditIter = 0;
+                S.stepEditRand = 0;
+                S.stepEditRatch = 0;
+            }
+        } else {
+            S.stepWasEmpty = false;
+            S.heldStepNotes = [];
+            if (S.activeBank === 6) {
+                S.ccStepEditActive = true;
+            } else {
+                S.stepEditVel = 100;
+                S.stepEditGate = (S.clipTPS[S.activeTrack][clip] || 24);
+                S.stepEditNudge = 0;
+                S.stepEditIter = 0;
+                S.stepEditRand = 0;
+                S.stepEditRatch = 0;
+            }
+        }
+
+        if (S.liveActiveNotes.size > 0 && S.activeBank !== 6) {
+            S.pendingChordToStep = {
+                t: S.activeTrack,
+                ac: clip,
+                step: absStep,
+                wasEmpty: stepState === 0,
+                pitches: [...S.liveActiveNotes].sort(function(a, b) { return a - b; }),
+                vel: deps.stepEntryVelocity(S.activeTrack, deps.effectiveVelocity(S.lastPadVelocity), false)
+            };
+            S.stepBtnPressedTick[idx] = -1;
+            S.stepWasHeld = true;
+        }
+        deps.forceRedraw();
+    } else if (S.stepBtnPressedTick[S.heldStepBtn] >= 0 && S.activeBank !== 6) {
+        const clip = deps.effectiveClip(S.activeTrack);
+        const absStep = S.trackCurrentPage[S.activeTrack] * 16 + idx;
+        const prefix = 't' + S.activeTrack + '_c' + clip + '_step_' + absStep;
+        const stepState = S.clipSteps[S.activeTrack][clip][absStep];
+        if (stepState === 0) {
+            const assignNote = S.lastPlayedNote >= 0 ? S.lastPlayedNote : -1;
+            if (assignNote >= 0 && deps.setParam) {
+                deps.setParam(prefix + '_toggle', assignNote + ' ' + deps.stepEntryVelocity(S.activeTrack, -1, false));
+                S.clipSteps[S.activeTrack][clip][absStep] = 1;
+                S.clipNonEmpty[S.activeTrack][clip] = true;
+                deps.refreshSeqNotesIfCurrent(S.activeTrack, clip, absStep);
+            }
+        } else if (stepState === 1) {
+            if (deps.setParam)
+                deps.setParam(prefix, '0');
+            S.clipSteps[S.activeTrack][clip][absStep] = 2;
+            if (S.clipNonEmpty[S.activeTrack][clip])
+                S.clipNonEmpty[S.activeTrack][clip] = deps.clipHasContent(S.activeTrack, clip);
+            deps.refreshSeqNotesIfCurrent(S.activeTrack, clip, absStep);
+        } else {
+            if (deps.setParam)
+                deps.setParam(prefix, '1');
+            S.clipSteps[S.activeTrack][clip][absStep] = 1;
+            S.clipNonEmpty[S.activeTrack][clip] = true;
+            deps.refreshSeqNotesIfCurrent(S.activeTrack, clip, absStep);
+        }
+        S.stepBtnPressedTick[idx] = -1;
+        deps.forceRedraw();
+    } else if (S.heldStepNotes.length > 0 && S.activeBank !== 6) {
+        S.stepBtnPressedTick[S.heldStepBtn] = -1;
+        S.stepWasHeld = true;
+        const clip = deps.effectiveClip(S.activeTrack);
+        const tappedStep = S.trackCurrentPage[S.activeTrack] * 16 + idx;
+        if (tappedStep !== S.heldStep) {
+            const len = S.clipLength[S.activeTrack][clip];
+            const tps = S.clipTPS[S.activeTrack][clip] || 24;
+            /* Gate extends through the tapped step; repeat tap shrinks to prior span. */
+            const dist = tappedStep > S.heldStep
+                ? tappedStep - S.heldStep + 1
+                : len - S.heldStep + tappedStep + 1;
+            const spanGate = dist * tps;
+            const newGate = Math.max(1, Math.min(
+                S.stepEditGate >= spanGate ? (dist - 1) * tps : spanGate, 65535));
+            if (deps.setParam)
+                deps.setParam('t' + S.activeTrack + '_c' + clip + '_step_' + S.heldStep + '_gate', String(newGate));
+            S.stepEditGate = newGate;
+            deps.forceRedraw();
+        }
+    }
+
+    return true;
+}

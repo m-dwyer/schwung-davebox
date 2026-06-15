@@ -948,6 +948,20 @@ Drum repeat workflows:
   melodic step press/edit, Parameter Bank behavior, recording behavior, Session
   View Performance Mode, modal workflows, and unrelated DSP reads/writes remain
   in `ui.js`.
+- Continued the Track View Step Workflow seam with normal melodic step presses.
+  Moved melodic press-time step edit entry, empty/non-empty state seeding, CC
+  step-edit activation, chord-first capture, tap-window multi-toggle, and
+  held-step gate-span taps into `handleTrackViewMelodicStepPress()`. Preserved
+  `_onStepButtons()` priority: hold-reveal, Session View step behavior, Loop
+  gesture, Copy+step, Delete+step, Mute+step fallthrough, Shift+step, and normal
+  drum step handling all remain before normal melodic step handling. `ui.js`
+  remains the adapter for clip resolution, step velocity helpers, effective
+  velocity, sequence-note refresh, clip-content checks, host parameter writes,
+  redraw, shared legacy `S`, and top-level MIDI/button routing. Drum/melodic
+  hold-threshold behavior, step release/velocity confirm, deeper CC step-edit
+  behavior, Parameter Bank behavior, recording behavior, Session View
+  Performance Mode, modal workflows, and unrelated DSP reads/writes remain in
+  `ui.js`.
 
 Verification:
 

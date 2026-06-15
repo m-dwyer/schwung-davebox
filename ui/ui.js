@@ -180,7 +180,8 @@ import {
     handleTrackViewDeleteStepPress,
     handleTrackViewMuteStepPress,
     handleTrackViewShiftStepPress,
-    handleTrackViewDrumStepPress
+    handleTrackViewDrumStepPress,
+    handleTrackViewMelodicStepPress
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -8152,10 +8153,13 @@ function createTrackViewStepWorkflowDeps() {
         doLaneDoubleFill,
         doShiftStepCommon: _doShiftStepCommon,
         effectiveClip,
+        effectiveVelocity,
+        clipHasContent,
         forceRedraw,
         getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
         invalidateLEDCache,
         padModeDrum: PAD_MODE_DRUM,
+        refreshSeqNotesIfCurrent,
         setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
         stepEntryVelocity,
         showActionPopup
@@ -8200,116 +8204,8 @@ function _onStepButtons(d1, d2) {
         return;
     } else if (handleTrackViewDrumStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
         return;
-    } else if (!S.shiftHeld) {
-        /* Record press time for tap detection on release.
-         * Enter step edit immediately — tap vs hold decided on release. */
-        S.stepBtnPressedTick[idx] = S.tickCount;
-        if (S.heldStep < 0) {
-            const ac_p   = effectiveClip(S.activeTrack);
-            const absP   = S.trackCurrentPage[S.activeTrack] * 16 + idx;
-            S.heldStepBtn  = idx;
-            S.heldStep     = absP;
-            const pref_p = 't' + S.activeTrack + '_c' + ac_p + '_step_' + absP;
-            /* get_param returns null in MIDI context — use clipSteps mirror to detect
-             * truly empty (0) vs has-data (1=active, 2=inactive). Notes/vel/gate
-             * are deferred to hold threshold where get_param works. */
-            const _stepState = S.clipSteps[S.activeTrack][ac_p][absP];
-            if (_stepState === 0) {
-                S.stepWasEmpty  = true;
-                S.heldStepNotes = [];
-                if (S.activeBank === 6) {
-                    S.ccStepEditActive = true;
-                } else {
-                    S.stepEditVel   = 100;
-                    S.stepEditGate  = (S.clipTPS[S.activeTrack][ac_p] || 24);
-                    S.stepEditNudge = 0;
-                    S.stepEditIter  = 0;
-                    S.stepEditRand  = 0;
-                    S.stepEditRatch = 0;
-                }
-            } else {
-                S.stepWasEmpty  = false;
-                S.heldStepNotes = [];   /* populated at hold threshold from tick context */
-                if (S.activeBank === 6) {
-                    S.ccStepEditActive = true;
-                } else {
-                    S.stepEditVel   = 100;
-                    S.stepEditGate  = (S.clipTPS[S.activeTrack][ac_p] || 24);
-                    S.stepEditNudge = 0;
-                    S.stepEditIter  = 0;
-                    S.stepEditRand  = 0;
-                    S.stepEditRatch = 0;
-                }
-            }
-            /* Chord-first: pads were held before this step was pressed.
-             * Store full context now — tick() may run after heldStep is cleared on quick release. */
-            if (S.liveActiveNotes.size > 0 && S.activeBank !== 6 &&
-                    S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-                S.pendingChordToStep  = {
-                    t:       S.activeTrack,
-                    ac:      ac_p,
-                    step:    absP,
-                    wasEmpty: _stepState === 0,
-                    pitches: [...S.liveActiveNotes].sort(function(a, b) { return a - b; }),
-                    vel:     stepEntryVelocity(S.activeTrack, effectiveVelocity(S.lastPadVelocity), false)
-                };
-                S.stepBtnPressedTick[idx] = -1;   /* bypass tap-toggle on release */
-                S.stepWasHeld = true;
-            }
-            forceRedraw();
-        } else if (S.stepBtnPressedTick[S.heldStepBtn] >= 0 && S.activeBank !== 6) {
-            /* Primary still in tap window: multi-toggle this step immediately.
-             * Use S.clipSteps for state — get_param is unreliable from onMidiMessage context. */
-            const ac_mp    = effectiveClip(S.activeTrack);
-            const absStep2 = S.trackCurrentPage[S.activeTrack] * 16 + idx;
-            const pref_mp  = 't' + S.activeTrack + '_c' + ac_mp + '_step_' + absStep2;
-            const state_mp = S.clipSteps[S.activeTrack][ac_mp][absStep2]; // 0=empty, 1=active, 2=inactive-with-notes
-            if (state_mp === 0) {
-                const assignNote3 = S.lastPlayedNote >= 0 ? S.lastPlayedNote : -1;
-                if (assignNote3 >= 0 && typeof host_module_set_param === 'function') {
-                    host_module_set_param(pref_mp + '_toggle', assignNote3 + ' ' + stepEntryVelocity(S.activeTrack, -1, false));
-                    S.clipSteps[S.activeTrack][ac_mp][absStep2] = 1;
-                    S.clipNonEmpty[S.activeTrack][ac_mp] = true;
-                    refreshSeqNotesIfCurrent(S.activeTrack, ac_mp, absStep2);
-                }
-            } else if (state_mp === 1) {
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param(pref_mp, '0');
-                S.clipSteps[S.activeTrack][ac_mp][absStep2] = 2;
-                if (S.clipNonEmpty[S.activeTrack][ac_mp]) S.clipNonEmpty[S.activeTrack][ac_mp] = clipHasContent(S.activeTrack, ac_mp);
-                refreshSeqNotesIfCurrent(S.activeTrack, ac_mp, absStep2);
-            } else {
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param(pref_mp, '1');
-                S.clipSteps[S.activeTrack][ac_mp][absStep2] = 1;
-                S.clipNonEmpty[S.activeTrack][ac_mp] = true;
-                refreshSeqNotesIfCurrent(S.activeTrack, ac_mp, absStep2);
-            }
-            S.stepBtnPressedTick[idx] = -1;
-            forceRedraw();
-        } else if (S.heldStepNotes.length > 0 && S.activeBank !== 6) {
-            /* Primary in step edit (past tap threshold): tap sets gate span.
-             * Clear S.heldStepBtn press-tick so the first step's release doesn't also tap-toggle. */
-            S.stepBtnPressedTick[S.heldStepBtn] = -1;
-            S.stepWasHeld = true;
-            const ac_tap     = effectiveClip(S.activeTrack);
-            const tappedStep = S.trackCurrentPage[S.activeTrack] * 16 + idx;
-            if (tappedStep !== S.heldStep) {
-                const len     = S.clipLength[S.activeTrack][ac_tap];
-                const tps     = S.clipTPS[S.activeTrack][ac_tap] || 24;
-                /* Extend THROUGH the tapped step; shrink if already at that span. */
-                const dist    = tappedStep > S.heldStep
-                    ? tappedStep - S.heldStep + 1
-                    : len - S.heldStep + tappedStep + 1;
-                const spanGate = dist * tps;
-                const newGate = Math.max(1, Math.min(
-                    S.stepEditGate >= spanGate ? (dist - 1) * tps : spanGate, 65535));
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + S.activeTrack + '_c' + ac_tap + '_step_' + S.heldStep + '_gate', String(newGate));
-                S.stepEditGate = newGate;
-                forceRedraw();
-            }
-        }
+    } else if (handleTrackViewMelodicStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
+        return;
     }
 }
 
