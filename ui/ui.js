@@ -188,6 +188,7 @@ import {
     handleUiCaptureButton,
     handleUiCopyButton,
     handleUiDeleteButton,
+    handleUiMenuCoRunExitButton,
     handleUiMuteModifierButton,
     handleUiShiftButton
 } from './ui_button_cc_workflow.mjs';
@@ -5707,15 +5708,7 @@ function _onCC_buttons(d1, d2) {
      * canonical exit, but Menu-as-second-exit is a Overture convenience for
      * existing muscle memory — outside co-run Overture ignores Menu (no other
      * handler exists), so this branch is dormant unless a session is active. */
-    if (d1 === 50 && d2 === 127) {
-        /* Schwung co-run exits on Menu. Move co-run disables Menu entirely —
-         * swallowed by the guard in the MoveNoteSession block below. */
-        if (S.schwungCoRunSlot >= 0) {
-            exitSchwungCoRun();
-            forceRedraw();
-            return;
-        }
-    }
+    if (handleUiMenuCoRunExitButton(S, createButtonCcWorkflowDeps(), d1, d2)) return;
 
     /* Note/Session view toggle: Shift+press = open global menu (Track View only);
      * tap = switch view; hold = session overview */
@@ -7275,11 +7268,13 @@ function createButtonCcWorkflowDeps() {
         computePadNoteMap,
         editSoundForTrack,
         effectiveClip,
+        exitSchwungCoRun,
         forceRedraw,
         invalidateLEDCache,
         moveCapture: MoveCapture,
         moveCopy: MoveCopy,
         moveDelete: MoveDelete,
+        moveMenu: 50,
         moveMute: MoveMute,
         moveShift: MoveShift,
         openClearAutoMenu,

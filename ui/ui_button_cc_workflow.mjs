@@ -135,3 +135,19 @@ export function handleUiCaptureButton(S, deps, d1, d2) {
         deps.forceRedraw();
     }
 }
+
+export function handleUiMenuCoRunExitButton(S, deps, d1, d2) {
+    if (d1 !== deps.moveMenu || d2 !== 127) return false;
+
+    /* Schwung co-run exits on Menu. Move co-run disables Menu entirely —
+     * swallowed by the guard in the MoveNoteSession block. Outside co-run
+     * Overture ignores Menu (no other handler), so this is dormant unless a
+     * Schwung session is active. */
+    if (S.schwungCoRunSlot >= 0) {
+        deps.exitSchwungCoRun();
+        deps.forceRedraw();
+        return true;
+    }
+
+    return false;
+}
