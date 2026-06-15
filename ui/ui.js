@@ -144,6 +144,8 @@ import {
 } from './ui_latch_workflows.mjs';
 import {
     readDrumActiveLaneFromDsp,
+    readDrumRepeatRatesFromDsp,
+    readTrackArpStepConfigFromDsp,
     readTrackConfigFromDsp,
     refreshDrumLaneBankParamsFromDsp,
     refreshPerClipBankParamsFromDsp,
@@ -2308,38 +2310,18 @@ function refreshPerClipBankParams(t) {
 
 /* Read TRACK ARP step_vel[8] from DSP for track t. Called on init and track switch. */
 function readTarpStepVel(t) {
-    if (typeof host_module_get_param !== 'function') return;
-    const raw = host_module_get_param('t' + t + '_tarp_sv');
-    if (!raw) return;
-    const v = raw.split(' ');
-    for (let s = 0; s < 8; s++)
-        S.tarpStepVel[t][s] = parseInt(v[s], 10) | 0;
-    /* Also pull step_int[8] (Arp Steps interval mode). */
-    const rawI = host_module_get_param('t' + t + '_tarp_si');
-    if (rawI) {
-        const vi = rawI.split(' ');
-        for (let s = 0; s < 8; s++)
-            S.tarpStepInt[t][s] = parseInt(vi[s], 10) | 0;
-    }
-    /* Step pattern loop length (1..8). */
-    const rawL = host_module_get_param('t' + t + '_tarp_sll');
-    if (rawL !== null && rawL !== undefined) {
-        const _ll = parseInt(rawL, 10) | 0;
-        S.tarpStepLoopLen[t] = (_ll >= 1 && _ll <= 8) ? _ll : 8;
-    }
+    readTrackArpStepConfigFromDsp(S, {
+        host_module_get_param: typeof host_module_get_param === 'function' ? host_module_get_param : undefined
+    }, t);
 }
 
 /* Read Rpt2 per-lane rate idx[32] from DSP for track t. Called after state
  * load so the rate-pad LED highlight matches the persisted DSP state.
  * (Rpt1's per-track last-rate lives only in DSP — JS has no mirror for it.) */
 function readDrumRepeatRates(t) {
-    if (typeof host_module_get_param !== 'function') return;
-    const r2 = host_module_get_param('t' + t + '_drum_r2rt');
-    if (r2) {
-        const v = r2.split(' ');
-        for (let l = 0; l < 32 && l < v.length; l++)
-            S.drumRepeat2RatePerLane[t][l] = parseInt(v[l], 10) | 0;
-    }
+    readDrumRepeatRatesFromDsp(S, {
+        host_module_get_param: typeof host_module_get_param === 'function' ? host_module_get_param : undefined
+    }, t);
 }
 
 /* Reset per-clip S.bankParams to defaults for track t (no DSP call needed —

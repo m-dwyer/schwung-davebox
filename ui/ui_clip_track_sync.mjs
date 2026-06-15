@@ -202,3 +202,38 @@ export function readTrackConfigFromDsp(S, deps, track) {
         S.bankParams[track][7][5] = S.drumInpQuant[track];
     }
 }
+
+export function readTrackArpStepConfigFromDsp(S, deps, track) {
+    if (typeof deps.host_module_get_param !== 'function') return;
+    const raw = deps.host_module_get_param('t' + track + '_tarp_sv');
+    if (!raw) return;
+    const values = raw.split(' ');
+    for (let step = 0; step < 8; step++) {
+        S.tarpStepVel[track][step] = parseInt(values[step], 10) | 0;
+    }
+
+    const rawIntervals = deps.host_module_get_param('t' + track + '_tarp_si');
+    if (rawIntervals) {
+        const intervalValues = rawIntervals.split(' ');
+        for (let step = 0; step < 8; step++) {
+            S.tarpStepInt[track][step] = parseInt(intervalValues[step], 10) | 0;
+        }
+    }
+
+    const rawLoopLen = deps.host_module_get_param('t' + track + '_tarp_sll');
+    if (rawLoopLen !== null && rawLoopLen !== undefined) {
+        const loopLen = parseInt(rawLoopLen, 10) | 0;
+        S.tarpStepLoopLen[track] = (loopLen >= 1 && loopLen <= 8) ? loopLen : 8;
+    }
+}
+
+export function readDrumRepeatRatesFromDsp(S, deps, track) {
+    if (typeof deps.host_module_get_param !== 'function') return;
+    const r2 = deps.host_module_get_param('t' + track + '_drum_r2rt');
+    if (r2) {
+        const values = r2.split(' ');
+        for (let lane = 0; lane < 32 && lane < values.length; lane++) {
+            S.drumRepeat2RatePerLane[track][lane] = parseInt(values[lane], 10) | 0;
+        }
+    }
+}
