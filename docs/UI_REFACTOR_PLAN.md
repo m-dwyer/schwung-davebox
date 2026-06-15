@@ -823,6 +823,12 @@ Drum repeat workflows:
   and left session navigation, clip state, and drum lane mirrors untouched.
 - Added focused output coverage in `web/tests/integration/idle-render.test.ts`
   and `web/tests/integration/session-overview-render.test.ts`.
+- Continued the presentation path by moving shared track-number row rendering
+  into `ui/ui_track_chrome_render.mjs` and Performance OLED takeover rendering
+  into `ui/ui_perf_render.mjs`. Kept perf input, LED updates, latch state, and
+  looper/DSP writes in `ui.js`.
+- Added focused output coverage in `web/tests/integration/idle-render.test.ts`
+  and `web/tests/integration/perf-render.test.ts`.
 
 Verification:
 

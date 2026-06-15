@@ -10,6 +10,7 @@ import {
 } from './ui_constants.mjs';
 import { effectiveClip } from './ui_leds.mjs';
 import { motionIdleModel } from './ui_motion.mjs';
+import { renderTrackRow } from './ui_track_chrome_render.mjs';
 
 export function renderSessionIdleView(deps) {
     deps.fill_rect(0, 0, 128, 12, 1);
@@ -23,7 +24,7 @@ export function renderSessionIdleView(deps) {
     const banner = oO + 'vertur' + oE;
     deps.print(40, 2, banner, 0);
     deps.drawMetroIndicator();
-    deps.drawTrackRow(34);
+    renderTrackRow(deps, 34);
     renderActiveClipLetters(deps);
 }
 
@@ -46,7 +47,7 @@ export function renderDrumTrackIdleView(deps) {
             deps.pixelPrint(128 - 4 - 5 * 6, 21, 'MUTED', 1);
     }
     deps.drawMetroIndicator();
-    deps.drawTrackRow(34);
+    renderTrackRow(deps, 34);
     renderActiveClipLetters(deps);
     renderDrumPositionBar(deps, t);
 }
@@ -72,7 +73,7 @@ export function renderMelodicTrackIdleView(deps) {
     deps.pixelPrint(keySclX, 10, keyScl, 1);
     if (S.scaleAware) deps.fill_rect(keySclX, 15, keyScl.length * CHAR_W, 1, 1);
     deps.drawMetroIndicator();
-    deps.drawTrackRow(34);
+    renderTrackRow(deps, 34);
     renderActiveClipLetters(deps);
     deps.drawPositionBar(S.activeTrack);
 }

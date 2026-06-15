@@ -79,7 +79,7 @@ import {
     CC_GRADIENT_BASE, CC_GRADIENT_LEVELS, CC_GRADIENT_SCALARS
 } from './ui_constants.mjs';
 
-import { S, CC_ASSIGN_DEFAULTS, PERF_FACTORY_PRESETS } from './ui_state.mjs';
+import { S, CC_ASSIGN_DEFAULTS } from './ui_state.mjs';
 import { saveState, writeSidecar, doClearSession, showActionPopup, uuidToStatePath, uuidToUiStatePath, readActiveSet, loadNameIndex, saveNameIndex, copyStateFiles, findInheritCandidates,
     SNAPSHOT_CAP, snapshotLabel, loadSnapshotManifest, commitSnapshot, applySnapshotToLive, dropSnapshots } from './ui_persistence.mjs';
 import { drawGlobalMenu } from './ui_dialogs.mjs';
@@ -113,6 +113,9 @@ import {
 import {
     renderSessionOverview
 } from './ui_session_overview_render.mjs';
+import {
+    renderPerfModeOled
+} from './ui_perf_render.mjs';
 import {
     renderSessionActionPopup,
     renderTrackActionPopup
@@ -592,11 +595,6 @@ const PERF_MOD_PAD_MAP = Object.freeze({
     92: 16, /* ½time   */ 93: 17, /* 3Skip   */ 94: 18, /* Phnm    */ 95: 19, /* Sprs    */
     96: 20, /* Gltch   */ 97: 21, /* Stggr   */ 98: 22, /* Shfl    */ 99: 23, /* Back    */
 });
-const PERF_MOD_NAMES = [
-    'Oct↑','Oct↓','Sc↑','Sc↓','5th','Triton','Drift','Storm',
-    'Decrsc','Swell','Cresc','Pulse','Sdchn','Stac','Lgto','RmpG',
-    '½time','3Skip','Phnm','Sprs','Gltch','Stggr','Shfl','Back',
-];
 const PERF_MOD_FULL_NAMES = [
     'Octave Up','Octave Down','Scale Up','Scale Down','Fifth','Tritone','Drift','Storm',
     'Decrescendo','Swell','Crescendo','Pulse','Sidechain','Staccato','Legato','Ramp Gate',
@@ -3338,149 +3336,6 @@ function forceRedraw() {
 /* Display                                                              */
 /* ------------------------------------------------------------------ */
 
-/* Track-number row: active track has a box (1px border + 1px pad around number).
- * Muted = inverted. Soloed = blink. */
-function drawTrackRow(y) {
-    const soloBlinkOn = Math.floor(S.tickCount / 24) % 2 === 0;
-    for (let _t = 0; _t < NUM_TRACKS; _t++) {
-        const cx = _t * 16 + 5;
-        const bx = _t * 16 + 3;
-        const by = y - 2;
-        const bw = 10, bh = 12;
-        const isActive = (_t === S.activeTrack);
-        if (S.trackMuted[_t]) {
-            if (soloBlinkOn) print(cx, y, String(_t + 1), 1);
-            if (isActive) {
-                fill_rect(bx, by,      bw, 1,  1);
-                fill_rect(bx, by+bh-1, bw, 1,  1);
-                fill_rect(bx, by,      1,  bh, 1);
-                fill_rect(bx+bw-1, by, 1,  bh, 1);
-            }
-        } else if (S.trackSoloed[_t]) {
-            fill_rect(bx, by, bw, bh, 1);
-            print(cx, y, String(_t + 1), 0);
-        } else {
-            print(cx, y, String(_t + 1), 1);
-            if (isActive) {
-                fill_rect(bx, by,      bw, 1,  1);
-                fill_rect(bx, by+bh-1, bw, 1,  1);
-                fill_rect(bx, by,      1,  bh, 1);
-                fill_rect(bx+bw-1, by, 1,  bh, 1);
-            }
-        }
-    }
-}
-
-/* Convert a PERF_MOD_NAMES entry to mcufont-safe ASCII (no arrows / fractions). */
-function _modAscii(name) {
-    return name.replace('↑', '+').replace('↓', '-').replace('½', 'Hf');
-}
-
-/* Footer indicator chip: filled-rect when active, outline when inactive.
- * Returns the chip's width so the caller can advance x. */
-function _perfChip(x, y, label, active) {
-    const w = label.length * 6 + 3;
-    if (active) {
-        fill_rect(x, y, w, 9, 1);
-        pixelPrint(x + 2, y + 2, label, 0);
-    } else {
-        /* hollow outline */
-        fill_rect(x,         y,     w, 1, 1);
-        fill_rect(x,         y + 8, w, 1, 1);
-        fill_rect(x,         y,     1, 9, 1);
-        fill_rect(x + w - 1, y,     1, 9, 1);
-        pixelPrint(x + 2, y + 2, label, 1);
-    }
-    return w;
-}
-
-function drawPerfModeOled() {
-    clear_screen();
-    const activeMods = S.perfModsToggled | S.perfModsHeld;
-
-    /* ── Header bar (y 0-11): preset name or "PERFORMANCE" ── */
-    fill_rect(0, 0, 128, 12, 1);
-    let title;
-    if (S.perfRecalledSlot >= 0) {
-        const fp = PERF_FACTORY_PRESETS[S.perfRecalledSlot];
-        title = fp ? fp.name : ('SLOT ' + (S.perfRecalledSlot + 1));
-    } else {
-        title = 'PERFORMANCE';
-    }
-    print(4, 3, title, 0);
-
-    /* ── Body (y 14-49): action popup → mod popup → mods list ── */
-    if (S.actionPopupEndTick >= 0 && S.tickCount <= S.actionPopupEndTick && S.actionPopupLines.length > 0) {
-        const _n = S.actionPopupLines.length;
-        if (_n >= 4) {
-            print(4, 14, S.actionPopupLines[0], 1);
-            print(4, 25, S.actionPopupLines[1], 1);
-            print(4, 36, S.actionPopupLines[2], 1);
-            print(4, 47, S.actionPopupLines[3], 1);
-        } else if (_n === 3) {
-            print(4, 17, S.actionPopupLines[0], 1);
-            print(4, 29, S.actionPopupLines[1], 1);
-            print(4, 41, S.actionPopupLines[2], 1);
-        } else if (_n === 2) {
-            print(4, 20, S.actionPopupLines[0], 1);
-            print(4, 32, S.actionPopupLines[1], 1);
-        } else {
-            print(4, 26, S.actionPopupLines[0], 1);
-        }
-    } else if (S.perfModPopupEndTick >= 0 && S.tickCount <= S.perfModPopupEndTick && S.perfModPopupName) {
-        const px = Math.floor((128 - S.perfModPopupName.length * 6) / 2);
-        print(px < 0 ? 0 : px, 26, S.perfModPopupName, 1);
-    } else {
-        S.perfModPopupEndTick = -1;
-        const activeNames = [];
-        for (let i = 0; i < PERF_MOD_NAMES.length; i++)
-            if ((activeMods >> i) & 1) activeNames.push(_modAscii(PERF_MOD_NAMES[i]));
-        if (activeNames.length === 0) {
-            pixelPrint(4, 24, 'no mods active', 1);
-            pixelPrint(4, 34, 'tap pad to engage', 1);
-        } else {
-            /* Wrap into up to 4 lines, ~20 chars per line at 6px each. */
-            const MAX_CHARS = 20;
-            const MAX_LINES = 4;
-            const lines = [];
-            let cur = '';
-            for (let i = 0; i < activeNames.length; i++) {
-                const sep  = cur ? '  ' : '';
-                const next = cur + sep + activeNames[i];
-                if (next.length > MAX_CHARS && cur) {
-                    lines.push(cur);
-                    if (lines.length >= MAX_LINES) { cur = ''; break; }
-                    cur = activeNames[i];
-                } else {
-                    cur = next;
-                }
-            }
-            if (cur && lines.length < MAX_LINES) lines.push(cur);
-            for (let li = 0; li < lines.length; li++) {
-                pixelPrint(4, 16 + li * 8, lines[li], 1);
-            }
-        }
-    }
-
-    /* ── Footer (y 53-61): mode chips + rate ── */
-    const fy = 53;
-    let fx = 2;
-    fx += _perfChip(fx, fy, 'Hold',  S.perfHoldPadHeld || S.perfStickyLengths.size > 0) + 3;
-    fx += _perfChip(fx, fy, 'Sync',  S.perfSync) + 3;
-    fx += _perfChip(fx, fy, 'Latch', S.perfLatchMode) + 3;
-
-    /* Rate (right-aligned, only when a loop length is active) */
-    if (S.perfStack.length > 0) {
-        const RATE_LABELS = ['1/32','1/16','1/8','1/4','1/2'];
-        const top = S.perfStack[S.perfStack.length - 1];
-        const lab = RATE_LABELS[top.idx];
-        const w   = lab.length * 6 + 3;
-        const rx  = 128 - w - 2;
-        fill_rect(rx, fy, w, 9, 1);
-        pixelPrint(rx + 2, fy + 2, lab, 0);
-    }
-}
-
 function createBankRenderDeps() {
     return {
         print,
@@ -3501,7 +3356,6 @@ function createTrackIdleRenderDeps() {
         drawBankHeading,
         drawBankHeadingInverted,
         drawMetroIndicator,
-        drawTrackRow,
         drawPositionBar,
     };
 }
@@ -3511,13 +3365,21 @@ function createSessionIdleRenderDeps() {
         print,
         pixelPrint,
         fill_rect,
-        drawMetroIndicator,
-        drawTrackRow
+        drawMetroIndicator
     };
 }
 
 function createSessionOverviewRenderDeps() {
     return {
+        fill_rect
+    };
+}
+
+function createPerfModeRenderDeps() {
+    return {
+        clear_screen,
+        print,
+        pixelPrint,
         fill_rect
     };
 }
@@ -3631,7 +3493,7 @@ function drawUI() {
     if (S.confirmBake) { drawBakeConfirm(); return; }
     if (S.globalMenuOpen || S.tapTempoOpen) { ensureGlobalMenuFresh(); drawGlobalMenu(); return; }
     /* Perf Mode OLED takeover (Session View + Loop held or locked) */
-    if (S.sessionView && (S.loopHeld || S.perfViewLocked)) { drawPerfModeOled(); return; }
+    if (S.sessionView && (S.loopHeld || S.perfViewLocked)) { renderPerfModeOled(createPerfModeRenderDeps()); return; }
     if (S.stateLoading || S.bootSplashTicks > 0) {
         /* Reroll the splash on entry edge — picks one of SPLASH_FRAMES at
          * random per splash session (boot, set load, etc.). Stays stable
