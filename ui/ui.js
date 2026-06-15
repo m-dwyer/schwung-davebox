@@ -137,6 +137,9 @@ import {
     renderLoopView
 } from './ui_loop_render.mjs';
 import {
+    renderStepIntervalOverlay
+} from './ui_step_interval_render.mjs';
+import {
     SCALE_INTERVALS,
     applyPadNoteMap,
     createLiveNoteQueues,
@@ -3606,6 +3609,14 @@ function createLoopRenderDeps() {
     };
 }
 
+function createStepIntervalRenderDeps() {
+    return {
+        print,
+        fill_rect,
+        drawBankHeading
+    };
+}
+
 function drawUI() {
     /* CO-RUN: shadow_ui's chain editor owns the OLED while this is active.
      * Skip every Overture draw path so it doesn't fight the chain editor's
@@ -3938,21 +3949,7 @@ function drawUI() {
      * offsets (±24); pad grid is the persistent step-vel level editor handled in
      * updateTrackLEDs. Renders REGARDLESS of knob-touch / inTimeout (persistent). */
     if (bank >= 0 && S.stepIntervalMode && !S.sessionView && (bank === 4 || bank === 5)) {
-        const t      = S.activeTrack;
-        const isSeq  = (bank === 4);
-        const arr    = isSeq ? S.seqArpStepInt[t][effectiveClip(t)] : S.tarpStepInt[t];
-        drawBankHeading(isSeq ? 'SEQ ARP Steps' : 'ARP IN Steps');
-        for (let k = 0; k < 8; k++) {
-            const colX = 4 + (k % 4) * 30;
-            const rowY = k < 4 ? 12 : 36;
-            const hi   = (S.knobTouched === k);
-            if (hi) fill_rect(colX, rowY, 24, 24, 1);
-            const lbl = 'S' + (k + 1);
-            const v   = arr[k] | 0;
-            const val = (v === 0) ? ' 0' : (v > 0 ? '+' + v : String(v));
-            print(colX, rowY,      col4(lbl), hi ? 0 : 1);
-            print(colX, rowY + 12, col4(val), hi ? 0 : 1);
-        }
+        renderStepIntervalOverlay(createStepIntervalRenderDeps(), bank);
         return;
     }
 
