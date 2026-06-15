@@ -105,6 +105,26 @@ export function renderBakeConfirm(deps, opts) {
     }
 }
 
+export function renderBakeSceneConfirm(deps, opts) {
+    opts = opts || {};
+    deps.clear_screen();
+    deps.drawMenuHeader('BAKE SCENE?');
+    const mH = 11;
+    if (opts.wrapPhase) {
+        deps.print(4, 22, 'Wrap tails?', 1);
+        const bY = 47, bW = 36;
+        renderButton(deps, 4,  bY, bW, mH, opts.wrapSel === 0, 'YES',    9);
+        renderButton(deps, 45, bY, bW, mH, opts.wrapSel === 1, 'NO',    14);
+        renderButton(deps, 86, bY, bW, mH, opts.wrapSel === 2, 'CANCEL', 1);
+    } else {
+        deps.print(4, 22, 'Loop count:', 1);
+        renderButton(deps, 14, 33, 100, mH, opts.sel === 0, 'CANCEL', 31);
+        renderButton(deps, 4,  47, 36,  mH, opts.sel === 1, '1x', 12);
+        renderButton(deps, 46, 47, 36,  mH, opts.sel === 2, '2x', 12);
+        renderButton(deps, 88, 47, 36,  mH, opts.sel === 3, '4x', 12);
+    }
+}
+
 export function renderInheritPicker(deps, picker) {
     deps.clear_screen();
     if (!picker) return;

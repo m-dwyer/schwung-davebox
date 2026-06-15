@@ -129,6 +129,7 @@ import {
 } from './ui_prompt_render.mjs';
 import {
     renderBakeConfirm,
+    renderBakeSceneConfirm,
     renderClearAutomationMenu,
     renderInheritPicker,
     renderLgtoConfirm,
@@ -1632,34 +1633,11 @@ function drawClearAutoMenu() {
 }
 
 function drawBakeSceneConfirm() {
-    clear_screen();
-    function _btn(x, y, w, h, sel, label, labelOff) {
-        if (sel) {
-            fill_rect(x, y, w, h, 1);
-            print(x + labelOff, y + 3, label, 0);
-        } else {
-            fill_rect(x, y, w, 1, 1);
-            fill_rect(x, y + h - 1, w, 1, 1);
-            fill_rect(x, y, 1, h, 1);
-            fill_rect(x + w - 1, y, 1, h, 1);
-            print(x + labelOff, y + 3, label, 1);
-        }
-    }
-    drawMenuHeader('BAKE SCENE?');
-    const mH = 11;
-    if (S.confirmBakeSceneWrapPhase) {
-        print(4, 22, 'Wrap tails?', 1);
-        const bY = 47, bW = 36;
-        _btn(4,  bY, bW, mH, S.confirmBakeSceneWrapSel === 0, 'YES',    9);
-        _btn(45, bY, bW, mH, S.confirmBakeSceneWrapSel === 1, 'NO',    14);
-        _btn(86, bY, bW, mH, S.confirmBakeSceneWrapSel === 2, 'CANCEL', 1);
-    } else {
-        print(4, 22, 'Loop count:', 1);
-        _btn(14, 33, 100, mH, S.confirmBakeSceneSel === 0, 'CANCEL', 31);
-        _btn(4,  47, 36,  mH, S.confirmBakeSceneSel === 1, '1x', 12);
-        _btn(46, 47, 36,  mH, S.confirmBakeSceneSel === 2, '2x', 12);
-        _btn(88, 47, 36,  mH, S.confirmBakeSceneSel === 3, '4x', 12);
-    }
+    renderBakeSceneConfirm(createModalRenderDeps(), {
+        wrapPhase: S.confirmBakeSceneWrapPhase,
+        wrapSel: S.confirmBakeSceneWrapSel,
+        sel: S.confirmBakeSceneSel
+    });
 }
 
 function drawXposeConfirm() {

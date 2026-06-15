@@ -847,6 +847,11 @@ Drum repeat workflows:
   and DSP/deferred write behavior in `ui.js`.
 - Extended focused modal output coverage for bake wrap tails, multi-loop,
   melodic confirm, drum clip/lane choice, and drum loop-count subviews.
+- Continued the modal presentation path by moving `drawBakeSceneConfirm()` into
+  `ui/ui_modal_render.mjs`. Kept scene-bake loop selection, wrap-tail
+  commit/cancel handling, DSP writes, and deferred resync behavior in `ui.js`.
+- Extended focused modal output coverage for scene-bake loop-count and
+  wrap-tail subviews.
 
 Verification:
 
@@ -855,6 +860,7 @@ Verification:
 - `npm run test:node -- tests/integration`
 - `npm run test:node`
 - `npm run build`
+- `node --check dist/overture/ui.js`
 - `pnpm test:node tests/integration/drum-lane-workflows.test.ts`
 - `pnpm test:node tests/integration/latch-workflows.test.ts`
 - `pnpm test:node tests/integration/drum-repeat-workflows.test.ts`
