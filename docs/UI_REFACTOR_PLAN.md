@@ -874,9 +874,24 @@ Drum repeat workflows:
 - Extended focused output coverage in `web/tests/integration/idle-render.test.ts`
   for metronome labels/off state, Track View velocity and adaptive/fixed
   indicators, melodic/drum fixed cases, and Session View right-side suppression.
+- Continued the presentation path by moving packed splash-frame drawing into
+  `renderSplashFrame()` in `ui/ui_splash.mjs`, where the decoded splash assets
+  and dimensions already live. Kept `drawUI()` priority/order, splash entry-edge
+  frame selection, `S.splashWasVisible`, `S.currentSplashIdx`, and
+  `clear_screen()` in `ui.js`.
+- Added focused output coverage in `web/tests/integration/splash-render.test.ts`
+  for MSB-first decoding, horizontal run coalescing, trailing run flushing,
+  empty frames, multi-row y coordinates, and wider packed rows.
 
 Verification:
 
+- `npm run test:node -- tests/integration/splash-render.test.ts`
+- `npm run test:node -- tests/integration/modal-render.test.ts tests/integration/loop-render.test.ts tests/integration/param-peek-render.test.ts tests/integration/prompt-render.test.ts tests/integration/popup-render.test.ts tests/integration/idle-render.test.ts tests/integration/bank-render.test.ts tests/integration/bank-chrome-render.test.ts tests/integration/perf-render.test.ts tests/integration/session-overview-render.test.ts tests/integration/splash-render.test.ts tests/integration/step-edit-render.test.ts tests/integration/cc-step-edit-render.test.ts tests/integration/step-interval-render.test.ts tests/integration/ui-descriptors.test.ts`
+- `npm run test:node -- tests/integration`
+- `npm run test:node`
+- `python3 scripts/bundle_ui.py`
+- `node --check dist/overture/ui.js`
+- `npm run build`
 - `npm run test:node -- tests/integration/idle-render.test.ts`
 - `npm run test:node -- tests/integration/modal-render.test.ts tests/integration/loop-render.test.ts tests/integration/param-peek-render.test.ts tests/integration/prompt-render.test.ts tests/integration/popup-render.test.ts tests/integration/idle-render.test.ts tests/integration/bank-render.test.ts tests/integration/bank-chrome-render.test.ts tests/integration/perf-render.test.ts tests/integration/session-overview-render.test.ts tests/integration/step-edit-render.test.ts tests/integration/cc-step-edit-render.test.ts tests/integration/step-interval-render.test.ts tests/integration/ui-descriptors.test.ts`
 - `npm run test:node -- tests/integration`

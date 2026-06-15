@@ -48,3 +48,23 @@ export function pickSplashIdx() {
      * Restore by changing the multiplier back to SPLASH_COUNT. */
     return Math.floor(Math.random() * 3);
 }
+
+export function renderSplashFrame(deps, frame, width, height) {
+    const w = width || SPLASH_W;
+    const h = height || SPLASH_H;
+    const rowBytes = Math.ceil(w / 8);
+    for (let y = 0; y < h; y++) {
+        let runStart = -1;
+        const rowOff = y * rowBytes;
+        for (let x = 0; x < w; x++) {
+            const bit = (frame[rowOff + (x >> 3)] >> (7 - (x & 7))) & 1;
+            if (bit) {
+                if (runStart < 0) runStart = x;
+            } else if (runStart >= 0) {
+                deps.fill_rect(runStart, y, x - runStart, 1, 1);
+                runStart = -1;
+            }
+        }
+        if (runStart >= 0) deps.fill_rect(runStart, y, w - runStart, 1, 1);
+    }
+}

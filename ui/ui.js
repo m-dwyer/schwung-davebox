@@ -85,7 +85,7 @@ import { saveState, writeSidecar, doClearSession, showActionPopup, uuidToStatePa
 import { drawGlobalMenu } from './ui_dialogs.mjs';
 import { trackClipHasContent, sceneAllQueued, updateSceneMapLEDs } from './ui_scene.mjs';
 import { effectiveClip, updateStepLEDs, updateSessionLEDs, updateTrackLEDs, flashAtRate, drawPositionBar, invalidateLEDCache, paintCoRunSideButtons } from './ui_leds.mjs';
-import { SPLASH_FRAMES, SPLASH_COUNT, SPLASH_W, SPLASH_H, pickSplashIdx } from './ui_splash.mjs';
+import { SPLASH_FRAMES, SPLASH_COUNT, pickSplashIdx, renderSplashFrame } from './ui_splash.mjs';
 import { requestExport, confirmExportStart, pollPendingExport } from './ui_export.mjs';
 import {
     canEditSoundRoute,
@@ -3048,6 +3048,12 @@ function createMetroIndicatorRenderDeps() {
     };
 }
 
+function createSplashRenderDeps() {
+    return {
+        fill_rect
+    };
+}
+
 function createTrackIdleRenderDeps() {
     return {
         pixelPrint,
@@ -3211,25 +3217,8 @@ function drawUI() {
             S.splashWasVisible = true;
         }
         clear_screen();
-        /* 128x64 splash bitmap, MSB-first packed bytes (1024 bytes total).
-         * Render via fill_rect runs of lit pixels per row — fewer host calls
-         * than per-pixel set_pixel and the screen is only redrawn briefly. */
         const _frame  = SPLASH_FRAMES[S.currentSplashIdx % SPLASH_COUNT];
-        const rowBytes = SPLASH_W >> 3;
-        for (let y = 0; y < SPLASH_H; y++) {
-            let runStart = -1;
-            const rowOff = y * rowBytes;
-            for (let x = 0; x < SPLASH_W; x++) {
-                const bit = (_frame[rowOff + (x >> 3)] >> (7 - (x & 7))) & 1;
-                if (bit) {
-                    if (runStart < 0) runStart = x;
-                } else if (runStart >= 0) {
-                    fill_rect(runStart, y, x - runStart, 1, 1);
-                    runStart = -1;
-                }
-            }
-            if (runStart >= 0) fill_rect(runStart, y, SPLASH_W - runStart, 1, 1);
-        }
+        renderSplashFrame(createSplashRenderDeps(), _frame);
         return;
     }
     /* Not in splash mode — clear the entry-edge flag so the next splash rerolls. */
