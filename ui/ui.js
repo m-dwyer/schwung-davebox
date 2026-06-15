@@ -188,6 +188,7 @@ import {
     handleUiCaptureButton,
     handleUiCopyButton,
     handleUiDeleteButton,
+    handleUiLoopPerfModeButton,
     handleUiMenuCoRunExitButton,
     handleUiMuteModifierButton,
     handleUiShiftButton
@@ -5805,72 +5806,8 @@ function _onCC_buttons(d1, d2) {
         }
     }
 
-    /* Loop button (CC 58, Session View): enter/exit Performance Mode.
-     * Pad presses in Perf Mode drive rate capture + modifier engage.
-     * Double-tap locks the view after Loop is released. */
-    if (d1 === MoveLoop && S.sessionView) {
-        if (d2 === 127) {
-            if (S.shiftHeld) {
-                /* Shift+Loop: toggle perf latch mode (mod pads momentary vs sticky). */
-                S.perfLatchMode = !S.perfLatchMode;
-                forceRedraw();
-                return;
-            }
-            S.loopPressTick = S.tickCount;
-            S.loopHeld      = true;
-            forceRedraw();
-            return;
-        }
-        const heldDuration = S.tickCount - S.loopPressTick;
-        const wasTap       = heldDuration < LOOP_TAP_TICKS;
-
-        if (S.perfViewLocked) {
-            /* Locked + tap → unlock + stop. */
-            if (wasTap) {
-                S.perfViewLocked    = false;
-                S.loopHeld          = false;
-                S.loopJogActive     = false;
-                S.perfStack         = [];
-                S.perfStickyLengths = new Set();
-                S.perfHoldPadHeld   = false;
-                S.perfModsHeld      = 0;
-                sendPerfMods();
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('looper_stop', '1');
-                invalidateLEDCache();
-                forceRedraw();
-            }
-            return;
-        }
-
-        if (wasTap) {
-            /* Tap → lock Perf Mode; preserve running loop + mods. */
-            S.perfViewLocked = true;
-            S.loopHeld       = true;
-            forceRedraw();
-            return;
-        }
-
-        /* Hold release: exit Perf Mode. Sticky lengths/hold pad auto-lock if still active. */
-        S.loopHeld      = false;
-        S.loopJogActive = false;
-        S.perfModsHeld = 0;
-        if (S.perfStickyLengths.size > 0 || S.perfHoldPadHeld) {
-            S.perfViewLocked = true;
-            if (!S.perfHoldPadHeld)
-                S.perfStack = S.perfStack.filter(function(e) { return S.perfStickyLengths.has(e.idx); });
-            if (S.perfStack.length > 0 && typeof host_module_set_param === 'function')
-                host_module_set_param('looper_arm', String(S.perfStack[S.perfStack.length - 1].ticks));
-        } else {
-            if (S.perfStack.length > 0 && typeof host_module_set_param === 'function')
-                host_module_set_param('looper_stop', '1');
-            S.perfStack = [];
-        }
-        sendPerfMods();
-        invalidateLEDCache();
-        forceRedraw();
-        return;
-    }
+    /* Loop button (CC 58, Session View): enter/exit Performance Mode. */
+    if (handleUiLoopPerfModeButton(S, createButtonCcWorkflowDeps(), d1, d2)) return;
 
     /* Loop button (CC 58, Track View): hold + step buttons sets clip length */
     if (d1 === MoveLoop && !S.sessionView) {
@@ -7271,13 +7208,17 @@ function createButtonCcWorkflowDeps() {
         exitSchwungCoRun,
         forceRedraw,
         invalidateLEDCache,
+        loopTapTicks: LOOP_TAP_TICKS,
         moveCapture: MoveCapture,
         moveCopy: MoveCopy,
         moveDelete: MoveDelete,
+        moveLoop: MoveLoop,
         moveMenu: 50,
         moveMute: MoveMute,
         moveShift: MoveShift,
         openClearAutoMenu,
+        sendPerfMods,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
         showActionPopup,
         padModeDrum: PAD_MODE_DRUM
     };

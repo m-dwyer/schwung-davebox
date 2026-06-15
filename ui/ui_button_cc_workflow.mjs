@@ -151,3 +151,72 @@ export function handleUiMenuCoRunExitButton(S, deps, d1, d2) {
 
     return false;
 }
+
+export function handleUiLoopPerfModeButton(S, deps, d1, d2) {
+    /* Loop button (CC 58, Session View): enter/exit Performance Mode.
+     * Pad presses in Perf Mode drive rate capture + modifier engage.
+     * Double-tap locks the view after Loop is released. */
+    if (d1 !== deps.moveLoop || !S.sessionView) return false;
+
+    if (d2 === 127) {
+        if (S.shiftHeld) {
+            /* Shift+Loop: toggle perf latch mode (mod pads momentary vs sticky). */
+            S.perfLatchMode = !S.perfLatchMode;
+            deps.forceRedraw();
+            return true;
+        }
+        S.loopPressTick = S.tickCount;
+        S.loopHeld      = true;
+        deps.forceRedraw();
+        return true;
+    }
+    const heldDuration = S.tickCount - S.loopPressTick;
+    const wasTap       = heldDuration < deps.loopTapTicks;
+
+    if (S.perfViewLocked) {
+        /* Locked + tap → unlock + stop. */
+        if (wasTap) {
+            S.perfViewLocked    = false;
+            S.loopHeld          = false;
+            S.loopJogActive     = false;
+            S.perfStack         = [];
+            S.perfStickyLengths = new Set();
+            S.perfHoldPadHeld   = false;
+            S.perfModsHeld      = 0;
+            deps.sendPerfMods();
+            if (deps.setParam)
+                deps.setParam('looper_stop', '1');
+            deps.invalidateLEDCache();
+            deps.forceRedraw();
+        }
+        return true;
+    }
+
+    if (wasTap) {
+        /* Tap → lock Perf Mode; preserve running loop + mods. */
+        S.perfViewLocked = true;
+        S.loopHeld       = true;
+        deps.forceRedraw();
+        return true;
+    }
+
+    /* Hold release: exit Perf Mode. Sticky lengths/hold pad auto-lock if still active. */
+    S.loopHeld      = false;
+    S.loopJogActive = false;
+    S.perfModsHeld = 0;
+    if (S.perfStickyLengths.size > 0 || S.perfHoldPadHeld) {
+        S.perfViewLocked = true;
+        if (!S.perfHoldPadHeld)
+            S.perfStack = S.perfStack.filter(function(e) { return S.perfStickyLengths.has(e.idx); });
+        if (S.perfStack.length > 0 && deps.setParam)
+            deps.setParam('looper_arm', String(S.perfStack[S.perfStack.length - 1].ticks));
+    } else {
+        if (S.perfStack.length > 0 && deps.setParam)
+            deps.setParam('looper_stop', '1');
+        S.perfStack = [];
+    }
+    deps.sendPerfMods();
+    deps.invalidateLEDCache();
+    deps.forceRedraw();
+    return true;
+}
