@@ -122,6 +122,7 @@ import {
 } from './ui_session_overview_render.mjs';
 import {
     handleSessionViewClipPadPress,
+    handleSessionViewSideRowPress,
     handleSessionViewStepPress,
     handleSessionViewStepRelease
 } from './ui_session_view_workflow.mjs';
@@ -6696,73 +6697,10 @@ function _onCC_side(d1, d2) {
     if (d1 >= 40 && d1 <= 43 && d2 === 127) {
         const idx     = d1 - 40;
         const clipIdx = S.sceneRow + (3 - idx);
-        /* Scene-bake picker (set by Session-View Capture tap): row press selects
-         * the scene to bake and goes straight to the scene-bake confirm dialog.
-         * Picker is consumed before any other gesture so it doesn't double-fire. */
-        if (S.pendingSceneBakePicker) {
-            S.pendingSceneBakePicker    = false;
-            S.confirmBakeScene          = true;
-            S.confirmBakeSceneWrapPhase = false;
-            S.confirmBakeSceneSel       = 1;
-            S.confirmBakeSceneClip      = clipIdx;
-            S.screenDirty               = true;
+        if (handleSessionViewSideRowPress(S, createSessionViewWorkflowDeps(), 3 - idx)) {
             return;
         }
-        /* Multi-track live merge placement: post-stop, row press picks
-         * destination row and commits captured clips (per-track skip when
-         * no notes captured — preserves existing clips on those tracks). */
-        if (S.pendingMergePlacement) {
-            S.pendingMergePlacement = false;
-            S.pendingDefaultSetParams.push({ key: 'merge_place_row', val: String(clipIdx) });
-            S.screenDirty = true;
-            return;
-        }
-        if (S.copyHeld) {
-            if (S.copySrc && S.copySrc.kind === 'step') {
-                /* step copy in progress: swallow track/scene buttons — don't mix copy types */
-            } else if (S.sessionView) {
-                /* Copy/Cut: row-to-row gesture */
-                if (!S.copySrc) {
-                    S.copySrc = S.shiftHeld
-                        ? { kind: 'cut_row', row: clipIdx }
-                        : { kind: 'row', row: clipIdx };
-                    invalidateLEDCache();
-                    showActionPopup(S.shiftHeld ? 'CUT' : 'COPIED');
-                } else if (S.copySrc.kind === 'row') {
-                    copyRow(S.copySrc.row, clipIdx);
-                    invalidateLEDCache();
-                    forceRedraw();
-                    showActionPopup('PASTED');
-                } else if (S.copySrc.kind === 'cut_row') {
-                    cutRow(S.copySrc.row, clipIdx);
-                    S.copySrc = { kind: 'row', row: clipIdx };
-                    invalidateLEDCache();
-                    forceRedraw();
-                    showActionPopup('PASTED');
-                }
-                /* clip/cut_clip kinds: swallow — don't mix copy types */
-            }
-            /* Track View (Change #1): per-clip copy/cut moved to the Session
-             * clip pads (Copy / Shift+Copy + pad — see _onPadMsg). Side buttons
-             * now select tracks, so a held-Copy + side is swallowed here: it must
-             * not jump tracks mid-gesture, and clip copy lives in Session. */
-        } else if (S.shiftHeld && S.deleteHeld) {
-            if (S.sessionView) {
-                /* Shift+Delete+scene row (Session View): hard reset all 8 clips in row */
-                for (let t = 0; t < NUM_TRACKS; t++) hardResetClip(t, clipIdx);
-                forceRedraw();
-                showActionPopup('CLIPS', 'CLEARED');
-            }
-            /* Track View hard-reset moved to Session (Shift+Delete + clip pad). */
-        } else if (S.deleteHeld) {
-            if (S.sessionView) {
-                /* Delete + scene row button (Session View): clear all 8 clips in that row */
-                clearRow(clipIdx);
-                forceRedraw();
-                showActionPopup('SEQUENCES', 'CLEARED');
-            }
-            /* Track View clip-clear moved to Session (Delete + clip pad). */
-        } else if (S.captureHeld) {
+        if (S.captureHeld) {
             /* Capture + scene row: copy each track's currently *playing* or
              * *queued* clip into this row. Inactive/focused-but-not-playing
              * clips are skipped — only what's actually live participates in
@@ -8247,11 +8185,14 @@ function _doShiftStepCommon(idx) {
 function createSessionViewWorkflowDeps() {
     return {
         clearClip,
+        clearRow,
         clipIsEmpty: _clipIsEmpty,
         copyClip,
         copyDrumClip,
+        copyRow,
         cutClip,
         cutDrumClip,
+        cutRow,
         doShiftStepCommon: _doShiftStepCommon,
         forceRedraw,
         handoffRecordingToTrack,

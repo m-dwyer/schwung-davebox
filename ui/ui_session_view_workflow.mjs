@@ -225,3 +225,78 @@ export function handleSessionViewClipPadPress(S, deps, padNote) {
 
     return true;
 }
+
+export function handleSessionViewSideRowPress(S, deps, rowIdx) {
+    const clipIdx = S.sceneRow + rowIdx;
+
+    if (S.pendingSceneBakePicker) {
+        S.pendingSceneBakePicker = false;
+        S.confirmBakeScene = true;
+        S.confirmBakeSceneWrapPhase = false;
+        S.confirmBakeSceneSel = 1;
+        S.confirmBakeSceneClip = clipIdx;
+        S.screenDirty = true;
+        return true;
+    }
+
+    if (S.pendingMergePlacement) {
+        S.pendingMergePlacement = false;
+        S.pendingDefaultSetParams.push({ key: 'merge_place_row', val: String(clipIdx) });
+        S.screenDirty = true;
+        return true;
+    }
+
+    if (S.copyHeld) {
+        if (S.copySrc && S.copySrc.kind === 'step') {
+            /* Step copy in progress: swallow side rows so copy types do not mix. */
+        } else if (S.sessionView) {
+            if (!S.copySrc) {
+                S.copySrc = S.shiftHeld
+                    ? { kind: 'cut_row', row: clipIdx }
+                    : { kind: 'row', row: clipIdx };
+                deps.invalidateLEDCache();
+                deps.showActionPopup(S.shiftHeld ? 'CUT' : 'COPIED');
+            } else if (S.copySrc.kind === 'row') {
+                deps.copyRow(S.copySrc.row, clipIdx);
+                deps.invalidateLEDCache();
+                deps.forceRedraw();
+                deps.showActionPopup('PASTED');
+            } else if (S.copySrc.kind === 'cut_row') {
+                deps.cutRow(S.copySrc.row, clipIdx);
+                S.copySrc = { kind: 'row', row: clipIdx };
+                deps.invalidateLEDCache();
+                deps.forceRedraw();
+                deps.showActionPopup('PASTED');
+            }
+            /* Clip/cut_clip kinds: swallow so copy types do not mix. */
+        }
+        return true;
+    }
+
+    if (S.shiftHeld && S.deleteHeld) {
+        if (S.sessionView) {
+            for (let t = 0; t < deps.numTracks; t++) deps.hardResetClip(t, clipIdx);
+            deps.forceRedraw();
+            deps.showActionPopup('CLIPS', 'CLEARED');
+        }
+        return true;
+    }
+
+    if (S.deleteHeld) {
+        if (S.sessionView) {
+            deps.clearRow(clipIdx);
+            deps.forceRedraw();
+            deps.showActionPopup('SEQUENCES', 'CLEARED');
+        }
+        return true;
+    }
+
+    if (!S.sessionView) return false;
+
+    S.sceneBtnFlashTick[3 - rowIdx] = S.tickCount;
+    S.pendingDefaultSetParams.push({
+        key: S.shiftHeld ? 'launch_scene_quant' : 'launch_scene',
+        val: String(clipIdx)
+    });
+    return true;
+}
