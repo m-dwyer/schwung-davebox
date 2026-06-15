@@ -1,5 +1,31 @@
 import { S } from './ui_state.mjs';
-import { NUM_TRACKS } from './ui_constants.mjs';
+import {
+    NUM_TRACKS,
+    PAD_MODE_DRUM,
+    fmtVelOverride
+} from './ui_constants.mjs';
+
+export function renderMetroIndicator(deps) {
+    const METRO_LABELS = [null, 'Count', 'Rec', 'Rec/Ply'];
+    const label = METRO_LABELS[S.metronomeOn];
+    if (label) {
+        const tx = 8;
+        const tw = label.length * 6;
+        deps.fill_rect(4, 22, 2, 2, 1);
+        deps.pixelPrint(tx, 21, label, 1);
+        deps.fill_rect(tx + tw + 2, 22, 2, 2, 1);
+    }
+
+    if (!S.sessionView) {
+        const t  = S.activeTrack;
+        const ac = (!S.playing && S.trackQueuedClip[t] >= 0) ? S.trackQueuedClip[t] : S.trackActiveClip[t];
+        const isDrum = S.trackPadMode[t] === PAD_MODE_DRUM;
+        const isEmpty = isDrum ? !S.drumClipNonEmpty[t][ac] : !S.clipNonEmpty[t][ac];
+        const manualLength = isDrum ? S.drumLaneLengthManuallySet[t] : S.clipLengthManuallySet[t][ac];
+        deps.pixelPrint(67, 21, fmtVelOverride(S.trackVelOverride[t]), 1);
+        deps.pixelPrint(isEmpty && !manualLength ? 103 : 109, 21, isEmpty && !manualLength ? 'Adap' : 'Fix', 1);
+    }
+}
 
 export function renderTrackRow(deps, y) {
     const soloBlinkOn = Math.floor(S.tickCount / 24) % 2 === 0;
