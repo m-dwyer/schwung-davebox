@@ -783,6 +783,16 @@ Drum repeat workflows:
   behavior at the existing seams.
 - Added focused output coverage in `web/tests/integration/loop-render.test.ts`
   for the moved loop presentation formatting.
+- Continued the faster presentation path after reassessing the held-step Track
+  View branches. Added `ui/ui_step_edit_render.mjs` for non-CC step-edit
+  presentation: the shared header plus drum and melodic step-edit grids. Kept
+  the CC automation step-hold graph, render-time DSP read, and all step/knob
+  edit-write behavior in `ui.js`, and preserved the melodic note-loading
+  fall-through.
+- Added focused output coverage in
+  `web/tests/integration/step-edit-render.test.ts` for drum step edit, melodic
+  merged note-cell rendering, empty held steps, and the note-loading fall-through
+  case.
 
 Verification:
 
@@ -791,6 +801,7 @@ Verification:
 - `pnpm test:node tests/integration/drum-repeat-workflows.test.ts`
 - `npm run test:node -- tests/integration/clip-track-sync.test.ts tests/integration/tick-tasks.test.ts`
 - `pnpm test:node tests/integration/loop-render.test.ts`
+- `pnpm vitest run tests/integration/step-edit-render.test.ts`
 - `pnpm test:node tests/integration/loop-render.test.ts tests/integration/param-peek-render.test.ts tests/integration/prompt-render.test.ts tests/integration/popup-render.test.ts tests/integration/idle-render.test.ts tests/integration/bank-render.test.ts tests/integration/ui-descriptors.test.ts`
 - `pnpm test:node tests/integration`
 - `pnpm test:node`

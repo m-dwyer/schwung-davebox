@@ -137,6 +137,9 @@ import {
     renderLoopView
 } from './ui_loop_render.mjs';
 import {
+    renderTrackStepEditView
+} from './ui_step_edit_render.mjs';
+import {
     renderStepIntervalOverlay
 } from './ui_step_interval_render.mjs';
 import {
@@ -284,27 +287,6 @@ function drawAltArrow(x, hdrBgWhite, on) {
     fill_rect(x + 2, 4, 1, 1, fg);
 }
 
-function drawStepEditHeader() {
-    pixelPrint(37, 1, 'STEP EDIT', 1);
-    fill_rect(0, 9, 128, 1, 1);
-}
-
-/* Per-step trig-condition formatters (v=34).
- *   formatStepIter(raw):  0 -> "—"; else "{idx}/{len}" with raw=(len<<4)|idx
- *   formatStepRand(raw):  0 -> "—" (100%); else "{n}%"
- *   formatStepRatch(raw): 0|1 -> "—"; else "x{n}" */
-function formatStepIter(raw) {
-    if (!raw) return '--';
-    return (raw & 0xF) + '/' + ((raw >> 4) & 0xF);
-}
-function formatStepRand(raw) {
-    if (!raw) return '--';
-    return raw + '%';
-}
-function formatStepRatch(raw) {
-    if (raw < 2) return '--';
-    return 'x' + raw;
-}
 /* Iter knob list: 36 entries, raw byte at each position. Index 0 = default (1/1).
  * Sorted by cycle_len then cycle_idx: 1/1, 1/2, 2/2, 1/3, 2/3, 3/3, ..., 8/8. */
 const STEP_ITER_LIST = (function() {
@@ -3609,6 +3591,14 @@ function createLoopRenderDeps() {
     };
 }
 
+function createStepEditRenderDeps() {
+    return {
+        print,
+        pixelPrint,
+        fill_rect
+    };
+}
+
 function createStepIntervalRenderDeps() {
     return {
         print,
@@ -3846,95 +3836,8 @@ function drawUI() {
             }
             return;
         } else {
-        drawStepEditHeader();
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-            /* Drum step edit: 2-row 4-col grid matching melodic layout width.
-             * Row 1: K1 Leng, K2 Vel, K3 Nudg, K4 —.
-             * Row 2: K5 Iter, K6 Prob, K7 Ratch, K8 —. */
-            const t    = S.activeTrack;
-            const lane = S.activeDrumLane[t];
-            if (S.heldStepNotes.length > 0) {
-                const tps   = S.drumLaneTPS[t] || 24;
-                const _gateSteps = S.stepEditGate / tps;
-                const LABELS = ['Leng', 'Vel', 'Nudg', '--', 'Iter', 'Prob', 'Ratch', '--'];
-                const VALS   = [
-                    _gateSteps % 1 === 0 ? _gateSteps.toFixed(0) : _gateSteps.toFixed(2),
-                    String(S.stepEditVel),
-                    (S.stepEditNudge >= 0 ? '+' : '') + String(S.stepEditNudge),
-                    '',
-                    formatStepIter(S.stepEditIter),
-                    formatStepRand(S.stepEditRand),
-                    formatStepRatch(S.stepEditRatch),
-                    ''
-                ];
-                const COL_X = [0, 32, 64, 96];
-                const ROW_Y = [13, 35];
-                const CELL_W = 31, CELL_H = 22;
-                for (let i = 0; i < 8; i++) {
-                    if (i === 3 || i === 7) continue;
-                    const col = i % 4, row = (i / 4) | 0;
-                    const x = COL_X[col], y = ROW_Y[row];
-                    const hi = (S.knobTouched === i);
-                    if (hi) fill_rect(x, y - 3, CELL_W, CELL_H, 1);
-                    print(x + 1, y, LABELS[i], hi ? 0 : 1);
-                    print(x + 1, y + 10, VALS[i], hi ? 0 : 1);
-                }
-            } else {
-                print(4, 30, '(empty)', 1);
-            }
-            return;
-        }
-        const ac        = effectiveClip(S.activeTrack);
-        if (S.heldStepNotes.length > 0) {
-            /* Melodic step edit: 2-row 4-col grid. Row 1: K1 Oct, K2 Note, K3 Leng, K4 Vel.
-             * Row 2: K5 Nudg, K6 Iter, K7 Prob, K8 Ratch. */
-            const root = S.heldStepNotes[0];
-            const noteLabel = S.heldStepNotes.length > 1
-                ? midiNoteName(root) + '+' + (S.heldStepNotes.length - 1)
-                : midiNoteName(root);
-            const tps = S.clipTPS[S.activeTrack][ac] || 24;
-            const _gateSteps = S.stepEditGate / tps;
-            const LABELS = ['Oct', 'Note', 'Leng', 'Vel', 'Nudg', 'Iter', 'Prob', 'Ratch'];
-            const VALS   = [
-                noteLabel,
-                noteLabel,
-                _gateSteps % 1 === 0 ? _gateSteps.toFixed(0) : _gateSteps.toFixed(2),
-                String(S.stepEditVel),
-                (S.stepEditNudge >= 0 ? '+' : '') + String(S.stepEditNudge),
-                formatStepIter(S.stepEditIter),
-                formatStepRand(S.stepEditRand),
-                formatStepRatch(S.stepEditRatch)
-            ];
-            const COL_X = [0, 32, 64, 96];
-            const ROW_Y = [13, 35];
-            const CELL_W = 31, CELL_H = 22;
-            /* Oct + Pit are merged: both knobs edit the same root note, so
-             * one centered note value sits under both labels with a divider line. */
-            {
-                const hiOP = (S.knobTouched === 0 || S.knobTouched === 1);
-                const opX  = COL_X[0];
-                const opW  = COL_X[1] + CELL_W - COL_X[0];
-                if (hiOP) fill_rect(opX, ROW_Y[0] - 3, opW, CELL_H, 1);
-                print(COL_X[0] + 1, ROW_Y[0], 'Oct',  hiOP ? 0 : 1);
-                print(COL_X[1] + 1, ROW_Y[0], 'Note', hiOP ? 0 : 1);
-                fill_rect(opX, ROW_Y[0] + 7, opW, 1, hiOP ? 0 : 1);
-                const _nlx = opX + ((opW - noteLabel.length * 6) >> 1);
-                print(_nlx, ROW_Y[0] + 10, noteLabel, hiOP ? 0 : 1);
-            }
-            for (let i = 2; i < 8; i++) {
-                const col = i % 4, row = (i / 4) | 0;
-                const x = COL_X[col], y = ROW_Y[row];
-                const hi = (S.knobTouched === i);
-                if (hi) fill_rect(x, y - 3, CELL_W, CELL_H, 1);
-                print(x + 1, y, LABELS[i], hi ? 0 : 1);
-                print(x + 1, y + 10, VALS[i], hi ? 0 : 1);
-            }
-            return;
-        } else if (S.stepWasEmpty) {
-            print(4, 30, '(empty)', 1);
-            return;
-        }
-        /* non-empty step, notes still loading at hold threshold — fall through to bank/header */
+        if (renderTrackStepEditView(createStepEditRenderDeps())) return;
+        /* Non-empty melodic step, notes still loading at hold threshold: fall through to bank/header. */
     } /* end else (non-bank-6 step edit) */
     }
 
