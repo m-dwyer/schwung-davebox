@@ -1417,6 +1417,34 @@ function selectClipOnTrack(t, clipIdx) {
     }
 }
 
+function releaseSideButtonHoldReveal(idx) {
+    if (S.sideHeldBtn !== idx) return false;
+    S.sideHeldBtn        = -1;
+    S.sideBtnPressedTick = -1;
+    if (S.revealClipsTrack >= 0) {
+        S.revealClipsTrack = -1;
+        forceRedraw();
+    }
+    return true;
+}
+
+function pressTrackViewSideButton(idx) {
+    /* Track View (Change #1): side button SELECTS THE ACTIVE TRACK
+     * (was: clip switch — relocated to the hold-reveal overlay + Session
+     * pads). Reversed mapping (CC43=track 1 … CC40=track 4), matching the
+     * Shift+bottom-pad legacy gesture: trackInBank = 3 - idx. Shift banks
+     * to the upper four (tracks 5–8). */
+    const trackInBank = 3 - idx;
+    const target      = trackInBank + (S.shiftHeld ? 4 : 0);
+    selectTrackGesture(target);
+
+    /* Arm hold detection: a sustained hold promotes to the clips-reveal
+     * overlay in tick() (revealClipsTrack = the now-active track). A quick
+     * tap releases before the threshold and just leaves the track selected. */
+    S.sideHeldBtn        = idx;
+    S.sideBtnPressedTick = S.tickCount;
+}
+
 function doDoubleFill() {
     const _t = S.activeTrack;
     if (S.trackPadMode[_t] === PAD_MODE_DRUM && S.activeBank === 7) {
@@ -6686,11 +6714,7 @@ function _onCC_side(d1, d2) {
     /* Side button RELEASE (Change #1): exit the hold-reveal clips overlay and
      * clear the hold-tracking state. Matched on the button that armed it. */
     if (d1 >= 40 && d1 <= 43 && d2 === 0) {
-        if (S.sideHeldBtn === d1 - 40) {
-            S.sideHeldBtn        = -1;
-            S.sideBtnPressedTick = -1;
-            if (S.revealClipsTrack >= 0) { S.revealClipsTrack = -1; forceRedraw(); }
-        }
+        releaseSideButtonHoldReveal(d1 - 40);
         return;
     }
     /* Track buttons CC40-43 */
@@ -6699,19 +6723,7 @@ function _onCC_side(d1, d2) {
         if (handleSessionViewSideRowPress(S, createSessionViewWorkflowDeps(), 3 - idx)) {
             return;
         }
-        /* Track View (Change #1): side button SELECTS THE ACTIVE TRACK
-         * (was: clip switch — relocated to the hold-reveal overlay + Session
-         * pads). Reversed mapping (CC43=track 1 … CC40=track 4), matching the
-         * Shift+bottom-pad legacy gesture: trackInBank = 3 - idx. Shift banks
-         * to the upper four (tracks 5–8). */
-        const trackInBank = 3 - idx;
-        const target      = trackInBank + (S.shiftHeld ? 4 : 0);
-        selectTrackGesture(target);
-        /* Arm hold detection: a sustained hold promotes to the clips-reveal
-         * overlay in tick() (revealClipsTrack = the now-active track). A quick
-         * tap releases before the threshold and just leaves the track selected. */
-        S.sideHeldBtn        = idx;
-        S.sideBtnPressedTick = S.tickCount;
+        pressTrackViewSideButton(idx);
     }
 
 }
