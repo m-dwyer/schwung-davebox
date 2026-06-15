@@ -14,6 +14,11 @@ function rereadMelodicClip(S, deps, track, clip) {
     }
 }
 
+function resyncMelodicClipReadback(S, deps, track, clip) {
+    rereadMelodicClip(S, deps, track, clip);
+    if (clip === S.trackActiveClip[track]) deps.refreshPerClipBankParams(track);
+}
+
 export function runLiveNoteDrain(S, deps) {
     /* Flush live note batches; one set_param per track so no coalescing.
      * Defer for 1 tick after any step button event so the step set_param clears
@@ -263,8 +268,7 @@ export function runDeferredContentResyncTasks(S, deps) {
         if (S.pendingStepsReread === 0) {
             const prt  = S.pendingStepsRereadTrack;
             const prac = S.pendingStepsRereadClip;
-            rereadMelodicClip(S, deps, prt, prac);
-            if (prac === S.trackActiveClip[prt]) deps.refreshPerClipBankParams(prt);
+            resyncMelodicClipReadback(S, deps, prt, prac);
             deps.forceRedraw();
         }
     }
@@ -280,8 +284,7 @@ export function runDeferredContentResyncTasks(S, deps) {
                         deps.syncDrumLaneSteps(t, S.activeDrumLane[t]);
                     }
                 } else {
-                    rereadMelodicClip(S, deps, t, sc);
-                    if (sc === S.trackActiveClip[t]) deps.refreshPerClipBankParams(t);
+                    resyncMelodicClipReadback(S, deps, t, sc);
                 }
             }
             deps.forceRedraw();
