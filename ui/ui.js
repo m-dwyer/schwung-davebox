@@ -101,8 +101,7 @@ import {
 import {
     PARAM_PEEK_DETAIL_TICKS,
     autoLaneLabel,
-    motionIdleModel,
-    paramPeekInfo
+    motionIdleModel
 } from './ui_motion.mjs';
 import {
     renderAllLanesBankOverview,
@@ -131,6 +130,9 @@ import {
     renderSceneBakePickerPrompt,
     renderShiftStepHelp
 } from './ui_prompt_render.mjs';
+import {
+    renderParamPeek
+} from './ui_param_peek_render.mjs';
 import {
     SCALE_INTERVALS,
     applyPadNoteMap,
@@ -735,21 +737,6 @@ function editSoundForTrack(t) {
         hasMoveInject: typeof move_midi_inject_to_move === 'function'
     });
     showActionPopup(popup.title, popup.body);
-}
-
-function truncText(s, maxLen) {
-    s = String(s || '');
-    return s.length > maxLen ? s.substring(0, Math.max(0, maxLen - 1)) + '.' : s;
-}
-
-function drawParamPeek() {
-    const p = paramPeekInfo();
-    fill_rect(0, 0, 128, 9, 1);
-    print(4, 1, truncText(p.header, 20), 0);
-    print(4, 13, truncText(p.target, 20), 1);
-    print(4, 25, truncText(p.value, 20), 1);
-    print(4, 38, truncText(p.detail, 20), 1);
-    print(4, 52, truncText(p.route, 20), 1);
 }
 
 /* ------------------------------------------------------------------ */
@@ -4145,7 +4132,7 @@ function drawUI() {
             (S.altMode && bankHasAltParams(S.activeTrack, bank)) ||
             (S.shiftHeld && bank === 1 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM))) {
         if (S.knobTouched >= 0 && !S.stepIntervalMode) {
-            drawParamPeek();
+            renderParamPeek(createPopupRenderDeps());
             return;
         }
         const bankRenderDeps = createBankRenderDeps();

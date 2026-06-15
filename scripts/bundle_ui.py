@@ -28,6 +28,7 @@ ORDER = [
     'ui/ui_idle_render.mjs',
     'ui/ui_popup_render.mjs',
     'ui/ui_prompt_render.mjs',
+    'ui/ui_param_peek_render.mjs',
     'ui/ui_pad_surface.mjs',
     'ui/ui_drum_lane_workflows.mjs',
     'ui/ui_drum_repeat_workflows.mjs',
