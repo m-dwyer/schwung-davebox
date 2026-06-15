@@ -125,7 +125,9 @@ import {
     renderTrackActionPopup
 } from './ui_popup_render.mjs';
 import {
+    renderCompressLimitNotice,
     renderMergePlacementPrompt,
+    renderNoNoteFlashNotice,
     renderSceneBakePickerPrompt
 } from './ui_prompt_render.mjs';
 import {
@@ -3716,9 +3718,7 @@ function drawUI() {
 
     /* Compress-limit override: highest priority for ~1500ms after a blocked compress */
     if (S.stretchBlockedEndTick >= 0) {
-        print(4, 10, '[CLIP       ]', 1);
-        print(4, 22, 'Beat Stretch', 1);
-        print(4, 34, 'COMPRESS LIMIT', 1);
+        renderCompressLimitNotice(createPopupRenderDeps());
         return;
     }
 
@@ -3730,8 +3730,7 @@ function drawUI() {
 
     /* No-note flash: ~600ms after pressing an empty step with no prior pad */
     if (S.noNoteFlashEndTick >= 0 && S.activeBank !== 6) {
-        print(4, 22, 'NO NOTE', 1);
-        print(4, 34, 'Play a pad first', 1);
+        renderNoNoteFlashNotice(createPopupRenderDeps());
         return;
     }
 
