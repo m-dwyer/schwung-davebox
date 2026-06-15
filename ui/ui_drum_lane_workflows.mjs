@@ -1,3 +1,42 @@
+import {
+    resetDrumRepeatGrooveMirrorsForLane
+} from './ui_drum_repeat_workflows.mjs';
+
+export function handleDrumLaneFactoryReset(S, deps, track, lane) {
+    if (lane < 0 || lane >= deps.DRUM_LANES) return false;
+
+    S.undoAvailable = true;
+    S.redoAvailable = false;
+    S.undoSeqArpSnapshot = null;
+
+    if (typeof deps.host_module_set_param === 'function')
+        deps.host_module_set_param('t' + track + '_l' + lane + '_hard_reset', '1');
+
+    deps.setActiveDrumLane(track, lane);
+
+    S.drumLaneLength[track] = 16;
+    for (let step = 0; step < 256; step++) S.drumLaneSteps[track][lane][step] = '0';
+    S.drumLaneHasNotes[track][lane] = false;
+    resetDrumRepeatGrooveMirrorsForLane(S, track, lane);
+
+    const activeClip = S.trackActiveClip[track];
+    S.drumClipNonEmpty[track][activeClip] = false;
+    for (let otherLane = 0; otherLane < deps.DRUM_LANES; otherLane++) {
+        if (S.drumLaneHasNotes[track][otherLane]) {
+            S.drumClipNonEmpty[track][activeClip] = true;
+            break;
+        }
+    }
+
+    S.pendingDrumLaneResync = 2;
+    S.pendingDrumLaneResyncTrack = track;
+    S.pendingDrumLaneResyncLane = lane;
+
+    deps.showActionPopup('LANE', 'RESET');
+    deps.forceRedraw();
+    return true;
+}
+
 export function handleDeleteDrumLaneClear(S, deps, track, lane, options = {}) {
     if (lane < 0 || lane >= deps.DRUM_LANES) return false;
 

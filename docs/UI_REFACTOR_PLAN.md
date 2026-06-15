@@ -534,9 +534,18 @@ Drum repeat workflows:
 - Added focused router coverage for Rpt1 rate/gate routing, Rpt2 rate/gate/lane
   routing, Delete+lane fallthrough, and repeat-owned release swallowing in
   `web/tests/integration/drum-repeat-workflows.test.ts`.
+- Completed the Drum Lane Factory Reset Workflow slice by moving
+  Shift+Delete+lane hard reset into `handleDrumLaneFactoryReset()` in
+  `ui_drum_lane_workflows.mjs`, while delegating repeat-specific defaults to
+  `resetDrumRepeatGrooveMirrorsForLane()`.
+- Added focused lane workflow coverage for immediate hard-reset DSP write,
+  undo/redo mirrors, lane length/steps/has-notes reset, clip non-empty
+  recompute, repeat-groove/Rpt2 rate defaults, delayed lane resync ordering,
+  popup/redraw behavior, and invalid-lane no-op.
 
 Verification:
 
+- `pnpm test:node tests/integration/drum-lane-workflows.test.ts`
 - `pnpm test:node tests/integration/latch-workflows.test.ts`
 - `pnpm test:node tests/integration/drum-repeat-workflows.test.ts`
 - `pnpm test:node tests/integration`

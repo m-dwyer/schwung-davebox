@@ -120,6 +120,7 @@ import {
 } from './ui_pad_surface.mjs';
 import {
     handleDeleteDrumLaneClear,
+    handleDrumLaneFactoryReset,
     handleDrumLaneCopyPaste,
     handleDrumLaneMuteSolo
 } from './ui_drum_lane_workflows.mjs';
@@ -127,7 +128,6 @@ import {
     handleDrumRepeat2LaneAftertouch,
     handleDrumRepeatPadAftertouch,
     resetDrumRepeatGrooveForLane,
-    resetDrumRepeatGrooveMirrorsForLane,
     copyDrumRepeatGrooveMirrors,
     moveDrumRepeatGrooveMirrors,
     editDrumRepeatGrooveStep,
@@ -9351,30 +9351,7 @@ function _onPadPressTrackView(status, d1, d2) {
         if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.shiftHeld && S.deleteHeld) {
             const t    = S.activeTrack;
             const lane = drumPadToLane(padIdx);
-            if (lane >= 0 && lane < DRUM_LANES) {
-                S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + t + '_l' + lane + '_hard_reset', '1');
-                setActiveDrumLane(t, lane);
-                S.drumLaneLength[t]     = 16;
-                for (let s = 0; s < 256; s++) S.drumLaneSteps[t][lane][s] = '0';
-                S.drumLaneHasNotes[t][lane] = false;
-                resetDrumRepeatGrooveMirrorsForLane(S, t, lane);
-                const ac = S.trackActiveClip[t];
-                S.drumClipNonEmpty[t][ac] = false;
-                for (let ol = 0; ol < DRUM_LANES; ol++) {
-                    if (S.drumLaneHasNotes[t][ol]) { S.drumClipNonEmpty[t][ac] = true; break; }
-                }
-                /* Defer refreshDrumLaneBankParams via pendingDrumLaneResync so it
-                 * runs AFTER DSP _hard_reset has drained (2 ticks). Synchronous
-                 * refresh was reading pre-reset DSP values, leaving NOTE FX /
-                 * DELAY mirrors un-defaulted. */
-                S.pendingDrumLaneResync      = 2;
-                S.pendingDrumLaneResyncTrack = t;
-                S.pendingDrumLaneResyncLane  = lane;
-                showActionPopup('LANE', 'RESET');
-                forceRedraw();
-            }
+            handleDrumLaneFactoryReset(S, createDrumLaneWorkflowDeps(), t, lane);
             return;
         }
 
