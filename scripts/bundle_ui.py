@@ -46,6 +46,11 @@ ORDER = [
     'ui/ui_tick_tasks.mjs',
     'ui/ui_splash.mjs',
     'ui/ui_export.mjs',
+    'ui/ui_cc_message_workflow.mjs',
+    'ui/ui_side_button_workflow.mjs',
+    'ui/ui_transport_cc_workflow.mjs',
+    'ui/ui_navigation_cc_workflow.mjs',
+    'ui/ui_track_view_step_workflow.mjs',
     'ui/ui.js',
 ]
 
