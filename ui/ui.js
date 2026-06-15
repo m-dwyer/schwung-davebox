@@ -182,7 +182,8 @@ import {
     handleTrackViewShiftStepPress,
     handleTrackViewDrumStepPress,
     handleTrackViewMelodicStepPress,
-    handleTrackViewStepRelease
+    handleTrackViewStepRelease,
+    handleTrackViewStepHoldThreshold
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -4618,106 +4619,7 @@ function _tickImpl() {
 
         /* Step hold threshold: once elapsed, close the tap window so release won't toggle.
          * Also auto-assign empty step now so knobs work immediately in step edit. */
-        if (S.heldStep >= 0 && S.heldStepBtn >= 0 && S.stepBtnPressedTick[S.heldStepBtn] >= 0 &&
-                (S.tickCount - S.stepBtnPressedTick[S.heldStepBtn]) >= STEP_HOLD_TICKS) {
-            S.stepBtnPressedTick[S.heldStepBtn] = -1;
-            S.stepWasHeld = true;
-            if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-                /* CC step-edit: seed from the recorded point at this step (or "—"),
-                 * plus the computed output value the lane produces there. The
-                 * first knob-turn writes from the recorded point if set, else the
-                 * clip resting value, else 0. */
-                const _t6 = S.activeTrack, _c6 = effectiveClip(_t6);
-                const _info = (typeof host_module_get_param === 'function')
-                    ? host_module_get_param('t' + _t6 + '_c' + _c6 + '_ccstepinfo_' + S.heldStep) : null;
-                const _ip = _info ? _info.split(' ') : [];
-                for (let _ck = 0; _ck < 8; _ck++) {
-                    const _pv = _ip.length > _ck     ? parseInt(_ip[_ck], 10)     : -1;
-                    const _cv = _ip.length > _ck + 8 ? parseInt(_ip[_ck + 8], 10) : -1;
-                    S.ccStepEditSet[_ck]      = _pv >= 0;
-                    S.ccStepEditComputed[_ck] = (_cv >= 0 && _cv <= 127) ? _cv : -1;
-                    const _rest = S.clipCCVal[_t6][_c6][_ck];
-                    S.ccStepEditVal[_ck] = _pv >= 0 ? _pv : (_rest >= 0 ? _rest : 0);
-                }
-                S.screenDirty = true;
-            } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-                /* Drum: auto-assign empty step so knobs work immediately */
-                if (S.stepWasEmpty && S.heldStepNotes.length === 0 && typeof host_module_set_param === 'function') {
-                    const t    = S.activeTrack;
-                    const lane = S.activeDrumLane[t];
-                    host_module_set_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_toggle', String(S.stepEditVel));
-                    S.drumLaneSteps[t][lane][S.heldStep] = '1';
-                    S.drumLaneHasNotes[t][lane] = true;
-                    S.heldStepNotes = [S.drumLaneNote[t][lane]];
-                    if (typeof host_module_get_param === 'function') {
-                        const rv = host_module_get_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_vel');
-                        const rg = host_module_get_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_gate');
-                        const rn = host_module_get_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_nudge');
-                        const ri = host_module_get_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_iter');
-                        const rr = host_module_get_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_rand');
-                        const rx = host_module_get_param('t' + t + '_l' + lane + '_step_' + S.heldStep + '_ratch');
-                        S.stepEditVel   = rv !== null ? parseInt(rv, 10) : S.stepEditVel;
-                        S.stepEditGate  = rg !== null ? parseInt(rg, 10) : Math.max(1, Math.floor((S.drumLaneTPS[t] || 24) / 2));
-                        S.stepEditNudge = rn !== null ? parseInt(rn, 10) : 0;
-                        S.stepEditIter  = ri !== null ? parseInt(ri, 10) : 0;
-                        S.stepEditRand  = rr !== null ? parseInt(rr, 10) : 0;
-                        S.stepEditRatch = rx !== null ? parseInt(rx, 10) : 0;
-                    }
-                }
-                S.screenDirty = true;
-            } else if (!S.stepWasEmpty && S.heldStepNotes.length === 0) {
-                /* Non-empty step — notes not yet read (get_param null at press time).
-                 * Read now from tick context where get_param works. */
-                const ac_h2 = effectiveClip(S.activeTrack);
-                const raw_h2 = typeof host_module_get_param === 'function'
-                    ? host_module_get_param('t' + S.activeTrack + '_c' + ac_h2 + '_step_' + S.heldStep + '_notes') : null;
-                S.heldStepNotes = (raw_h2 && raw_h2.trim().length > 0)
-                    ? raw_h2.trim().split(' ').map(Number).filter(function(n) { return n >= 0 && n <= 127; })
-                    : [];
-                const rv2 = typeof host_module_get_param === 'function'
-                    ? host_module_get_param('t' + S.activeTrack + '_c' + ac_h2 + '_step_' + S.heldStep + '_vel') : null;
-                const rg2 = typeof host_module_get_param === 'function'
-                    ? host_module_get_param('t' + S.activeTrack + '_c' + ac_h2 + '_step_' + S.heldStep + '_gate') : null;
-                const rn2 = typeof host_module_get_param === 'function'
-                    ? host_module_get_param('t' + S.activeTrack + '_c' + ac_h2 + '_step_' + S.heldStep + '_nudge') : null;
-                const ri2 = typeof host_module_get_param === 'function'
-                    ? host_module_get_param('t' + S.activeTrack + '_c' + ac_h2 + '_step_' + S.heldStep + '_iter') : null;
-                const rr2 = typeof host_module_get_param === 'function'
-                    ? host_module_get_param('t' + S.activeTrack + '_c' + ac_h2 + '_step_' + S.heldStep + '_rand') : null;
-                const rx2 = typeof host_module_get_param === 'function'
-                    ? host_module_get_param('t' + S.activeTrack + '_c' + ac_h2 + '_step_' + S.heldStep + '_ratch') : null;
-                S.stepEditVel   = rv2 !== null ? parseInt(rv2, 10) : 100;
-                S.stepEditGate  = rg2 !== null ? parseInt(rg2, 10) : (S.clipTPS[S.activeTrack][ac_h2] || 24);
-                S.stepEditNudge = rn2 !== null ? parseInt(rn2, 10) : 0;
-                S.stepEditIter  = ri2 !== null ? parseInt(ri2, 10) : 0;
-                S.stepEditRand  = rr2 !== null ? parseInt(rr2, 10) : 0;
-                S.stepEditRatch = rx2 !== null ? parseInt(rx2, 10) : 0;
-                S.screenDirty = true;
-            } else if (S.stepWasEmpty && S.heldStepNotes.length === 0) {
-                /* Empty melodic step held past threshold: auto-activate with
-                 * lastPlayedNote so step edit knobs work in one gesture (mirrors
-                 * the drum-mode auto-assign above and the tap-empty path at
-                 * ~L8589). If no lastPlayedNote, fall back to no-note flash. */
-                if (S.activeBank === 6) {
-                    /* CC bank: no note auto-assign */
-                } else if (S.lastPlayedNote >= 0 && typeof host_module_set_param === 'function') {
-                    const ac_he       = effectiveClip(S.activeTrack);
-                    const assignNote  = S.lastPlayedNote;
-                    const assignVel   = stepEntryVelocity(S.activeTrack, -1, false);
-                    host_module_set_param('t' + S.activeTrack + '_c' + ac_he + '_step_' + S.heldStep + '_toggle',
-                                          assignNote + ' ' + assignVel);
-                    S.clipSteps[S.activeTrack][ac_he][S.heldStep] = 1;
-                    S.clipNonEmpty[S.activeTrack][ac_he] = true;
-                    S.heldStepNotes = [assignNote];
-                    S.stepEditVel   = assignVel;
-                    S.stepWasEmpty  = false;
-                    refreshSeqNotesIfCurrent(S.activeTrack, ac_he, S.heldStep);
-                } else {
-                    S.noNoteFlashEndTick = S.tickCount + NO_NOTE_FLASH_TICKS;
-                }
-                S.screenDirty = true;
-            }
-        }
+        handleTrackViewStepHoldThreshold(S, createTrackViewStepWorkflowDeps());
 
         /* Chord-first phase 2: replace notes with full chord — fires the tick AFTER phase 1.
          * Must come before phase 1 so both can't fire in the same tick and coalesce. */
@@ -8163,6 +8065,7 @@ function createTrackViewStepWorkflowDeps() {
         padModeDrum: PAD_MODE_DRUM,
         refreshSeqNotesIfCurrent,
         setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        stepHoldTicks: STEP_HOLD_TICKS,
         stepEntryVelocity,
         showActionPopup
     };

@@ -421,3 +421,96 @@ export function handleTrackViewStepRelease(S, deps, btn) {
     deps.forceRedraw();
     return true;
 }
+
+export function handleTrackViewStepHoldThreshold(S, deps) {
+    if (S.heldStep < 0 || S.heldStepBtn < 0 || S.stepBtnPressedTick[S.heldStepBtn] < 0)
+        return false;
+    if ((S.tickCount - S.stepBtnPressedTick[S.heldStepBtn]) < deps.stepHoldTicks)
+        return false;
+
+    S.stepBtnPressedTick[S.heldStepBtn] = -1;
+    S.stepWasHeld = true;
+
+    if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== deps.padModeDrum) {
+        const track = S.activeTrack;
+        const clip = deps.effectiveClip(track);
+        const info = deps.getParam
+            ? deps.getParam('t' + track + '_c' + clip + '_ccstepinfo_' + S.heldStep)
+            : null;
+        const parts = info ? info.split(' ') : [];
+        for (let k = 0; k < 8; k++) {
+            const pointVal = parts.length > k ? parseInt(parts[k], 10) : -1;
+            const computedVal = parts.length > k + 8 ? parseInt(parts[k + 8], 10) : -1;
+            S.ccStepEditSet[k] = pointVal >= 0;
+            S.ccStepEditComputed[k] = (computedVal >= 0 && computedVal <= 127) ? computedVal : -1;
+            const restingVal = S.clipCCVal[track][clip][k];
+            S.ccStepEditVal[k] = pointVal >= 0 ? pointVal : (restingVal >= 0 ? restingVal : 0);
+        }
+        S.screenDirty = true;
+    } else if (S.trackPadMode[S.activeTrack] === deps.padModeDrum) {
+        if (S.stepWasEmpty && S.heldStepNotes.length === 0 && deps.setParam) {
+            const track = S.activeTrack;
+            const lane = S.activeDrumLane[track];
+            deps.setParam('t' + track + '_l' + lane + '_step_' + S.heldStep + '_toggle', String(S.stepEditVel));
+            S.drumLaneSteps[track][lane][S.heldStep] = '1';
+            S.drumLaneHasNotes[track][lane] = true;
+            S.heldStepNotes = [S.drumLaneNote[track][lane]];
+            if (deps.getParam) {
+                const vel = deps.getParam('t' + track + '_l' + lane + '_step_' + S.heldStep + '_vel');
+                const gate = deps.getParam('t' + track + '_l' + lane + '_step_' + S.heldStep + '_gate');
+                const nudge = deps.getParam('t' + track + '_l' + lane + '_step_' + S.heldStep + '_nudge');
+                const iter = deps.getParam('t' + track + '_l' + lane + '_step_' + S.heldStep + '_iter');
+                const rand = deps.getParam('t' + track + '_l' + lane + '_step_' + S.heldStep + '_rand');
+                const ratch = deps.getParam('t' + track + '_l' + lane + '_step_' + S.heldStep + '_ratch');
+                S.stepEditVel = vel !== null ? parseInt(vel, 10) : S.stepEditVel;
+                S.stepEditGate = gate !== null ? parseInt(gate, 10) : Math.max(1, Math.floor((S.drumLaneTPS[track] || 24) / 2));
+                S.stepEditNudge = nudge !== null ? parseInt(nudge, 10) : 0;
+                S.stepEditIter = iter !== null ? parseInt(iter, 10) : 0;
+                S.stepEditRand = rand !== null ? parseInt(rand, 10) : 0;
+                S.stepEditRatch = ratch !== null ? parseInt(ratch, 10) : 0;
+            }
+        }
+        S.screenDirty = true;
+    } else if (!S.stepWasEmpty && S.heldStepNotes.length === 0) {
+        const clip = deps.effectiveClip(S.activeTrack);
+        const prefix = 't' + S.activeTrack + '_c' + clip + '_step_' + S.heldStep;
+        const rawNotes = deps.getParam ? deps.getParam(prefix + '_notes') : null;
+        S.heldStepNotes = (rawNotes && rawNotes.trim().length > 0)
+            ? rawNotes.trim().split(' ').map(Number).filter(function(n) { return n >= 0 && n <= 127; })
+            : [];
+        const vel = deps.getParam ? deps.getParam(prefix + '_vel') : null;
+        const gate = deps.getParam ? deps.getParam(prefix + '_gate') : null;
+        const nudge = deps.getParam ? deps.getParam(prefix + '_nudge') : null;
+        const iter = deps.getParam ? deps.getParam(prefix + '_iter') : null;
+        const rand = deps.getParam ? deps.getParam(prefix + '_rand') : null;
+        const ratch = deps.getParam ? deps.getParam(prefix + '_ratch') : null;
+        S.stepEditVel = vel !== null ? parseInt(vel, 10) : 100;
+        S.stepEditGate = gate !== null ? parseInt(gate, 10) : (S.clipTPS[S.activeTrack][clip] || 24);
+        S.stepEditNudge = nudge !== null ? parseInt(nudge, 10) : 0;
+        S.stepEditIter = iter !== null ? parseInt(iter, 10) : 0;
+        S.stepEditRand = rand !== null ? parseInt(rand, 10) : 0;
+        S.stepEditRatch = ratch !== null ? parseInt(ratch, 10) : 0;
+        S.screenDirty = true;
+    } else if (S.stepWasEmpty && S.heldStepNotes.length === 0) {
+        if (S.activeBank === 6) {
+            /* CC bank: no note auto-assign */
+        } else if (S.lastPlayedNote >= 0 && deps.setParam) {
+            const clip = deps.effectiveClip(S.activeTrack);
+            const assignNote = S.lastPlayedNote;
+            const assignVel = deps.stepEntryVelocity(S.activeTrack, -1, false);
+            deps.setParam('t' + S.activeTrack + '_c' + clip + '_step_' + S.heldStep + '_toggle',
+                assignNote + ' ' + assignVel);
+            S.clipSteps[S.activeTrack][clip][S.heldStep] = 1;
+            S.clipNonEmpty[S.activeTrack][clip] = true;
+            S.heldStepNotes = [assignNote];
+            S.stepEditVel = assignVel;
+            S.stepWasEmpty = false;
+            deps.refreshSeqNotesIfCurrent(S.activeTrack, clip, S.heldStep);
+        } else {
+            S.noNoteFlashEndTick = S.tickCount + deps.noNoteFlashTicks;
+        }
+        S.screenDirty = true;
+    }
+
+    return true;
+}

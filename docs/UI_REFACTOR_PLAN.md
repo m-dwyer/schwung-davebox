@@ -974,6 +974,18 @@ Drum repeat workflows:
   Drum/melodic hold-threshold behavior, deeper CC step-edit behavior, Parameter
   Bank behavior, recording behavior, Session View Performance Mode, modal
   workflows, and unrelated DSP reads/writes remain in `ui.js`.
+- Continued the Track View Step Workflow seam with the tick-side step
+  hold-threshold lifecycle. Moved tap-window closure, CC step-edit value seeding,
+  drum empty-step auto-assign/readback, melodic non-empty note/edit readback, and
+  melodic empty-step auto-assign/no-note flash into
+  `handleTrackViewStepHoldThreshold()`. Preserved tick priority by leaving the
+  call at the original point after side-button hold reveal and before
+  chord-first phase 2/phase 1 work. `ui.js` remains the adapter for shared
+  state, host reads/writes, clip resolution, velocity helpers, sequence-note
+  refresh, constants, and top-level tick/MIDI routing. Deeper CC step-edit
+  behavior, Parameter Bank behavior, recording behavior, Session View
+  Performance Mode, modal workflows, and unrelated DSP reads/writes remain in
+  `ui.js`.
 
 Verification:
 
