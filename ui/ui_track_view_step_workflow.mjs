@@ -64,3 +64,10 @@ export function handleTrackViewDeleteStepPress(S, deps, idx) {
     deps.forceRedraw();
     return true;
 }
+
+export function handleTrackViewMuteStepPress(S) {
+    if (!S.muteHeld) return false;
+
+    /* Track View Mute+step currently falls through to normal step editing. */
+    return false;
+}

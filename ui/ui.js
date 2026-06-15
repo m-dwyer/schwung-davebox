@@ -177,7 +177,8 @@ import {
 } from './ui_track_chrome_render.mjs';
 import {
     handleTrackViewCopyStepPress,
-    handleTrackViewDeleteStepPress
+    handleTrackViewDeleteStepPress,
+    handleTrackViewMuteStepPress
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -8179,6 +8180,8 @@ function _onStepButtons(d1, d2) {
     } else if (handleTrackViewCopyStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
         return;
     } else if (handleTrackViewDeleteStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
+        return;
+    } else if (handleTrackViewMuteStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
         return;
     } else if (S.shiftHeld) {
         /* Shift+step shortcuts */

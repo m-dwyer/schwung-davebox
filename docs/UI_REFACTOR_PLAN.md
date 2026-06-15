@@ -917,6 +917,14 @@ Drum repeat workflows:
   action popups. Mute+step, held-step edit, Parameter Bank behavior, recording
   behavior, Session View Performance Mode, modal workflows, and unrelated DSP
   reads/writes remain in `ui.js`.
+- Continued the Track View Step Workflow seam with the Mute+step modifier check.
+  Characterized the current behavior: Track View Mute+step has no separate
+  action and intentionally falls through to the normal drum or melodic step
+  handlers. Added `handleTrackViewMuteStepPress()` as the explicit seam after
+  Copy+step and Delete+step, preserving priority for hold-reveal, Session View
+  step behavior, Loop gesture, Copy+step, and Delete+step. Held-step edit,
+  Parameter Bank behavior, recording behavior, Session View Performance Mode,
+  modal workflows, and unrelated DSP reads/writes remain in `ui.js`.
 
 Verification:
 
