@@ -187,7 +187,8 @@ import {
     handleTrackViewChordFirstStepTick,
     handleTrackViewMelodicStepNoteAssignment,
     handleTrackViewMelodicStepKnob,
-    handleTrackViewDrumStepKnob
+    handleTrackViewDrumStepKnob,
+    handleTrackViewCcStepEditKnob
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -6580,51 +6581,7 @@ function ccKnobDelta(d2, k) {
 }
 
 function _onCC_stepedit(d1, d2) {
-    /* CC step-edit: bank 6 + held step — all 8 knobs write CC automation at step's tick */
-    if (S.heldStep >= 0 && S.activeBank === 6 &&
-            S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM && d1 >= 71 && d1 <= 78) {
-        const _kIdx = d1 - 71;
-        const _acc  = ccKnobDelta(d2, _kIdx);  /* run-length acceleration */
-        if (_acc === 0) return;
-        const _t    = S.activeTrack;
-        const _ac   = effectiveClip(_t);
-        S.knobTouched          = _kIdx;
-        S.knobTurnedTick[_kIdx] = S.tickCount;
-        S.ccActiveLane[_t]      = _kIdx;
-        S.screenDirty  = true;
-        var _laneTps = S.ccLaneTps[_t][_ac][_kIdx];
-        const _tps   = (_laneTps > 0) ? _laneTps : (S.clipTPS[_t][_ac] || 24);
-        const _tick  = S.heldStep * _tps;
-        const _hold  = Math.min(65535, _tick + _tps - 1);
-        /* Floor at "—": from an unset step, down → stays "—" (clear this knob's
-         * point in the step window); up → writes the seed (recorded point if
-         * any, else clip resting value, else 0; computed at step-hold time).
-         * From a set step, down past 0 → clears back to "—". */
-        if (!S.ccStepEditSet[_kIdx]) {
-            if (_acc < 0) {
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + _t + '_cc_auto_clear_range',
-                        _ac + ' ' + _kIdx + ' ' + _tick + ' ' + _hold);
-                return;   /* stays "—" */
-            }
-            S.ccStepEditSet[_kIdx] = true;   /* keep the seed value */
-        } else {
-            const _nv = S.ccStepEditVal[_kIdx] + _acc;
-            if (_nv < 0) {
-                /* down past 0 → "—": drop this knob's point(s) in the step window */
-                S.ccStepEditSet[_kIdx] = false;
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + _t + '_cc_auto_clear_range',
-                        _ac + ' ' + _kIdx + ' ' + _tick + ' ' + _hold);
-                /* refresh the auto bit (knob may still have points elsewhere) */
-                return;
-            }
-            S.ccStepEditVal[_kIdx] = Math.min(127, _nv);
-        }
-        if (typeof host_module_set_param === 'function')
-            host_module_set_param('t' + _t + '_cc_auto_set2',
-                _ac + ' ' + _kIdx + ' ' + _tick + ' ' + _hold + ' ' + S.ccStepEditVal[_kIdx]);
-        S.trackCCAutoBits[_t][_ac] |= (1 << _kIdx);
+    if (handleTrackViewCcStepEditKnob(S, createTrackViewStepWorkflowDeps(), d1, d2)) {
         return;
     }
 

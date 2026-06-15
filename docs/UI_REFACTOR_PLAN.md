@@ -1022,6 +1022,15 @@ Drum repeat workflows:
   the adapter for shared state, host writes, `ccKnobDelta()`,
   `STEP_ITER_LIST`, top-level CC routing, CC-bank step-edit, Parameter Bank
   behavior, and recording behavior.
+- Continued the Track View Step Workflow seam with CC-bank held-step knob
+  handling. Moved lane selection/touch state, unset negative clear behavior,
+  unset positive seed writes, set below-zero clears, value clamping,
+  `trackCCAutoBits` updates, and step-window tick range writes into
+  `handleTrackViewCcStepEditKnob()`. Preserved priority by keeping this helper
+  first in `_onCC_stepedit()` before drum and melodic held-step knob handling.
+  `ui.js` remains the adapter for shared state, host writes, `effectiveClip()`,
+  `ccKnobDelta()`, top-level CC routing, Parameter Bank behavior, and recording
+  behavior.
 
 Verification:
 

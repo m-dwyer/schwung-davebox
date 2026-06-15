@@ -761,3 +761,52 @@ export function handleTrackViewDrumStepKnob(S, deps, d1, d2) {
 
     return true;
 }
+
+export function handleTrackViewCcStepEditKnob(S, deps, d1, d2) {
+    if (S.heldStep < 0 || S.activeBank !== 6 || d1 < 71 || d1 > 78)
+        return false;
+    if (S.trackPadMode[S.activeTrack] === deps.padModeDrum)
+        return false;
+
+    const knobIdx = d1 - 71;
+    const acc = deps.ccKnobDelta(d2, knobIdx);
+    if (acc === 0) return true;
+
+    const track = S.activeTrack;
+    const clip = deps.effectiveClip(track);
+    S.knobTouched = knobIdx;
+    S.knobTurnedTick[knobIdx] = S.tickCount;
+    S.ccActiveLane[track] = knobIdx;
+    S.screenDirty = true;
+
+    const laneTps = S.ccLaneTps[track][clip][knobIdx];
+    const tps = laneTps > 0 ? laneTps : (S.clipTPS[track][clip] || 24);
+    const tick = S.heldStep * tps;
+    const hold = Math.min(65535, tick + tps - 1);
+
+    if (!S.ccStepEditSet[knobIdx]) {
+        if (acc < 0) {
+            if (deps.setParam)
+                deps.setParam('t' + track + '_cc_auto_clear_range',
+                    clip + ' ' + knobIdx + ' ' + tick + ' ' + hold);
+            return true;
+        }
+        S.ccStepEditSet[knobIdx] = true;
+    } else {
+        const nextVal = S.ccStepEditVal[knobIdx] + acc;
+        if (nextVal < 0) {
+            S.ccStepEditSet[knobIdx] = false;
+            if (deps.setParam)
+                deps.setParam('t' + track + '_cc_auto_clear_range',
+                    clip + ' ' + knobIdx + ' ' + tick + ' ' + hold);
+            return true;
+        }
+        S.ccStepEditVal[knobIdx] = Math.min(127, nextVal);
+    }
+
+    if (deps.setParam)
+        deps.setParam('t' + track + '_cc_auto_set2',
+            clip + ' ' + knobIdx + ' ' + tick + ' ' + hold + ' ' + S.ccStepEditVal[knobIdx]);
+    S.trackCCAutoBits[track][clip] |= (1 << knobIdx);
+    return true;
+}
