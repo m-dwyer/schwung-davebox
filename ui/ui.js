@@ -145,6 +145,7 @@ import {
 import {
     runDefaultSetParamDrain,
     runDeferredContentResyncTasks,
+    runDeferredLaneEditReadbackTasks,
     runDeferredDrumNoteOffDrain,
     runDspMirrorResyncTasks,
     runEndOfTickPersistenceTasks,
@@ -5783,34 +5784,11 @@ function _tickImpl() {
         forceRedraw
     });
 
-    /* Deferred _steps re-read after _reassign: confirm DSP move in JS mirror */
-    if (S.pendingAllLanesStretchCheck >= 0) {
-        const _sat = S.pendingAllLanesStretchCheck;
-        S.pendingAllLanesStretchCheck = -1;
-        const _res = host_module_get_param('t' + _sat + '_all_lanes_stretch_result');
-        if (_res !== null && parseInt(_res, 10) === -1) {
-            showActionPopup('NO ROOM');
-            S.bankParams[_sat][7][1] -= (S.knobLastDir[1] || 1);
-        }
-    }
-    if (S.allLanesQntResetTick >= 0 && S.tickCount >= S.allLanesQntResetTick) {
-        S.bankParams[S.allLanesQntResetTrack][7][3] = -1;
-        S.allLanesQntResetTick  = -1;
-        S.allLanesQntResetTrack = -1;
-        S.screenDirty = true;
-    }
-    if (S.allLanesResResetTick >= 0 && S.tickCount >= S.allLanesResResetTick) {
-        S.bankParams[S.allLanesResResetTrack][7][0] = -1;
-        S.allLanesResResetTick  = -1;
-        S.allLanesResResetTrack = -1;
-        S.screenDirty = true;
-    }
-    if (S.allLanesDirResetTick >= 0 && S.tickCount >= S.allLanesDirResetTick) {
-        S.bankParams[S.allLanesDirResetTrack][7][6] = -1;
-        S.allLanesDirResetTick  = -1;
-        S.allLanesDirResetTrack = -1;
-        S.screenDirty = true;
-    }
+    runDeferredLaneEditReadbackTasks(S, {
+        host_module_get_param,
+        showActionPopup
+    });
+
     runDeferredContentResyncTasks(S, {
         NUM_TRACKS,
         NUM_STEPS,

@@ -203,6 +203,37 @@ export function runPendingUndoSyncTask(S, deps) {
     deps.forceRedraw();
 }
 
+export function runDeferredLaneEditReadbackTasks(S, deps) {
+    /* Deferred _steps re-read after _reassign: confirm DSP move in JS mirror. */
+    if (S.pendingAllLanesStretchCheck >= 0) {
+        const track = S.pendingAllLanesStretchCheck;
+        S.pendingAllLanesStretchCheck = -1;
+        const result = deps.host_module_get_param('t' + track + '_all_lanes_stretch_result');
+        if (result !== null && parseInt(result, 10) === -1) {
+            deps.showActionPopup('NO ROOM');
+            S.bankParams[track][7][1] -= (S.knobLastDir[1] || 1);
+        }
+    }
+    if (S.allLanesQntResetTick >= 0 && S.tickCount >= S.allLanesQntResetTick) {
+        S.bankParams[S.allLanesQntResetTrack][7][3] = -1;
+        S.allLanesQntResetTick  = -1;
+        S.allLanesQntResetTrack = -1;
+        S.screenDirty = true;
+    }
+    if (S.allLanesResResetTick >= 0 && S.tickCount >= S.allLanesResResetTick) {
+        S.bankParams[S.allLanesResResetTrack][7][0] = -1;
+        S.allLanesResResetTick  = -1;
+        S.allLanesResResetTrack = -1;
+        S.screenDirty = true;
+    }
+    if (S.allLanesDirResetTick >= 0 && S.tickCount >= S.allLanesDirResetTick) {
+        S.bankParams[S.allLanesDirResetTrack][7][6] = -1;
+        S.allLanesDirResetTick  = -1;
+        S.allLanesDirResetTrack = -1;
+        S.screenDirty = true;
+    }
+}
+
 export function runDeferredContentResyncTasks(S, deps) {
     if (S.pendingDrumResync > 0) {
         S.pendingDrumResync--;
