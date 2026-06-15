@@ -185,6 +185,24 @@ export function runMoveCoRunTickTasks(S, deps) {
     }
 }
 
+export function runPendingUndoSyncTask(S, deps) {
+    /* Deferred targeted re-sync after undo/redo: re-read only the affected clip(s). */
+    if (S.pendingUndoSync <= 0) return;
+    S.pendingUndoSync--;
+    if (S.pendingUndoSync !== 0) return;
+
+    const info = deps.host_module_get_param('last_restore');
+    deps.syncClipsTargeted(info);
+    /* apply_clip_restore clears tr->recording on the DSP side; re-establish it.
+     * Also flush stale JS note buffers since DSP called finalize_pending_notes. */
+    if (S.recordArmed && !S.recordCountingIn && S.recordArmedTrack >= 0) {
+        deps.clearRecordingNoteBuffers();
+        deps.host_module_set_param('t' + S.recordArmedTrack + '_recording', '1');
+    }
+    deps.invalidateLEDCache();
+    deps.forceRedraw();
+}
+
 export function runDeferredContentResyncTasks(S, deps) {
     if (S.pendingDrumResync > 0) {
         S.pendingDrumResync--;

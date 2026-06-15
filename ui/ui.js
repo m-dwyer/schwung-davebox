@@ -153,6 +153,7 @@ import {
     runMetroNoteOffTask,
     runMoveCoRunTickTasks,
     runPadMapSelfHealTask,
+    runPendingUndoSyncTask,
     runRepeatRecordingLaneRefreshTask
 } from './ui_tick_tasks.mjs';
 
@@ -5767,26 +5768,20 @@ function _tickImpl() {
         move_midi_inject_to_move: (typeof move_midi_inject_to_move === 'function') ? move_midi_inject_to_move : null
     });
 
-    /* Deferred targeted re-sync after undo/redo: re-read only the affected clip(s). */
-    if (S.pendingUndoSync > 0) {
-        S.pendingUndoSync--;
-        if (S.pendingUndoSync === 0) {
-            const _info = host_module_get_param('last_restore');
-            syncClipsTargeted(_info);
-            /* apply_clip_restore clears tr->recording on the DSP side; re-establish it.
-             * Also flush stale JS note buffers since DSP called finalize_pending_notes. */
-            if (S.recordArmed && !S.recordCountingIn && S.recordArmedTrack >= 0) {
-                _recordingNoteTrack.clear();
-                S._recNoteOns.length   = 0;
-                S._recNoteOffs.length  = 0;
-                _drumRecNoteOns.length  = 0;
-                _drumRecNoteOffs.length = 0;
-                host_module_set_param('t' + S.recordArmedTrack + '_recording', '1');
-            }
-            invalidateLEDCache();
-            forceRedraw();
-        }
-    }
+    runPendingUndoSyncTask(S, {
+        host_module_get_param,
+        host_module_set_param,
+        syncClipsTargeted,
+        clearRecordingNoteBuffers: function () {
+            _recordingNoteTrack.clear();
+            S._recNoteOns.length   = 0;
+            S._recNoteOffs.length  = 0;
+            _drumRecNoteOns.length  = 0;
+            _drumRecNoteOffs.length = 0;
+        },
+        invalidateLEDCache,
+        forceRedraw
+    });
 
     /* Deferred _steps re-read after _reassign: confirm DSP move in JS mirror */
     if (S.pendingAllLanesStretchCheck >= 0) {
