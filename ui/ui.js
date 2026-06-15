@@ -133,6 +133,11 @@ import {
     handleDrumRepeatPadAftertouch,
     handleDrumRepeatRatePadPress,
     handleDrumRepeatRatePadRelease,
+    resetDrumRepeatGrooveForLane,
+    resetDrumRepeatGrooveMirrorsForLane,
+    copyDrumRepeatGrooveMirrors,
+    moveDrumRepeatGrooveMirrors,
+    editDrumRepeatGrooveStep,
     cycleDrumRepeatPerformMode,
     prepareDrumRepeatLoopPress,
     latchHeldDrumRepeatsOnLoopPress,
@@ -1120,13 +1125,7 @@ function copyDrumLane(t, srcLane, dstLane) {
     for (let s = 0; s < 256; s++) steps[dstLane][s] = steps[srcLane][s];
     S.drumLaneHasNotes[t][dstLane] = S.drumLaneHasNotes[t][srcLane];
     if (S.drumLaneHasNotes[t][srcLane]) S.drumClipNonEmpty[t][S.trackActiveClip[t]] = true;
-    /* Copy repeat groove JS state */
-    S.drumRepeatGate[t][dstLane]    = S.drumRepeatGate[t][srcLane];
-    S.drumRepeatGateLen[t][dstLane] = S.drumRepeatGateLen[t][srcLane];
-    for (let s = 0; s < 8; s++) {
-        S.drumRepeatVelScale[t][dstLane][s] = S.drumRepeatVelScale[t][srcLane][s];
-        S.drumRepeatNudge[t][dstLane][s]    = S.drumRepeatNudge[t][srcLane][s];
-    }
+    copyDrumRepeatGrooveMirrors(S, t, srcLane, dstLane);
     S.pendingDrumLaneResync = 2; S.pendingDrumLaneResyncTrack = t; S.pendingDrumLaneResyncLane = dstLane;
 }
 
@@ -1143,16 +1142,7 @@ function cutDrumLane(t, srcLane, dstLane) {
     let anyHits = false;
     for (let l = 0; l < DRUM_LANES; l++) if (S.drumLaneHasNotes[t][l]) { anyHits = true; break; }
     S.drumClipNonEmpty[t][S.trackActiveClip[t]] = anyHits;
-    /* Move repeat groove JS state */
-    S.drumRepeatGate[t][dstLane]    = S.drumRepeatGate[t][srcLane];
-    S.drumRepeatGateLen[t][dstLane] = S.drumRepeatGateLen[t][srcLane];
-    for (let s = 0; s < 8; s++) {
-        S.drumRepeatVelScale[t][dstLane][s] = S.drumRepeatVelScale[t][srcLane][s];
-        S.drumRepeatNudge[t][dstLane][s]    = S.drumRepeatNudge[t][srcLane][s];
-    }
-    S.drumRepeatGate[t][srcLane]    = 0xFF;
-    S.drumRepeatGateLen[t][srcLane] = 8;
-    for (let s = 0; s < 8; s++) { S.drumRepeatVelScale[t][srcLane][s] = 100; S.drumRepeatNudge[t][srcLane][s] = 0; }
+    moveDrumRepeatGrooveMirrors(S, t, srcLane, dstLane);
     S.pendingDrumLaneResync = 2; S.pendingDrumLaneResyncTrack = t; S.pendingDrumLaneResyncLane = dstLane;
 }
 
@@ -6902,15 +6892,7 @@ function _onCC_jog(d1, d2) {
                 /* Rpt/Rpt2 mode: Delete+jog = reset current lane groove params */
                 const _rt = S.activeTrack;
                 const _rl = S.activeDrumLane[_rt];
-                S.drumRepeatGate[_rt][_rl]    = 0xFF;
-                S.drumRepeatGateLen[_rt][_rl] = 8;
-                for (let _s = 0; _s < 8; _s++) {
-                    S.drumRepeatVelScale[_rt][_rl][_s] = 100;
-                    S.drumRepeatNudge[_rt][_rl][_s]    = 0;
-                }
-                /* Defer reset push — synchronous from jog handler coalesces. */
-                S.pendingDefaultSetParams.push({ key: 't' + _rt + '_l' + _rl + '_repeat_groove_reset', val: '1' });
-                showActionPopup('RPT GROOVE', 'RESET');
+                resetDrumRepeatGrooveForLane(S, { showActionPopup }, _rt, _rl);
             } else {
                 /* Drum: Delete+jog = reset only the active real-time FX bank + Dir/RvSt/SqFl */
                 const REAL_TIME_BANKS = [1, 2, 3];
@@ -8993,22 +8975,7 @@ function _onCC_knobs(d1, d2) {
             if (S.knobAccum[knobIdx] >= 2) {
                 S.knobAccum[knobIdx] = 0;
                 const step = knobIdx;
-                if (S.altMode) {
-                    const nv = Math.max(-50, Math.min(50, (S.drumRepeatNudge[t][lane][step] | 0) + dir));
-                    if (nv !== S.drumRepeatNudge[t][lane][step]) {
-                        S.drumRepeatNudge[t][lane][step] = nv;
-                        if (typeof host_module_set_param === 'function')
-                            host_module_set_param('t' + t + '_l' + lane + '_repeat_nudge', step + ' ' + nv);
-                    }
-                } else {
-                    const nv = Math.max(0, Math.min(200, (S.drumRepeatVelScale[t][lane][step] | 0) + dir * 3));
-                    if (nv !== S.drumRepeatVelScale[t][lane][step]) {
-                        S.drumRepeatVelScale[t][lane][step] = nv;
-                        if (typeof host_module_set_param === 'function')
-                            host_module_set_param('t' + t + '_l' + lane + '_repeat_vel_scale', step + ' ' + nv);
-                    }
-                }
-                S.screenDirty = true;
+                editDrumRepeatGrooveStep(S, { host_module_set_param }, t, lane, step, dir, S.altMode);
             }
             return;
         }
@@ -9395,14 +9362,7 @@ function _onPadPressTrackView(status, d1, d2) {
                 S.drumLaneLength[t]     = 16;
                 for (let s = 0; s < 256; s++) S.drumLaneSteps[t][lane][s] = '0';
                 S.drumLaneHasNotes[t][lane] = false;
-                /* Per-lane Rpt1 + Rpt2 groove reset to fresh-session defaults
-                 * (matches drum_repeat_init_defaults + doClearSession). */
-                S.drumRepeatGate[t][lane] = 0xFF;
-                for (let _s = 0; _s < 8; _s++) {
-                    S.drumRepeatVelScale[t][lane][_s] = 100;
-                    S.drumRepeatNudge[t][lane][_s]    = 0;
-                }
-                S.drumRepeat2RatePerLane[t][lane] = 0;
+                resetDrumRepeatGrooveMirrorsForLane(S, t, lane);
                 const ac = S.trackActiveClip[t];
                 S.drumClipNonEmpty[t][ac] = false;
                 for (let ol = 0; ol < DRUM_LANES; ol++) {

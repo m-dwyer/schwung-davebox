@@ -1,3 +1,65 @@
+const REPEAT_GROOVE_DEFAULT_GATE = 0xFF;
+const REPEAT_GROOVE_DEFAULT_GATE_LEN = 8;
+const REPEAT_GROOVE_DEFAULT_VEL_SCALE = 100;
+const REPEAT_GROOVE_DEFAULT_NUDGE = 0;
+const REPEAT_GROOVE_DEFAULT_RPT2_RATE = 0;
+
+function resetDrumRepeatGrooveShapeMirrorsForLane(S, track, lane) {
+    S.drumRepeatGate[track][lane] = REPEAT_GROOVE_DEFAULT_GATE;
+    S.drumRepeatGateLen[track][lane] = REPEAT_GROOVE_DEFAULT_GATE_LEN;
+    for (let step = 0; step < 8; step++) {
+        S.drumRepeatVelScale[track][lane][step] = REPEAT_GROOVE_DEFAULT_VEL_SCALE;
+        S.drumRepeatNudge[track][lane][step] = REPEAT_GROOVE_DEFAULT_NUDGE;
+    }
+}
+
+export function resetDrumRepeatGrooveMirrorsForLane(S, track, lane) {
+    resetDrumRepeatGrooveShapeMirrorsForLane(S, track, lane);
+    if (S.drumRepeat2RatePerLane) S.drumRepeat2RatePerLane[track][lane] = REPEAT_GROOVE_DEFAULT_RPT2_RATE;
+}
+
+export function resetDrumRepeatGrooveForLane(S, deps, track, lane) {
+    resetDrumRepeatGrooveShapeMirrorsForLane(S, track, lane);
+    S.pendingDefaultSetParams.push({ key: 't' + track + '_l' + lane + '_repeat_groove_reset', val: '1' });
+    deps.showActionPopup('RPT GROOVE', 'RESET');
+}
+
+export function copyDrumRepeatGrooveMirrors(S, track, srcLane, dstLane) {
+    S.drumRepeatGate[track][dstLane] = S.drumRepeatGate[track][srcLane];
+    S.drumRepeatGateLen[track][dstLane] = S.drumRepeatGateLen[track][srcLane];
+    for (let step = 0; step < 8; step++) {
+        S.drumRepeatVelScale[track][dstLane][step] = S.drumRepeatVelScale[track][srcLane][step];
+        S.drumRepeatNudge[track][dstLane][step] = S.drumRepeatNudge[track][srcLane][step];
+    }
+}
+
+export function moveDrumRepeatGrooveMirrors(S, track, srcLane, dstLane) {
+    copyDrumRepeatGrooveMirrors(S, track, srcLane, dstLane);
+    resetDrumRepeatGrooveMirrorsForLane(S, track, srcLane);
+}
+
+export function editDrumRepeatGrooveStep(S, deps, track, lane, step, dir, editNudge) {
+    if (step < 0 || step >= 8) return false;
+
+    if (editNudge) {
+        const nv = Math.max(-50, Math.min(50, (S.drumRepeatNudge[track][lane][step] | 0) + dir));
+        if (nv !== S.drumRepeatNudge[track][lane][step]) {
+            S.drumRepeatNudge[track][lane][step] = nv;
+            if (typeof deps.host_module_set_param === 'function')
+                deps.host_module_set_param('t' + track + '_l' + lane + '_repeat_nudge', step + ' ' + nv);
+        }
+    } else {
+        const nv = Math.max(0, Math.min(200, (S.drumRepeatVelScale[track][lane][step] | 0) + dir * 3));
+        if (nv !== S.drumRepeatVelScale[track][lane][step]) {
+            S.drumRepeatVelScale[track][lane][step] = nv;
+            if (typeof deps.host_module_set_param === 'function')
+                deps.host_module_set_param('t' + track + '_l' + lane + '_repeat_vel_scale', step + ' ' + nv);
+        }
+    }
+    S.screenDirty = true;
+    return true;
+}
+
 export function handleDrumRepeatRatePadPress(S, deps, track, padIdx, rateIdx, lane, velocity) {
     if (S.drumRepeatLatched[track] && S.drumRepeatHeldPad[track] === padIdx) {
         S.drumRepeatLatched[track]  = false;

@@ -511,6 +511,20 @@ Drum repeat workflows:
   `cycleDrumRepeatPerformMode()`, preserving stop-before-mode-change ordering,
   Rpt1 held-pad cleanup, Rpt2 held/latched lane cleanup, repeat-bank selection,
   and the mode popup behavior.
+- Started the larger Repeat Groove Workflow Module slice by moving
+  repeat-groove reset/default mirror behavior into
+  `ui_drum_repeat_workflows.mjs`:
+  `resetDrumRepeatGrooveForLane()`,
+  `resetDrumRepeatGrooveMirrorsForLane()`,
+  `copyDrumRepeatGrooveMirrors()`, and
+  `moveDrumRepeatGrooveMirrors()`.
+- Moved repeat-groove step knob edits into
+  `editDrumRepeatGrooveStep()`, preserving velocity-scale/nudge clamp ranges,
+  DSP payload shapes, and dirty-screen behavior.
+- Added focused coverage for Delete+jog deferred reset queue ordering,
+  mirror-only factory reset, copy/move mirror semantics, and repeat-groove knob
+  clamp/write behavior in
+  `web/tests/integration/drum-repeat-workflows.test.ts`.
 
 Verification:
 
