@@ -9,22 +9,52 @@ function snapById(p, id) {
     return null;
 }
 
+function renderButton(deps, x, y, w, h, selected, label, labelOff) {
+    if (selected) {
+        deps.fill_rect(x, y, w, h, 1);
+        deps.print(x + labelOff, y + 3, label, 0);
+    } else {
+        deps.fill_rect(x, y, w, 1, 1);
+        deps.fill_rect(x, y + h - 1, w, 1, 1);
+        deps.fill_rect(x, y, 1, h, 1);
+        deps.fill_rect(x + w - 1, y, 1, h, 1);
+        deps.print(x + labelOff, y + 3, label, 1);
+    }
+}
+
 function renderSnapYesNo(deps, sel) {
     const noX = 6, yesX = 74, btnY = 46, btnW = 46, btnH = 13;
-    function btn(x, on, label, off) {
-        if (on) {
-            deps.fill_rect(x, btnY, btnW, btnH, 1);
-            deps.print(x + off, btnY + 3, label, 0);
-        } else {
-            deps.fill_rect(x, btnY, btnW, 1, 1);
-            deps.fill_rect(x, btnY + btnH - 1, btnW, 1, 1);
-            deps.fill_rect(x, btnY, 1, btnH, 1);
-            deps.fill_rect(x + btnW - 1, btnY, 1, btnH, 1);
-            deps.print(x + off, btnY + 3, label, 1);
-        }
-    }
-    btn(noX, sel === 1, 'No', 17);
-    btn(yesX, sel === 0, 'Yes', 14);
+    renderButton(deps, noX, btnY, btnW, btnH, sel === 1, 'No', 17);
+    renderButton(deps, yesX, btnY, btnW, btnH, sel === 0, 'Yes', 14);
+}
+
+export function renderStateWipeConfirm(deps, selected) {
+    deps.clear_screen();
+    deps.drawMenuHeader('Incompatible State');
+    deps.print(4, 16, 'Session incompatible', 1);
+    deps.print(4, 25, 'with current dB ver.', 1);
+    deps.print(4, 34, 'Erase and proceed?', 1);
+    renderButton(deps, 6,  46, 46, 13, selected === 0, 'Yes', 14);
+    renderButton(deps, 74, 46, 46, 13, selected === 1, 'No',  17);
+}
+
+export function renderRecordBlockedDialog(deps, selected) {
+    deps.clear_screen();
+    deps.drawMenuHeader('REC Unavailable');
+    deps.print(4, 16, 'Set Dir to Fwd', 1);
+    deps.print(4, 25, 'or Bake', 1);
+    renderButton(deps, 6,  46, 46, 13, selected === 0, 'OK',       19);
+    renderButton(deps, 58, 46, 64, 13, selected === 1, 'BAKE NOW', 6);
+}
+
+export function renderLgtoConfirm(deps, opts) {
+    deps.clear_screen();
+    deps.drawMenuHeader(opts && opts.isDrum ? 'Lgto (lane)' : 'Lgto (clip)');
+    deps.print(4, 16, 'Destructive', 1);
+    deps.print(4, 25, 'Proceed?', 1);
+    const selected = opts ? opts.selected : 0;
+    renderButton(deps, 6,  46, 46, 13, selected === 0, 'OK',     19);
+    renderButton(deps, 58, 46, 64, 13, selected === 1, 'CANCEL', 14);
 }
 
 export function renderInheritPicker(deps, picker) {

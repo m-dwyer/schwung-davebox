@@ -130,7 +130,10 @@ import {
 import {
     renderClearAutomationMenu,
     renderInheritPicker,
-    renderSnapshotPicker
+    renderLgtoConfirm,
+    renderRecordBlockedDialog,
+    renderSnapshotPicker,
+    renderStateWipeConfirm
 } from './ui_modal_render.mjs';
 import {
     renderParamPeek
@@ -1584,69 +1587,20 @@ function routeCheckWarnForTrack(t) {
  * style. OK dismisses; BAKE NOW opens the standard bake confirm dialog
  * pre-targeted at the active clip / drum lane. */
 function drawStateWipeConfirm() {
-    clear_screen();
-    function _btn(x, y, w, h, sel, label, labelOff) {
-        if (sel) {
-            fill_rect(x, y, w, h, 1);
-            print(x + labelOff, y + 3, label, 0);
-        } else {
-            fill_rect(x, y, w, 1, 1);
-            fill_rect(x, y + h - 1, w, 1, 1);
-            fill_rect(x, y, 1, h, 1);
-            fill_rect(x + w - 1, y, 1, h, 1);
-            print(x + labelOff, y + 3, label, 1);
-        }
-    }
-    drawMenuHeader('Incompatible State');
-    print(4, 16, 'Session incompatible', 1);
-    print(4, 25, 'with current dB ver.', 1);
-    print(4, 34, 'Erase and proceed?', 1);
-    _btn(6,  46, 46, 13, S.confirmStateWipeSel === 0, 'Yes', 14);
-    _btn(74, 46, 46, 13, S.confirmStateWipeSel === 1, 'No',  17);
+    renderStateWipeConfirm(createModalRenderDeps(), S.confirmStateWipeSel);
 }
 
 function drawRecordBlockedDialog() {
-    clear_screen();
-    function _btn(x, y, w, h, sel, label, labelOff) {
-        if (sel) {
-            fill_rect(x, y, w, h, 1);
-            print(x + labelOff, y + 3, label, 0);
-        } else {
-            fill_rect(x, y, w, 1, 1);
-            fill_rect(x, y + h - 1, w, 1, 1);
-            fill_rect(x, y, 1, h, 1);
-            fill_rect(x + w - 1, y, 1, h, 1);
-            print(x + labelOff, y + 3, label, 1);
-        }
-    }
-    drawMenuHeader('REC Unavailable');
-    print(4, 16, 'Set Dir to Fwd', 1);
-    print(4, 25, 'or Bake', 1);
-    _btn(6,  46, 46, 13, S.recordBlockedDialogSel === 0, 'OK',       19);
-    _btn(58, 46, 64, 13, S.recordBlockedDialogSel === 1, 'BAKE NOW', 6);
+    renderRecordBlockedDialog(createModalRenderDeps(), S.recordBlockedDialogSel);
 }
 
 /* Destructive Lgto confirm dialog. Right-turn of CLIP K8 / DRUM LANE K8
  * opens this. OK applies; CANCEL aborts. Undoable. */
 function drawLgtoConfirm() {
-    clear_screen();
-    function _btn(x, y, w, h, sel, label, labelOff) {
-        if (sel) {
-            fill_rect(x, y, w, h, 1);
-            print(x + labelOff, y + 3, label, 0);
-        } else {
-            fill_rect(x, y, w, 1, 1);
-            fill_rect(x, y + h - 1, w, 1, 1);
-            fill_rect(x, y, 1, h, 1);
-            fill_rect(x + w - 1, y, 1, h, 1);
-            print(x + labelOff, y + 3, label, 1);
-        }
-    }
-    drawMenuHeader(S.confirmLgtoIsDrum ? 'Lgto (lane)' : 'Lgto (clip)');
-    print(4, 16, 'Destructive', 1);
-    print(4, 25, 'Proceed?', 1);
-    _btn(6,  46, 46, 13, S.confirmLgtoSel === 0, 'OK',     19);
-    _btn(58, 46, 64, 13, S.confirmLgtoSel === 1, 'CANCEL', 14);
+    renderLgtoConfirm(createModalRenderDeps(), {
+        isDrum: S.confirmLgtoIsDrum,
+        selected: S.confirmLgtoSel
+    });
 }
 
 function drawBakeConfirm() {

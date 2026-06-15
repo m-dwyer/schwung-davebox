@@ -836,6 +836,12 @@ Drum repeat workflows:
 - Added focused output coverage in `web/tests/integration/modal-render.test.ts`
   for selected-row inversion, scroll indicators, snapshot confirm subviews, and
   checkbox/action rows.
+- Continued the modal presentation path by moving the simple state-wipe,
+  record-blocked, and Lgto confirm dialog renderers into `ui/ui_modal_render.mjs`.
+  Kept their open/commit/cancel input handling and workflow side effects in
+  `ui.js`.
+- Extended focused modal output coverage for simple confirm title/body text and
+  selected button inversion.
 
 Verification:
 
