@@ -183,7 +183,8 @@ import {
     handleTrackViewDrumStepPress,
     handleTrackViewMelodicStepPress,
     handleTrackViewStepRelease,
-    handleTrackViewStepHoldThreshold
+    handleTrackViewStepHoldThreshold,
+    handleTrackViewChordFirstStepTick
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -4621,36 +4622,7 @@ function _tickImpl() {
          * Also auto-assign empty step now so knobs work immediately in step edit. */
         handleTrackViewStepHoldThreshold(S, createTrackViewStepWorkflowDeps());
 
-        /* Chord-first phase 2: replace notes with full chord — fires the tick AFTER phase 1.
-         * Must come before phase 1 so both can't fire in the same tick and coalesce. */
-        if (S.pendingChordPhase2 !== null) {
-            const _cp2 = S.pendingChordPhase2;
-            if (_cp2.pitches.length > 1 && typeof host_module_set_param === 'function') {
-                host_module_set_param('t' + _cp2.t + '_c' + _cp2.ac + '_step_' + _cp2.step + '_set_notes',
-                    _cp2.pitches.join(' '));
-            }
-            S.heldStepNotes = _cp2.pitches.slice();
-            refreshSeqNotesIfCurrent(_cp2.t, _cp2.ac, _cp2.step);
-            S.screenDirty = true;
-            S.pendingChordPhase2 = null;
-        }
-
-        /* Chord-first phase 1: activate empty step with first chord pitch so _set_notes works next tick.
-         * _set_notes is a no-op on empty steps, so _toggle must fire first to activate.
-         * Context is self-contained — does not depend on heldStep (may fire after quick release).
-         * Sets pendingChordPhase2 for the NEXT tick; phase 2 check above ensures they never coalesce. */
-        if (S.pendingChordToStep !== null && S.activeBank !== 6) {
-            const _cp1 = S.pendingChordToStep;
-            if (_cp1.wasEmpty) {
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + _cp1.t + '_c' + _cp1.ac + '_step_' + _cp1.step + '_toggle',
-                        _cp1.pitches[0] + ' ' + _cp1.vel);
-                S.clipSteps[_cp1.t][_cp1.ac][_cp1.step] = 1;
-                S.clipNonEmpty[_cp1.t][_cp1.ac] = true;
-            }
-            S.pendingChordPhase2 = _cp1;
-            S.pendingChordToStep = null;
-        }
+        handleTrackViewChordFirstStepTick(S, createTrackViewStepWorkflowDeps());
 
         /* Refresh scene state cache for O(1) lookups in LED update functions */
         for (let _i = 0; _i < 16; _i++) {

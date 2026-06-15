@@ -986,6 +986,16 @@ Drum repeat workflows:
   behavior, Parameter Bank behavior, recording behavior, Session View
   Performance Mode, modal workflows, and unrelated DSP reads/writes remain in
   `ui.js`.
+- Continued the Track View Step Workflow seam with chord-first tick phase
+  handling. Moved pending chord phase 2 full-note writes, held-note refresh,
+  pending chord phase 1 empty-step activation, phase 2 promotion, and CC-bank
+  deferral into `handleTrackViewChordFirstStepTick()`. Preserved tick priority
+  by leaving the call at the original point after step hold-threshold handling
+  and before scene-cache refresh and unrelated tick work. `ui.js` remains the
+  adapter for shared state, host writes, sequence-note refresh, constants, and
+  top-level tick/MIDI routing. Deeper CC step-edit behavior, Parameter Bank
+  behavior, recording behavior, Session View Performance Mode, modal workflows,
+  and unrelated DSP reads/writes remain in `ui.js`.
 
 Verification:
 

@@ -514,3 +514,41 @@ export function handleTrackViewStepHoldThreshold(S, deps) {
 
     return true;
 }
+
+export function handleTrackViewChordFirstStepTick(S, deps) {
+    let handled = false;
+
+    /* Chord-first phase 2: replace notes with full chord — fires the tick AFTER phase 1.
+     * Must come before phase 1 so a phase 1 promotion cannot coalesce with phase 2. */
+    if (S.pendingChordPhase2 !== null) {
+        const cp2 = S.pendingChordPhase2;
+        if (cp2.pitches.length > 1 && deps.setParam) {
+            deps.setParam('t' + cp2.t + '_c' + cp2.ac + '_step_' + cp2.step + '_set_notes',
+                cp2.pitches.join(' '));
+        }
+        S.heldStepNotes = cp2.pitches.slice();
+        deps.refreshSeqNotesIfCurrent(cp2.t, cp2.ac, cp2.step);
+        S.screenDirty = true;
+        S.pendingChordPhase2 = null;
+        handled = true;
+    }
+
+    /* Chord-first phase 1: activate empty step with first chord pitch so _set_notes works next tick.
+     * _set_notes is a no-op on empty steps, so _toggle must fire first to activate.
+     * Context is self-contained — does not depend on heldStep (may fire after quick release). */
+    if (S.pendingChordToStep !== null && S.activeBank !== 6) {
+        const cp1 = S.pendingChordToStep;
+        if (cp1.wasEmpty) {
+            if (deps.setParam)
+                deps.setParam('t' + cp1.t + '_c' + cp1.ac + '_step_' + cp1.step + '_toggle',
+                    cp1.pitches[0] + ' ' + cp1.vel);
+            S.clipSteps[cp1.t][cp1.ac][cp1.step] = 1;
+            S.clipNonEmpty[cp1.t][cp1.ac] = true;
+        }
+        S.pendingChordPhase2 = cp1;
+        S.pendingChordToStep = null;
+        handled = true;
+    }
+
+    return handled;
+}
