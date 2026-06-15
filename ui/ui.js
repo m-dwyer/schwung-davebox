@@ -125,6 +125,10 @@ import {
     renderTrackActionPopup
 } from './ui_popup_render.mjs';
 import {
+    renderMergePlacementPrompt,
+    renderSceneBakePickerPrompt
+} from './ui_prompt_render.mjs';
+import {
     SCALE_INTERVALS,
     applyPadNoteMap,
     createLiveNoteQueues,
@@ -3603,6 +3607,13 @@ function createPopupRenderDeps() {
     };
 }
 
+function createPromptRenderDeps() {
+    return {
+        clear_screen,
+        print
+    };
+}
+
 function drawUI() {
     /* CO-RUN: shadow_ui's chain editor owns the OLED while this is active.
      * Skip every Overture draw path so it doesn't fight the chain editor's
@@ -3640,19 +3651,11 @@ function drawUI() {
     if (S.snapshotPicker) { drawSnapshotPicker(); return; }
     if (S.clearAutoMenu) { drawClearAutoMenu(); return; }
     if (S.pendingSceneBakePicker) {
-        clear_screen();
-        print(4, 8,  'BAKE SCENE',         1);
-        print(4, 22, 'Tap row or scene step', 1);
-        print(4, 34, 'to pick destination',  1);
-        print(4, 50, 'Any other btn cancels', 1);
+        renderSceneBakePickerPrompt(createPromptRenderDeps());
         return;
     }
     if (S.pendingMergePlacement) {
-        clear_screen();
-        print(4, 8,  'PLACE MERGED CLIPS',  1);
-        print(4, 22, 'Tap row or scene step', 1);
-        print(4, 34, 'to pick destination',  1);
-        print(4, 50, 'Capture cancels',      1);
+        renderMergePlacementPrompt(createPromptRenderDeps());
         return;
     }
     if (S.confirmStateWipe) { drawStateWipeConfirm(); return; }
