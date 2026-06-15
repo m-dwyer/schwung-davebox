@@ -8,6 +8,22 @@ import {
     SCENE_LETTERS
 } from './ui_constants.mjs';
 
+export function renderSessionIdleView(deps) {
+    deps.fill_rect(0, 0, 128, 12, 1);
+    let oO, oE;
+    if (S.playing) {
+        oO = (Math.floor(S.masterPos / 192) % 2 === 0) ? 'O' : 'o';
+        oE = (Math.floor(S.masterPos /  48) % 2 === 0) ? 'e' : '3';
+    } else {
+        oO = 'O'; oE = 'e';
+    }
+    const banner = oO + 'vertur' + oE;
+    deps.print(40, 2, banner, 0);
+    deps.drawMetroIndicator();
+    deps.drawTrackRow(34);
+    renderActiveClipLetters(deps);
+}
+
 export function renderDrumTrackIdleView(deps) {
     const t         = S.activeTrack;
     const lane      = S.activeDrumLane[t];

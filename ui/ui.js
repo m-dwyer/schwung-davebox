@@ -116,9 +116,10 @@ import {
     renderMotionBankOverview
 } from './ui_bank_render.mjs';
 import {
+    renderSessionIdleView,
     renderDrumTrackIdleView,
     renderMelodicTrackIdleView
-} from './ui_track_idle_render.mjs';
+} from './ui_idle_render.mjs';
 import {
     SCALE_INTERVALS,
     applyPadNoteMap,
@@ -3581,6 +3582,16 @@ function createTrackIdleRenderDeps() {
     };
 }
 
+function createSessionIdleRenderDeps() {
+    return {
+        print,
+        pixelPrint,
+        fill_rect,
+        drawMetroIndicator,
+        drawTrackRow
+    };
+}
+
 function drawUI() {
     /* CO-RUN: shadow_ui's chain editor owns the OLED while this is active.
      * Skip every Overture draw path so it doesn't fight the chain editor's
@@ -3696,33 +3707,7 @@ function drawUI() {
             }
             return;
         }
-        /* Overture banner — white bar, letters animated when transport running */
-        fill_rect(0, 0, 128, 12, 1);
-        let oO, oE;
-        if (S.playing) {
-            oO = (Math.floor(S.masterPos / 192) % 2 === 0) ? 'O' : 'o';
-            oE = (Math.floor(S.masterPos /  48) % 2 === 0) ? 'e' : '3';
-        } else {
-            oO = 'O'; oE = 'e';
-        }
-        const banner = oO + 'vertur' + oE; /* "Overture" */
-        print(40, 2, banner, 0);
-        drawMetroIndicator();
-        drawTrackRow(34);
-        for (let t = 0; t < NUM_TRACKS; t++) {
-            const cx = t * 16 + 5;
-            const ac = S.trackActiveClip[t];
-            const hasData = S.trackPadMode[t] === PAD_MODE_DRUM
-                ? S.drumClipNonEmpty[t][ac]
-                : S.clipNonEmpty[t][ac];
-            const isActive = (S.trackClipPlaying[t] || S.trackWillRelaunch[t] || (S.trackQueuedClip[t] >= 0)) && hasData;
-            if (isActive) {
-                fill_rect(cx - 1, 45, 9, 7, 1);
-                pixelPrint(cx, 46, SCENE_LETTERS[ac], 0);
-            } else {
-                pixelPrint(cx, 46, SCENE_LETTERS[ac], 1);
-            }
-        }
+        renderSessionIdleView(createSessionIdleRenderDeps());
         return;
     }
 
