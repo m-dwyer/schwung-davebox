@@ -173,6 +173,7 @@ import {
     handleUiSideButton
 } from './ui_side_button_workflow.mjs';
 import {
+    handleUiMuteButton,
     handleUiPlayButton,
     handleUiRecordButton,
     handleUiSampleButton
@@ -6167,27 +6168,7 @@ function _onCC_transport(d1, d2) {
     /* Mute button: Delete+Mute = clear all (both views); toggle mute/solo on active track (Track View only).
      * Press: handle Delete+Mute immediately. Release: toggle mute/solo, but only if Mute was not used as
      * a modifier key (e.g. Mute+Play = metro toggle). */
-    if (d1 === MoveMute && d2 === 127) {
-        if (S.deleteHeld) {
-            if (!S.sessionView && S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-                /* Delete+Mute in drum track view: clear all drum lane mute/solo */
-                S.drumLaneMute[S.activeTrack] = 0;
-                S.drumLaneSolo[S.activeTrack] = 0;
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + S.activeTrack + '_drum_mute_all_clear', '1');
-                S.muteUsedAsModifier = true;
-                forceRedraw();
-            } else {
-                clearAllMuteSolo();
-            }
-        }
-    }
-    if (d1 === MoveMute && d2 === 0) {
-        if (!S.muteUsedAsModifier && !S.deleteHeld && !S.sessionView) {
-            if (S.shiftHeld) setTrackSolo(S.activeTrack, !S.trackSoloed[S.activeTrack]);
-            else           setTrackMute(S.activeTrack, !S.trackMuted[S.activeTrack]);
-        }
-    }
+    handleUiMuteButton(S, createTransportCcWorkflowDeps(), d1, d2);
 
     /* Left/Right: page nav in Track View — clamp to the loop window so
      * step-edit nav never lands on a page that won't play. */
@@ -7564,11 +7545,13 @@ function createSideButtonWorkflowDeps() {
 
 function createTransportCcWorkflowDeps() {
     return {
+        clearAllMuteSolo,
         disarmRecord,
         focusedClipIsEmpty: _focusedClipIsEmpty,
         forceRedraw,
         getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
         movePlay: MovePlay,
+        moveMute: MoveMute,
         moveRec: MoveRec,
         moveSample: MoveSample,
         numTracks: NUM_TRACKS,
@@ -7577,6 +7560,8 @@ function createTransportCcWorkflowDeps() {
         resolveInheritPicker,
         setButtonLED,
         setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setTrackMute,
+        setTrackSolo,
         showActionPopup,
         unlatchAllTracks: function () {
             return unlatchAllTracks(S, NUM_TRACKS);

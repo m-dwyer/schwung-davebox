@@ -142,6 +142,37 @@ export function handleUiRecordButton(S, deps, d1, d2) {
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
 }
 
+export function handleUiMuteButton(S, deps, d1, d2) {
+    if (d1 !== deps.moveMute) return;
+
+    /* Press: Delete+Mute clears mute/solo. In a Track View drum clip it clears
+     * that track's drum-lane mute/solo (and counts as a modifier so release
+     * doesn't also toggle the track); otherwise it clears every track. */
+    if (d2 === 127) {
+        if (S.deleteHeld) {
+            if (!S.sessionView && S.trackPadMode[S.activeTrack] === deps.padModeDrum) {
+                S.drumLaneMute[S.activeTrack] = 0;
+                S.drumLaneSolo[S.activeTrack] = 0;
+                if (deps.setParam)
+                    deps.setParam('t' + S.activeTrack + '_drum_mute_all_clear', '1');
+                S.muteUsedAsModifier = true;
+                deps.forceRedraw();
+            } else {
+                deps.clearAllMuteSolo();
+            }
+        }
+    }
+
+    /* Release: toggle the active track's mute (or solo with Shift) in Track
+     * View, but only when Mute was not used as a modifier this gesture. */
+    if (d2 === 0) {
+        if (!S.muteUsedAsModifier && !S.deleteHeld && !S.sessionView) {
+            if (S.shiftHeld) deps.setTrackSolo(S.activeTrack, !S.trackSoloed[S.activeTrack]);
+            else             deps.setTrackMute(S.activeTrack, !S.trackMuted[S.activeTrack]);
+        }
+    }
+}
+
 export function handleUiSampleButton(S, deps, d1, d2) {
     if (d1 !== deps.moveSample || S.shiftHeld) return;
 
