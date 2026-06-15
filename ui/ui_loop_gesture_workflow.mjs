@@ -108,3 +108,76 @@ export function handleLoopStepRelease(S, deps, idx) {
     if (idx === S.loopGestureStart) resolveLoopGesture(S, deps, true);
     return true;
 }
+
+export function handleLoopJog(S, deps, delta) {
+    const track = S.activeTrack;
+
+    if (S.recordArmed && !S.recordCountingIn) {
+        return true;
+    }
+
+    if (S.trackPadMode[track] === deps.padModeDrum) {
+        const lane = S.activeDrumLane[track];
+        const current = S.drumLaneLength[track];
+        const next = Math.max(1, Math.min(256, current + delta));
+        if (next !== current) {
+            S.drumLaneLength[track] = next;
+            S.drumLaneLengthManuallySet[track] = true;
+            const loopStart = S.drumLaneLoopStart[track] | 0;
+            const maxPage = Math.max(0, Math.floor((loopStart + next - 1) / 16));
+            S.loopJogActive = true;
+            S.loopJogLastTick = S.tickCount;
+            S.drumStepPage[track] = maxPage;
+            if (deps.setParam) {
+                if (S.activeBank === 7) {
+                    deps.setParam('t' + track + '_all_lanes_length', String(next));
+                } else {
+                    deps.setParam('t' + track + '_l' + lane + '_clip_length', String(next));
+                }
+            }
+            deps.forceRedraw();
+        }
+        return true;
+    }
+
+    const clip = deps.effectiveClip(track);
+
+    if (S.activeBank === 6) {
+        const lane = S.ccActiveLane[track];
+        let current = S.ccLaneLength[track][clip][lane];
+        if (current === 0) {
+            const clipTps = S.clipTPS[track][clip] || 24;
+            const laneTps = S.ccLaneTps[track][clip][lane] || clipTps;
+            current = Math.max(1, Math.round(S.clipLength[track][clip] * clipTps / laneTps));
+        }
+        const next = Math.max(1, Math.min(256, current + delta));
+        if (next !== current) {
+            S.ccLaneLength[track][clip][lane] = next;
+            S.loopJogActive = true;
+            S.loopJogLastTick = S.tickCount;
+            const loopStart = S.ccLaneLoopStart[track][clip][lane] | 0;
+            S.trackCurrentPage[track] = Math.max(0, Math.floor((loopStart + next - 1) / 16));
+            if (deps.setParam) {
+                deps.setParam('t' + track + '_c' + clip + '_k' + lane + '_cc_lane_length', String(next));
+            }
+            deps.forceRedraw();
+        }
+        return true;
+    }
+
+    const current = S.clipLength[track][clip];
+    const next = Math.max(1, Math.min(256, current + delta));
+    if (next !== current) {
+        S.clipLength[track][clip] = next;
+        S.clipLengthManuallySet[track][clip] = true;
+        S.loopJogActive = true;
+        S.loopJogLastTick = S.tickCount;
+        const loopStart = S.clipLoopStart[track][clip] | 0;
+        S.trackCurrentPage[track] = Math.max(0, Math.floor((loopStart + next - 1) / 16));
+        if (deps.setParam) {
+            deps.setParam('t' + track + '_clip_length', String(next));
+        }
+        deps.forceRedraw();
+    }
+    return true;
+}

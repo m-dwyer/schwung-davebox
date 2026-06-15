@@ -158,6 +158,7 @@ import {
     renderLoopView
 } from './ui_loop_render.mjs';
 import {
+    handleLoopJog,
     handleLoopStepPress,
     handleLoopStepRelease,
     resolveLoopGesture
@@ -5737,75 +5738,7 @@ function _onCC_jog(d1, d2) {
                     S.sceneRow = Math.min(NUM_CLIPS - 4, Math.max(0, S.sceneRow + delta));
                     forceRedraw();
                 } else if (S.loopHeld) {
-                    /* Track View + Loop held: adjust length ±1 step */
-                    const _t  = S.activeTrack;
-                    if (S.recordArmed && !S.recordCountingIn) {
-                        /* Block length changes during active recording */
-                    } else if (S.trackPadMode[_t] === PAD_MODE_DRUM) {
-                        /* Drum: adjust length. In ALL LANES bank, length applies to all 32
-                         * lanes atomically; in per-lane DRUM bank, just the active lane. */
-                        const _lane = S.activeDrumLane[_t];
-                        const _cur  = S.drumLaneLength[_t];
-                        const _nv   = Math.max(1, Math.min(256, _cur + delta));
-                        if (_nv !== _cur) {
-                            S.drumLaneLength[_t] = _nv;
-                            S.drumLaneLengthManuallySet[_t] = true;
-                            /* Boundary page is window-aware: last absolute step is
-                             * loop_start + length - 1, so the page containing it is
-                             * floor((loop_start + length - 1) / 16). */
-                            const _ls = S.drumLaneLoopStart[_t] | 0;
-                            const _maxPage = Math.max(0, Math.floor((_ls + _nv - 1) / 16));
-                            /* Show OOB step view in both modes — navigate to boundary page
-                             * so the step-level OOB greying renders. */
-                            S.loopJogActive = true;
-                            S.loopJogLastTick = S.tickCount;
-                            S.drumStepPage[_t] = _maxPage;
-                            if (typeof host_module_set_param === 'function') {
-                                if (S.activeBank === 7) {
-                                    host_module_set_param('t' + _t + '_all_lanes_length', String(_nv));
-                                } else {
-                                    host_module_set_param('t' + _t + '_l' + _lane + '_clip_length', String(_nv));
-                                }
-                            }
-                            forceRedraw();
-                        }
-                    } else if (S.activeBank === 6) {
-                        var _ac = effectiveClip(_t);
-                        var _ccL = S.ccActiveLane[_t];
-                        var _cur = S.ccLaneLength[_t][_ac][_ccL];
-                        if (_cur === 0) {
-                            var _cTps = S.clipTPS[_t][_ac] || 24;
-                            var _lTps = S.ccLaneTps[_t][_ac][_ccL] || _cTps;
-                            _cur = Math.max(1, Math.round(S.clipLength[_t][_ac] * _cTps / _lTps));
-                        }
-                        var _nv  = Math.max(1, Math.min(256, _cur + delta));
-                        if (_nv !== _cur) {
-                            S.ccLaneLength[_t][_ac][_ccL] = _nv;
-                            S.loopJogActive = true;
-                            S.loopJogLastTick = S.tickCount;
-                            var _ls = S.ccLaneLoopStart[_t][_ac][_ccL] | 0;
-                            S.trackCurrentPage[_t] = Math.max(0, Math.floor((_ls + _nv - 1) / 16));
-                            if (typeof host_module_set_param === 'function')
-                                host_module_set_param('t' + _t + '_c' + _ac + '_k' + _ccL + '_cc_lane_length', String(_nv));
-                            forceRedraw();
-                        }
-                    } else {
-                    const _ac = effectiveClip(_t);
-                    const _cur = S.clipLength[_t][_ac];
-                    const _nv  = Math.max(1, Math.min(256, _cur + delta));
-                    if (_nv !== _cur) {
-                        S.clipLength[_t][_ac] = _nv;
-                        S.clipLengthManuallySet[_t][_ac] = true;
-                        /* Show OOB step view: navigate to boundary page (window-aware) */
-                        S.loopJogActive = true;
-                        S.loopJogLastTick = S.tickCount;
-                        const _ls = S.clipLoopStart[_t][_ac] | 0;
-                        S.trackCurrentPage[_t] = Math.max(0, Math.floor((_ls + _nv - 1) / 16));
-                        if (typeof host_module_set_param === 'function')
-                            host_module_set_param('t' + _t + '_clip_length', String(_nv));
-                        forceRedraw();
-                    }
-                    }
+                    handleLoopJog(S, createLoopGestureWorkflowDeps(), delta);
                 } else if (S.heldStep >= 0) {
                     /* Change #3: a held step reserves the jog for step LENGTH
                      * (Move's "hold step + wheel = length"), so it no longer
@@ -8252,7 +8185,8 @@ function createLoopGestureWorkflowDeps() {
         effectiveClip,
         fireLoopWindowSet: _fireLoopWindowSet,
         forceRedraw,
-        padModeDrum: PAD_MODE_DRUM
+        padModeDrum: PAD_MODE_DRUM,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null
     };
 }
 
