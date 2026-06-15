@@ -176,6 +176,9 @@ import {
     renderMetroIndicator
 } from './ui_track_chrome_render.mjs';
 import {
+    handleTrackViewCopyStepPress
+} from './ui_track_view_step_workflow.mjs';
+import {
     SCALE_INTERVALS,
     applyPadNoteMap,
     createLiveNoteQueues,
@@ -8131,6 +8134,15 @@ function createLoopGestureWorkflowDeps() {
     };
 }
 
+function createTrackViewStepWorkflowDeps() {
+    return {
+        copyStep,
+        effectiveClip,
+        forceRedraw,
+        invalidateLEDCache
+    };
+}
+
 function _onStepButtons(d1, d2) {
     /* Co-run (Schwung chain-edit or Move-native): the step grid is blanked down
      * to a single exit affordance (the blinking Step 3 button + lit icon).
@@ -8159,19 +8171,8 @@ function _onStepButtons(d1, d2) {
         return;
     } else if (handleLoopStepPress(S, createLoopGestureWorkflowDeps(), idx)) {
         return;
-    } else if (S.copyHeld) {
-        /* Copy + step button (Track View): step-to-step copy within active clip */
-        const ac     = effectiveClip(S.activeTrack);
-        const absIdx = S.trackCurrentPage[S.activeTrack] * 16 + idx;
-        if (!S.copySrc) {
-            S.copySrc = { kind: 'step', absStep: absIdx };
-            invalidateLEDCache();
-        } else if (S.copySrc.kind === 'step') {
-            if (S.copySrc.absStep !== absIdx) copyStep(S.activeTrack, ac, S.copySrc.absStep, absIdx);
-            invalidateLEDCache();
-            forceRedraw();
-        }
-        /* S.copySrc.kind !== 'step': swallow — don't mix copy types */
+    } else if (handleTrackViewCopyStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
+        return;
     } else if (S.deleteHeld) {
         /* Delete + step button (Track View): clear all notes from that step.
          * On the CC bank (melodic), instead clear all knobs' points in the step. */

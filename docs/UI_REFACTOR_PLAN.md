@@ -889,9 +889,29 @@ Drum repeat workflows:
 - Extended focused output coverage in `web/tests/integration/splash-render.test.ts`
   for first-entry frame selection, visible-frame reuse, clear-before-draw
   ordering, and modulo frame-index wrapping.
+- Completed the current Loop Gesture Workflow phase by moving Loop+step
+  loop-window writes and Track View Loop+jog length edits into
+  `ui/ui_loop_gesture_workflow.mjs`. The workflow now owns press-time context
+  capture, A/B window calculation, reversed endpoints, mirror updates, page
+  clamping, manual-length flags, ALL LANES pending drum resync, CC lane loop
+  writes, single-step fallback, active-recording blocks, and jog length edits.
+  `ui.js` remains the adapter for handler priority, host globals,
+  `effectiveClip()`, redraw, shared legacy `S`, and top-level MIDI/button
+  routing. The helper-move rule held: the packed loop-window write helper moved
+  only when doing so removed a callback dependency from the workflow interface.
+- Started the Track View Step Workflow seam with Copy+step. Added
+  `ui/ui_track_view_step_workflow.mjs` for step-source capture, same-clip
+  copy-to-target, same-step no-op copy behavior, LED invalidation/redraw, and
+  swallowing non-step copy sources without mixing copy kinds. Kept `_onStepButtons()`
+  ordering in `ui.js`: hold-reveal, Session View steps, and Loop gesture still
+  run before Track View Copy+step. Delete+step, Mute+step, held-step edit,
+  Parameter Bank behavior, recording behavior, Session View Performance Mode,
+  modal workflows, and unrelated DSP reads/writes remain in `ui.js`.
 
 Verification:
 
+- `npm run test:node -- track-view-step-workflow.test.ts`
+- `npm run test:node -- behaviour.test.ts`
 - `npm run test:node -- tests/integration/splash-render.test.ts`
 - `npm run test:node -- tests/integration/modal-render.test.ts tests/integration/loop-render.test.ts tests/integration/param-peek-render.test.ts tests/integration/prompt-render.test.ts tests/integration/popup-render.test.ts tests/integration/idle-render.test.ts tests/integration/bank-render.test.ts tests/integration/bank-chrome-render.test.ts tests/integration/perf-render.test.ts tests/integration/session-overview-render.test.ts tests/integration/splash-render.test.ts tests/integration/step-edit-render.test.ts tests/integration/cc-step-edit-render.test.ts tests/integration/step-interval-render.test.ts tests/integration/ui-descriptors.test.ts`
 - `npm run test:node -- tests/integration`
