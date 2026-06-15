@@ -174,7 +174,8 @@ import {
 } from './ui_side_button_workflow.mjs';
 import {
     handleUiPlayButton,
-    handleUiRecordButton
+    handleUiRecordButton,
+    handleUiSampleButton
 } from './ui_transport_cc_workflow.mjs';
 import {
     renderTrackStepEditView
@@ -6161,51 +6162,7 @@ function _onCC_transport(d1, d2) {
     handleUiRecordButton(S, createTransportCcWorkflowDeps(), d1, d2);
 
     /* Sample press (no modifier): track held state; cancel dialogs/merge immediately on press */
-    if (d1 === MoveSample && d2 === 127 && !S.shiftHeld) {
-        S.sampleHeld           = true;
-        S.sampleUsedAsModifier = false;
-        if (S.pendingInheritPicker) {
-            resolveInheritPicker(-1);  /* Cancel = Start blank */
-            S.sampleUsedAsModifier = true;
-        } else if (S.confirmBakeScene) {
-            S.confirmBakeScene     = false;
-            S.sampleUsedAsModifier = true;
-            forceRedraw();
-        } else if (S.confirmBake) {
-            S.confirmBake             = false;
-            S.confirmBakeDrumLoopOpen = false;
-            S.confirmBakeWrapPhase    = false;
-            S.sampleUsedAsModifier    = true;
-            forceRedraw();
-        } else if (S.dspMergeState !== 0) {
-            S.pendingDefaultSetParams.push({ key: 'merge_stop', val: '1' });
-            S.sampleUsedAsModifier = true;
-            /* LED stays green until DSP finalizes at page boundary */
-        }
-    }
-    /* Sample release (no modifier): in Session View arm/stop multi-track live
-     * merge; in Track View bare tap is a no-op (clip bake moved off Sample
-     * onto Capture). Sample-held + scene row still opens scene bake directly
-     * (Sample is also a modifier — flagged via sampleUsedAsModifier). */
-    if (d1 === MoveSample && d2 === 0 && !S.shiftHeld) {
-        S.sampleHeld = false;
-        if (!S.sampleUsedAsModifier && S.sessionView) {
-            if (S.dspMergeState !== 0) {
-                S.pendingDefaultSetParams.push({ key: 'merge_stop', val: '1' });
-                /* LED stays Red until DSP finalizes at page boundary, then
-                 * placement dialog opens via dspMergeState→IDLE detection. */
-            } else {
-                S.pendingDefaultSetParams.push({ key: 'merge_arm', val: '1' });
-                S.pendingMergeArm = true;
-                setButtonLED(MoveSample, Red);
-                /* Explain what's happening — multi-track merge is non-obvious
-                 * and the user needs time to read. Override the standard popup
-                 * window to ~3 seconds. */
-                showActionPopup('LIVE MERGE', 'Capturing all 8', 'tracks. Tap Sample', 'again to stop.');
-                S.actionPopupEndTick = S.tickCount + 280;
-            }
-        }
-    }
+    handleUiSampleButton(S, createTransportCcWorkflowDeps(), d1, d2);
 
     /* Mute button: Delete+Mute = clear all (both views); toggle mute/solo on active track (Track View only).
      * Press: handle Delete+Mute immediately. Release: toggle mute/solo, but only if Mute was not used as
@@ -7613,9 +7570,11 @@ function createTransportCcWorkflowDeps() {
         getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
         movePlay: MovePlay,
         moveRec: MoveRec,
+        moveSample: MoveSample,
         numTracks: NUM_TRACKS,
         padModeDrum: PAD_MODE_DRUM,
         red: Red,
+        resolveInheritPicker,
         setButtonLED,
         setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
         showActionPopup,

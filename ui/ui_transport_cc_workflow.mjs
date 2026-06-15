@@ -141,3 +141,49 @@ export function handleUiRecordButton(S, deps, d1, d2) {
         deps.setParam('t' + t + '_recording', adaptive ? '2' : '1');
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
 }
+
+export function handleUiSampleButton(S, deps, d1, d2) {
+    if (d1 !== deps.moveSample || S.shiftHeld) return;
+
+    /* Sample press: track held state; cancel dialogs/merge immediately on press. */
+    if (d2 === 127) {
+        S.sampleHeld           = true;
+        S.sampleUsedAsModifier = false;
+        if (S.pendingInheritPicker) {
+            deps.resolveInheritPicker(-1);
+            S.sampleUsedAsModifier = true;
+        } else if (S.confirmBakeScene) {
+            S.confirmBakeScene     = false;
+            S.sampleUsedAsModifier = true;
+            deps.forceRedraw();
+        } else if (S.confirmBake) {
+            S.confirmBake             = false;
+            S.confirmBakeDrumLoopOpen = false;
+            S.confirmBakeWrapPhase    = false;
+            S.sampleUsedAsModifier    = true;
+            deps.forceRedraw();
+        } else if (S.dspMergeState !== 0) {
+            S.pendingDefaultSetParams.push({ key: 'merge_stop', val: '1' });
+            S.sampleUsedAsModifier = true;
+            /* LED stays green until DSP finalizes at page boundary. */
+        }
+    }
+
+    /* Sample release: in Session View arm/stop multi-track live merge; in
+     * Track View bare tap is a no-op. */
+    if (d2 === 0) {
+        S.sampleHeld = false;
+        if (!S.sampleUsedAsModifier && S.sessionView) {
+            if (S.dspMergeState !== 0) {
+                S.pendingDefaultSetParams.push({ key: 'merge_stop', val: '1' });
+                /* LED stays Red until DSP finalizes at page boundary. */
+            } else {
+                S.pendingDefaultSetParams.push({ key: 'merge_arm', val: '1' });
+                S.pendingMergeArm = true;
+                deps.setButtonLED(deps.moveSample, deps.red);
+                deps.showActionPopup('LIVE MERGE', 'Capturing all 8', 'tracks. Tap Sample', 'again to stop.');
+                S.actionPopupEndTick = S.tickCount + 280;
+            }
+        }
+    }
+}
