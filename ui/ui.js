@@ -8122,68 +8122,9 @@ function createSessionViewWorkflowDeps() {
     };
 }
 
-/* Loop+step gesture fire helpers — both the deferred fallback (length-only,
- * loop_start=0) and the active range gesture (loop_start=a*16, length=(b-a+1)*16)
- * route through the new atomic `*_loop_set` DSP keys so there is exactly one
- * DSP write path. Packed encoding mirrors seq8_set_param.c: ls<<16 | length. */
-function _fireLoopWindowSet(track, ctx, startStep, lenSteps) {
-    if (typeof host_module_set_param !== 'function') return;
-    if (ctx === 3) { _fireLoopWindowSetCC(track, startStep, lenSteps); return; }
-    const packed = (startStep << 16) | (lenSteps & 0xFFFF);
-    if (ctx === 0) {
-        /* Melodic per-active-clip */
-        const ac = effectiveClip(track);
-        S.clipLength[track][ac]     = lenSteps;
-        S.clipLoopStart[track][ac]  = startStep;
-        S.clipLengthManuallySet[track][ac] = true;
-        const startPage = startStep >> 4;
-        const lastPage  = startPage + ((lenSteps + 15) >> 4) - 1;
-        if (S.trackCurrentPage[track] < startPage) S.trackCurrentPage[track] = startPage;
-        else if (S.trackCurrentPage[track] > lastPage) S.trackCurrentPage[track] = lastPage;
-        host_module_set_param('t' + track + '_c' + ac + '_loop_set', String(packed));
-    } else if (ctx === 1) {
-        /* Drum lane (active lane on this track) */
-        const lane = S.activeDrumLane[track];
-        S.drumLaneLength[track]    = lenSteps;
-        S.drumLaneLoopStart[track] = startStep;
-        S.drumLaneLengthManuallySet[track] = true;
-        const startPage = startStep >> 4;
-        const lastPage  = startPage + ((lenSteps + 15) >> 4) - 1;
-        if (S.drumStepPage[track] < startPage) S.drumStepPage[track] = startPage;
-        else if (S.drumStepPage[track] > lastPage) S.drumStepPage[track] = lastPage;
-        host_module_set_param('t' + track + '_l' + lane + '_loop_set', String(packed));
-    } else {
-        /* ALL LANES: all 32 drum lanes of the active drum clip get the same window */
-        S.drumLaneLength[track]    = lenSteps;
-        S.drumLaneLoopStart[track] = startStep;
-        S.drumLaneLengthManuallySet[track] = true;
-        const startPage = startStep >> 4;
-        const lastPage  = startPage + ((lenSteps + 15) >> 4) - 1;
-        if (S.drumStepPage[track] < startPage) S.drumStepPage[track] = startPage;
-        else if (S.drumStepPage[track] > lastPage) S.drumStepPage[track] = lastPage;
-        S.pendingDrumResync = 2; S.pendingDrumResyncTrack = track;
-        host_module_set_param('t' + track + '_all_lanes_loop_set', String(packed));
-    }
-}
-
-function _fireLoopWindowSetCC(track, startStep, lenSteps) {
-    if (typeof host_module_set_param !== 'function') return;
-    var ac = effectiveClip(track);
-    var lane = S.ccActiveLane[track];
-    S.ccLaneLoopStart[track][ac][lane] = startStep;
-    S.ccLaneLength[track][ac][lane] = lenSteps;
-    var packed = (startStep << 16) | (lenSteps & 0xFFFF);
-    host_module_set_param('t' + track + '_c' + ac + '_k' + lane + '_cc_loop_set', String(packed));
-    var startPage = startStep >> 4;
-    var lastPage  = startPage + ((lenSteps + 15) >> 4) - 1;
-    if (S.trackCurrentPage[track] < startPage) S.trackCurrentPage[track] = startPage;
-    else if (S.trackCurrentPage[track] > lastPage) S.trackCurrentPage[track] = lastPage;
-}
-
 function createLoopGestureWorkflowDeps() {
     return {
         effectiveClip,
-        fireLoopWindowSet: _fireLoopWindowSet,
         forceRedraw,
         padModeDrum: PAD_MODE_DRUM,
         setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null

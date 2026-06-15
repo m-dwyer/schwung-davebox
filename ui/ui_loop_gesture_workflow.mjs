@@ -6,6 +6,56 @@ function loopGestureCtxFor(S, deps, track) {
     return S.activeBank === 7 ? 2 : 1;
 }
 
+function clampPageToWindow(currentPage, startStep, lenSteps) {
+    const startPage = startStep >> 4;
+    const lastPage = startPage + ((lenSteps + 15) >> 4) - 1;
+    if (currentPage < startPage) return startPage;
+    if (currentPage > lastPage) return lastPage;
+    return currentPage;
+}
+
+/* Loop+step gesture fire helper. Both the deferred fallback and the active A/B
+ * range gesture route through atomic `*_loop_set` DSP keys so there is one DSP
+ * write path for loop start plus length. */
+function fireLoopWindowSet(S, deps, track, ctx, startStep, lenSteps) {
+    if (!deps.setParam) return;
+    if (ctx === 3) {
+        const clip = deps.effectiveClip(track);
+        const lane = S.ccActiveLane[track];
+        S.ccLaneLoopStart[track][clip][lane] = startStep;
+        S.ccLaneLength[track][clip][lane] = lenSteps;
+        const packed = (startStep << 16) | (lenSteps & 0xFFFF);
+        deps.setParam('t' + track + '_c' + clip + '_k' + lane + '_cc_loop_set', String(packed));
+        S.trackCurrentPage[track] = clampPageToWindow(S.trackCurrentPage[track], startStep, lenSteps);
+        return;
+    }
+
+    const packed = (startStep << 16) | (lenSteps & 0xFFFF);
+    if (ctx === 0) {
+        const clip = deps.effectiveClip(track);
+        S.clipLength[track][clip] = lenSteps;
+        S.clipLoopStart[track][clip] = startStep;
+        S.clipLengthManuallySet[track][clip] = true;
+        S.trackCurrentPage[track] = clampPageToWindow(S.trackCurrentPage[track], startStep, lenSteps);
+        deps.setParam('t' + track + '_c' + clip + '_loop_set', String(packed));
+    } else if (ctx === 1) {
+        const lane = S.activeDrumLane[track];
+        S.drumLaneLength[track] = lenSteps;
+        S.drumLaneLoopStart[track] = startStep;
+        S.drumLaneLengthManuallySet[track] = true;
+        S.drumStepPage[track] = clampPageToWindow(S.drumStepPage[track], startStep, lenSteps);
+        deps.setParam('t' + track + '_l' + lane + '_loop_set', String(packed));
+    } else {
+        S.drumLaneLength[track] = lenSteps;
+        S.drumLaneLoopStart[track] = startStep;
+        S.drumLaneLengthManuallySet[track] = true;
+        S.drumStepPage[track] = clampPageToWindow(S.drumStepPage[track], startStep, lenSteps);
+        S.pendingDrumResync = 2;
+        S.pendingDrumResyncTrack = track;
+        deps.setParam('t' + track + '_all_lanes_loop_set', String(packed));
+    }
+}
+
 export function handleLoopStepPress(S, deps, idx) {
     if (!S.loopHeld) return false;
 
@@ -33,7 +83,7 @@ export function handleLoopStepPress(S, deps, idx) {
         const b = Math.max(S.loopGestureStart, idx);
         const startStep = a * 16;
         const lenSteps = (b - a + 1) * 16;
-        deps.fireLoopWindowSet(S.loopGestureTrack, S.loopGestureCtx, startStep, lenSteps);
+        fireLoopWindowSet(S, deps, S.loopGestureTrack, S.loopGestureCtx, startStep, lenSteps);
         S.loopGestureFired = true;
         deps.forceRedraw();
     }
@@ -96,7 +146,7 @@ export function resolveLoopGesture(S, deps, fireFallback) {
         if (newLen === currentLen && currentLen === 32) {
             newLen = 16;
         }
-        deps.fireLoopWindowSet(track, ctx, newLs, newLen);
+        fireLoopWindowSet(S, deps, track, ctx, newLs, newLen);
     }
 
     deps.forceRedraw();
