@@ -173,6 +173,8 @@ import {
     handleUiSideButton
 } from './ui_side_button_workflow.mjs';
 import {
+    handleUiBackButton,
+    handleUiUndoButton,
     handleUiMuteButton,
     handleUiPlayButton,
     handleUiRecordButton,
@@ -6063,102 +6065,11 @@ function _onCC_buttons(d1, d2) {
 }
 
 function _onCC_transport(d1, d2) {
-    /* Back: close global menu if open; otherwise (with Shift) hide module.
-     * Back during co-run never reaches us because Overture opts out of the
-     * framework Back-as-exit (CORUN_KEEP_BACK in keep_mask) and cedes Back
-     * to the peer (chain editor sub-view pop / Move firmware navigation).
-     * Menu is the Overture exit during co-run, handled in _onCC_buttons. */
-    if (d1 === MoveBack && d2 === 127) {
-        if (S.tapTempoOpen) {
-            closeTapTempo();
-            forceRedraw();
-        } else if (S.confirmBake) {
-            S.confirmBake          = false;
-            S.confirmBakeWrapPhase = false;
-            forceRedraw();
-        } else if (S.globalMenuOpen && S.confirmClearSession) {
-            S.confirmClearSession = false;
-            forceRedraw();
-        } else if (S.globalMenuOpen && S.confirmSaveState) {
-            S.confirmSaveState = false;
-            forceRedraw();
-        } else if (S.globalMenuOpen && S.confirmConvertToDrum) {
-            closeConvertConfirm();
-            forceRedraw();
-        } else if (S.globalMenuOpen && S.exportDoneDialog) {
-            S.exportDoneDialog = false;
-            S.globalMenuOpen   = false;
-            forceRedraw();
-        } else if (S.globalMenuOpen && S.confirmExport) {
-            S.confirmExport = false;
-            forceRedraw();
-        } else if (S.globalMenuOpen && S.routeCheckOpen) {
-            S.routeCheckOpen = false;
-            forceRedraw();
-        } else if (S.globalMenuOpen) {
-            S.globalMenuOpen = false;
-            S.lastSentMenuEditValue = null;
-            forceRedraw();
-        } else if (S.shiftHeld) {
-            if (S.schwungCoRunSlot >= 0) exitSchwungCoRun();
-            saveState();                       /* sets pendingSuspendSave */
-            S.pendingHideAfterSave = true;     /* drained one tick after save fires */
-        }
-    }
+    /* Back: close the topmost dialog/menu, else Shift+Back suspends+hides. */
+    handleUiBackButton(S, createTransportCcWorkflowDeps(), d1, d2);
 
     /* Undo button: press = undo; Shift+Undo = redo */
-    if (d1 === MoveUndo && d2 === 127) {
-        if (S.shiftHeld) {
-            if (S.redoAvailable) {
-                if (S.redoSeqArpSnapshot) {
-                    const _t = S.redoSeqArpSnapshot.track;
-                    S.undoSeqArpSnapshot = { track: _t, params: S.bankParams[_t][4].slice() };
-                } else {
-                    S.undoSeqArpSnapshot = null;
-                }
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('redo_restore', '1');
-                if (S.redoSeqArpSnapshot) {
-                    const { track, params } = S.redoSeqArpSnapshot;
-                    for (let k = 0; k < 8; k++) {
-                        const pm = BANKS[4].knobs[k];
-                        if (pm) S.bankParams[track][4][k] = params[k];
-                    }
-                }
-                S.undoAvailable = true;
-                S.redoAvailable = false;
-                S.pendingUndoSync = 5;
-                showActionPopup('REDO');
-            } else {
-                showActionPopup('NOTHING TO', 'REDO');
-            }
-        } else {
-            if (S.undoAvailable) {
-                if (S.undoSeqArpSnapshot) {
-                    const _t = S.undoSeqArpSnapshot.track;
-                    S.redoSeqArpSnapshot = { track: _t, params: S.bankParams[_t][4].slice() };
-                } else {
-                    S.redoSeqArpSnapshot = null;
-                }
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('undo_restore', '1');
-                if (S.undoSeqArpSnapshot) {
-                    const { track, params } = S.undoSeqArpSnapshot;
-                    for (let k = 0; k < 8; k++) {
-                        const pm = BANKS[4].knobs[k];
-                        if (pm) S.bankParams[track][4][k] = params[k];
-                    }
-                }
-                S.redoAvailable = true;
-                S.undoAvailable = false;
-                S.pendingUndoSync = 5;
-                showActionPopup('UNDO');
-            } else {
-                showActionPopup('NOTHING TO', 'UNDO');
-            }
-        }
-        S.screenDirty = true;
-    }
+    handleUiUndoButton(S, createTransportCcWorkflowDeps(), d1, d2);
 
     /* Play: toggle transport; Shift+Play = restart transport; Delete+Play = deactivate_all; Mute+Play = toggle metro */
     handleUiPlayButton(S, createTransportCcWorkflowDeps(), d1, d2);
@@ -7420,19 +7331,26 @@ function createSideButtonWorkflowDeps() {
 
 function createTransportCcWorkflowDeps() {
     return {
+        banks: BANKS,
         clearAllMuteSolo,
+        closeConvertConfirm,
+        closeTapTempo,
         disarmRecord,
+        exitSchwungCoRun,
         focusedClipIsEmpty: _focusedClipIsEmpty,
         forceRedraw,
         getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
+        moveBack: MoveBack,
         movePlay: MovePlay,
         moveMute: MoveMute,
         moveRec: MoveRec,
         moveSample: MoveSample,
+        moveUndo: MoveUndo,
         numTracks: NUM_TRACKS,
         padModeDrum: PAD_MODE_DRUM,
         red: Red,
         resolveInheritPicker,
+        saveState,
         setButtonLED,
         setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
         setTrackMute,

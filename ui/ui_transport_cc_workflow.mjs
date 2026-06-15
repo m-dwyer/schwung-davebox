@@ -1,3 +1,104 @@
+export function handleUiBackButton(S, deps, d1, d2) {
+    if (d1 !== deps.moveBack || d2 !== 127) return;
+
+    /* Back: close the topmost open dialog/menu layer; otherwise (with Shift)
+     * suspend + hide the module. Back during co-run never reaches us — Overture
+     * cedes Back to the peer and exits via Menu instead. */
+    if (S.tapTempoOpen) {
+        deps.closeTapTempo();
+        deps.forceRedraw();
+    } else if (S.confirmBake) {
+        S.confirmBake          = false;
+        S.confirmBakeWrapPhase = false;
+        deps.forceRedraw();
+    } else if (S.globalMenuOpen && S.confirmClearSession) {
+        S.confirmClearSession = false;
+        deps.forceRedraw();
+    } else if (S.globalMenuOpen && S.confirmSaveState) {
+        S.confirmSaveState = false;
+        deps.forceRedraw();
+    } else if (S.globalMenuOpen && S.confirmConvertToDrum) {
+        deps.closeConvertConfirm();
+        deps.forceRedraw();
+    } else if (S.globalMenuOpen && S.exportDoneDialog) {
+        S.exportDoneDialog = false;
+        S.globalMenuOpen   = false;
+        deps.forceRedraw();
+    } else if (S.globalMenuOpen && S.confirmExport) {
+        S.confirmExport = false;
+        deps.forceRedraw();
+    } else if (S.globalMenuOpen && S.routeCheckOpen) {
+        S.routeCheckOpen = false;
+        deps.forceRedraw();
+    } else if (S.globalMenuOpen) {
+        S.globalMenuOpen = false;
+        S.lastSentMenuEditValue = null;
+        deps.forceRedraw();
+    } else if (S.shiftHeld) {
+        if (S.schwungCoRunSlot >= 0) deps.exitSchwungCoRun();
+        deps.saveState();                  /* sets pendingSuspendSave */
+        S.pendingHideAfterSave = true;     /* drained one tick after save fires */
+    }
+}
+
+export function handleUiUndoButton(S, deps, d1, d2) {
+    if (d1 !== deps.moveUndo || d2 !== 127) return;
+
+    /* Undo button: press = undo; Shift+Undo = redo. The SEQ ARP bank (4) is
+     * per-clip pfx state that the DSP undo/redo doesn't restore, so we snapshot
+     * it across the swap and re-bake it from the saved params. */
+    if (S.shiftHeld) {
+        if (S.redoAvailable) {
+            if (S.redoSeqArpSnapshot) {
+                const _t = S.redoSeqArpSnapshot.track;
+                S.undoSeqArpSnapshot = { track: _t, params: S.bankParams[_t][4].slice() };
+            } else {
+                S.undoSeqArpSnapshot = null;
+            }
+            if (deps.setParam)
+                deps.setParam('redo_restore', '1');
+            if (S.redoSeqArpSnapshot) {
+                const { track, params } = S.redoSeqArpSnapshot;
+                for (let k = 0; k < 8; k++) {
+                    const pm = deps.banks[4].knobs[k];
+                    if (pm) S.bankParams[track][4][k] = params[k];
+                }
+            }
+            S.undoAvailable = true;
+            S.redoAvailable = false;
+            S.pendingUndoSync = 5;
+            deps.showActionPopup('REDO');
+        } else {
+            deps.showActionPopup('NOTHING TO', 'REDO');
+        }
+    } else {
+        if (S.undoAvailable) {
+            if (S.undoSeqArpSnapshot) {
+                const _t = S.undoSeqArpSnapshot.track;
+                S.redoSeqArpSnapshot = { track: _t, params: S.bankParams[_t][4].slice() };
+            } else {
+                S.redoSeqArpSnapshot = null;
+            }
+            if (deps.setParam)
+                deps.setParam('undo_restore', '1');
+            if (S.undoSeqArpSnapshot) {
+                const { track, params } = S.undoSeqArpSnapshot;
+                for (let k = 0; k < 8; k++) {
+                    const pm = deps.banks[4].knobs[k];
+                    if (pm) S.bankParams[track][4][k] = params[k];
+                }
+            }
+            S.redoAvailable = true;
+            S.undoAvailable = false;
+            S.pendingUndoSync = 5;
+            deps.showActionPopup('UNDO');
+        } else {
+            deps.showActionPopup('NOTHING TO', 'UNDO');
+        }
+    }
+    S.screenDirty = true;
+}
+
 export function handleUiPlayButton(S, deps, d1, d2) {
     if (d1 !== deps.movePlay || d2 !== 127) return;
 
