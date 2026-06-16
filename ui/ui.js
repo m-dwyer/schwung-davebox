@@ -173,6 +173,9 @@ import {
     handleUiMidiInternalMessage
 } from './ui_midi_internal_workflow.mjs';
 import {
+    handleUiKnobTouch
+} from './ui_knob_touch_workflow.mjs';
+import {
     handleUiSideButton
 } from './ui_side_button_workflow.mjs';
 import {
@@ -3867,153 +3870,24 @@ function createMidiInternalWorkflowDeps() {
 }
 
 function _onKnobTouch(status, d1, d2) {
-    /* Knob touch (notes 0-7). MoveKnob1-8Touch = notes 0-7.
-     * Hardware: d2=127 = touch on; d2 in 0-63 (via 0x90 or 0x80) = touch off.
-     * Note 9 (jog touch): shows bank overview while held, locked out in global menu. */
-    if (d1 >= 0 && d1 <= 9) {
-        if ((status & 0xF0) === 0x90) {
-            if (d2 === 127) {
-                if (d1 <= 7 && S.activeBank >= 0) {
-                    S.knobTouched = d1; S.knobTouchStartTick = S.tickCount;
-                    S.knobTurnedTick[d1] = -1; S.screenDirty = true;
-                    /* CC bank: touching a knob makes it the active lane (persistent
-                     * — drives the step-LED gradient and highlighted overview cell). */
-                    if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-                        S.ccActiveLane[S.activeTrack] = d1;
-                        invalidateLEDCache();
-                    }
-                    /* Perf view: touch knob k toggles looper for track k */
-                    if (S.perfViewLocked) {
-                        const _lt = d1;
-                        const _newLooper = S.trackLooper[_lt] !== 0 ? 0 : 1;
-                        S.trackLooper[_lt] = _newLooper;
-                        applyTrackConfig(_lt, 'track_looper', _newLooper);
-                        showActionPopup('LOOPER ' + (_newLooper ? 'ON' : 'OFF'), 'TRACK ' + (_lt + 1));
-                        setButtonLED(71 + _lt, _newLooper ? TRACK_COLORS[_lt] : LED_OFF, true);
-                    }
-                    /* CC bank: Delete+touch clears this knob's automation + resting value → "—" */
-                    if (S.activeBank === 6 && S.deleteHeld && !S.shiftHeld &&
-                            S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-                        const _dt = S.activeTrack, _dac = effectiveClip(_dt);
-                        S.trackCCAutoBits[_dt][_dac] &= ~(1 << d1);
-                        S.trackCCLiveVal[_dt][d1] = -1;
-                        S.clipCCVal[_dt][_dac][d1] = -1;
-                        if (typeof host_module_set_param === 'function')
-                            host_module_set_param('t' + _dt + '_cc_auto_clear_k', _dac + ' ' + d1);
-                        showActionPopup('CC', 'CLEAR');
-                        invalidateLEDCache();
-                    }
-                    /* CC bank: touch-record — start overwriting automation while held.
-                     * Initial value = current live/output value, else clip rest, else 0. */
-                    if (S.activeBank === 6 && !S.deleteHeld && !S.sessionView &&
-                            S.recordArmed && !S.recordCountingIn &&
-                            S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-                        const _dac = effectiveClip(S.activeTrack);
-                        const _lv  = S.trackCCLiveVal[S.activeTrack][d1];
-                        const _rv  = S.clipCCVal[S.activeTrack][_dac][d1];
-                        const _tv  = _lv >= 0 ? _lv : (_rv >= 0 ? _rv : 0);
-                        host_module_set_param('t' + S.activeTrack + '_cc_touch',
-                            d1 + ' 1 ' + _tv);
-                        S.trackCCAutoBits[S.activeTrack][_dac] |= (1 << d1);
-                    }
-                    /* SEQ ARP K5 / TRACK ARP K5 touch: switch pads to vel-slider editor immediately. */
-                    if ((S.activeBank === 4 && d1 === 4) || (S.activeBank === 5 && d1 === 4)) forceRedraw();
-                }
-                if (d1 === MoveMainTouch && !S.globalMenuOpen && !S.shiftHeld) { S.jogTouched = true; forceRedraw(); }
-            } else if (d2 < 64) {
-                if (d1 <= 7) {
-                    if (S.activeBank >= 0 && BANKS[S.activeBank].knobs[d1]) {
-                        const relPm = BANKS[S.activeBank].knobs[d1];
-                        if (relPm.dspKey === 'nudge') {
-                            S.bankParams[S.activeTrack][S.activeBank][d1] = 0;
-                            if (typeof host_module_set_param === 'function') {
-                                const _isAllLanesNdg = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.activeBank === 7;
-                                const _isDrumNdg = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.activeBank === 0;
-                                if (_isAllLanesNdg)
-                                    host_module_set_param('t' + S.activeTrack + '_all_lanes_nudge', '0');
-                                else if (_isDrumNdg)
-                                    host_module_set_param('t' + S.activeTrack + '_l' + S.activeDrumLane[S.activeTrack] + '_nudge', '0');
-                                else
-                                    host_module_set_param('t' + S.activeTrack + '_nudge', '0');
-                            }
-                        } else if (relPm.dspKey === 'clock_shift' || relPm.dspKey === 'beat_stretch') {
-                            S.clockShiftTouchDelta = 0;
-                            S.bankParams[S.activeTrack][S.activeBank][d1] = 0;
-                            /* Shft knob doubles as Nudge under Shift held — reset DSP nudge
-                             * accumulator on release in case the user finished a Shift+turn. */
-                            if (relPm.dspKey === 'clock_shift' &&
-                                    typeof host_module_set_param === 'function') {
-                                const _isAllLanes = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.activeBank === 7;
-                                const _isDrum     = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.activeBank === 0;
-                                if (_isAllLanes)
-                                    host_module_set_param('t' + S.activeTrack + '_all_lanes_nudge', '0');
-                                else if (_isDrum)
-                                    host_module_set_param('t' + S.activeTrack + '_l' + S.activeDrumLane[S.activeTrack] + '_nudge', '0');
-                                else
-                                    host_module_set_param('t' + S.activeTrack + '_nudge', '0');
-                            }
-                        }
-                        /* ALL LANES: schedule display reset to '--' after ~500ms on touch release */
-                        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.activeBank === 7) {
-                            if (d1 === 0) { S.allLanesResResetTick = S.tickCount + 47; S.allLanesResResetTrack = S.activeTrack; }
-                            if (d1 === 3) { S.allLanesQntResetTick = S.tickCount + 47; S.allLanesQntResetTrack = S.activeTrack; }
-                            if (d1 === 6) { S.allLanesDirResetTick = S.tickCount + 47; S.allLanesDirResetTrack = S.activeTrack; }
-                        }
-                    }
-                    /* CC bank: touch-record — stop overwriting automation on release */
-                    if (S.activeBank === 6 && S.recordArmed && !S.recordCountingIn &&
-                            S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM)
-                        host_module_set_param('t' + S.activeTrack + '_cc_touch', d1 + ' 0 0');
-                    /* SEQ ARP K5 / TRACK ARP K5 release: refresh pads (vel-slider editor → normal pads). */
-                    if ((S.activeBank === 4 && d1 === 4) || (S.activeBank === 5 && d1 === 4)) forceRedraw();
-                    S.knobTouched = -1;
-                    S.knobTouchStartTick = -1;
-                    S.knobLocked[d1] = false;
-                    S.knobAccum[d1]  = 0;
-                    S.screenDirty = true;
-                }
-                if (d1 === MoveMainTouch && S.jogTouched) { S.jogTouched = false; S.bankSelectTick = -1; forceRedraw(); }
-            }
-            return;
-        }
-        if ((status & 0xF0) === 0x80) {
-            if (d1 <= 7) {
-                if (S.activeBank >= 0 && BANKS[S.activeBank].knobs[d1]) {
-                    const relPm = BANKS[S.activeBank].knobs[d1];
-                    if (relPm.dspKey === 'nudge') {
-                        S.bankParams[S.activeTrack][S.activeBank][d1] = 0;
-                        if (typeof host_module_set_param === 'function') {
-                            const _isAllLanesNdg = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.activeBank === 7;
-                            const _isDrumNdg = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.activeBank === 0;
-                            if (_isAllLanesNdg)
-                                host_module_set_param('t' + S.activeTrack + '_all_lanes_nudge', '0');
-                            else if (_isDrumNdg)
-                                host_module_set_param('t' + S.activeTrack + '_l' + S.activeDrumLane[S.activeTrack] + '_nudge', '0');
-                            else
-                                host_module_set_param('t' + S.activeTrack + '_nudge', '0');
-                        }
-                    } else if (relPm.dspKey === 'clock_shift' || relPm.dspKey === 'beat_stretch') {
-                        S.clockShiftTouchDelta = 0;
-                        S.bankParams[S.activeTrack][S.activeBank][d1] = 0;
-                    }
-                    /* ALL LANES K4 (Qnt): schedule display reset to '--' after ~500ms */
-                    if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.activeBank === 7 && d1 === 3) {
-                        S.allLanesQntResetTick  = S.tickCount + 47;
-                        S.allLanesQntResetTrack = S.activeTrack;
-                    }
-                }
-                if ((S.activeBank === 4 && d1 === 4) || (S.activeBank === 5 && d1 === 4)) forceRedraw();
-                S.knobTouched = -1;
-                S.knobTouchStartTick = -1;
-                S.knobLocked[d1] = false;
-                S.knobAccum[d1]  = 0;
-                S.screenDirty = true;
-            }
-            if (d1 === MoveMainTouch && S.jogTouched) { S.jogTouched = false; S.bankSelectTick = -1; forceRedraw(); }
-            return;
-        }
-    }
+    handleUiKnobTouch(S, createKnobTouchWorkflowDeps(), status, d1, d2);
+}
 
+function createKnobTouchWorkflowDeps() {
+    return {
+        applyTrackConfig,
+        banks: BANKS,
+        effectiveClip,
+        forceRedraw,
+        invalidateLEDCache,
+        ledOff: LED_OFF,
+        moveMainTouch: MoveMainTouch,
+        padModeDrum: PAD_MODE_DRUM,
+        setButtonLED,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        showActionPopup,
+        trackColors: TRACK_COLORS
+    };
 }
 
 /* Pad pressure (poly aftertouch). On drum tracks: routes continuous pressure to
