@@ -74,7 +74,7 @@ import {
     fmtArpStyle, fmtArpRate, fmtArpSteps, fmtArpOct, fmtVelOverride, fmtPlayDir, fmtRevStyle,
     MCUFONT, pixelPrint, pixelPrintC,
     BANKS, ACTION_POPUP_TICKS, PAD_MODE_DRUM, PAD_MODE_MELODIC_SCALE,
-    POLL_INTERVAL, TAP_TEMPO_FLASH_TICKS, TAP_TEMPO_RESET_MS,
+    POLL_INTERVAL, TAP_TEMPO_FLASH_TICKS,
     PARAM_LED_BANKS, STATE_VERSION,
     CC_GRADIENT_BASE, CC_GRADIENT_LEVELS, CC_GRADIENT_SCALARS
 } from './ui_constants.mjs';
@@ -376,6 +376,15 @@ import {
     buildGlobalMenuItemsImpl
 } from './ui_global_menu.mjs';
 import {
+    closeTapTempoImpl,
+    openTapTempoImpl,
+    registerTapTempoImpl
+} from './ui_tap_tempo_workflow.mjs';
+import {
+    maybeShowInheritPickerImpl,
+    resolveInheritPickerImpl
+} from './ui_inherit_picker_workflow.mjs';
+import {
     applyBankParamImpl,
     applyTrackConfigImpl,
     readBankParamsImpl,
@@ -475,6 +484,25 @@ function createGlobalMenuDeps() {
 
 function buildGlobalMenuItems() {
     return buildGlobalMenuItemsImpl(S, createGlobalMenuDeps());
+}
+
+function createTapTempoDeps() {
+    return {
+        getParam: host_module_get_param,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        computePadNoteMap,
+        invalidateLEDCache
+    };
+}
+
+function createInheritPickerDeps() {
+    return {
+        fileExists: typeof host_file_exists === 'function' ? host_file_exists : null,
+        uuidToStatePath,
+        loadNameIndex,
+        findInheritCandidates,
+        copyStateFiles
+    };
 }
 
 
@@ -980,62 +1008,15 @@ function recordNoteOff(pitch) {
 
 
 function openTapTempo() {
-    S.tapTempoOpen      = true;
-    S.tapTempoTapTimes  = [];
-    S.tapTempoBpm       = Math.max(40, Math.min(250, Math.round(parseFloat(host_module_get_param('bpm')) || 120)));
-    S.tapTempoFlashTick = -1;
-    S.tapTempoFlashPad  = -1;
-    computePadNoteMap();
-    invalidateLEDCache();
-    S.screenDirty = true;
+    openTapTempoImpl(S, createTapTempoDeps());
 }
 
 function closeTapTempo() {
-    S.tapTempoOpen = false;
-    if (typeof host_module_set_param === 'function')
-        host_module_set_param('bpm', String(S.tapTempoBpm));
-    computePadNoteMap();
-    invalidateLEDCache();
-    S.screenDirty = true;
+    closeTapTempoImpl(S, createTapTempoDeps());
 }
 
 function registerTapTempo(padNote) {
-    const nowMs  = Date.now();
-    const taps   = S.tapTempoTapTimes;
-    const last   = taps.length > 0 ? taps[taps.length - 1] : -1;
-    const intvl  = last >= 0 ? nowMs - last : -1;
-
-    /* Inactivity reset: gap exceeds 2s */
-    if (intvl > TAP_TEMPO_RESET_MS) {
-        S.tapTempoTapTimes = [nowMs];
-    } else if (intvl > 0 && taps.length >= 2) {
-        /* Deviation reset: new interval differs from previous by >~1.8x */
-        const prevIntvl = taps[taps.length - 1] - taps[taps.length - 2];
-        const ratio     = intvl / prevIntvl;
-        if (ratio > 1.8 || ratio < 0.55) {
-            /* Tempo change: keep last tap as anchor for new session */
-            S.tapTempoTapTimes = [last, nowMs];
-        } else {
-            taps.push(nowMs);
-            /* Sliding window: cap at last 9 taps (8 intervals) */
-            if (taps.length > 9) S.tapTempoTapTimes = taps.slice(-9);
-        }
-    } else {
-        taps.push(nowMs);
-    }
-
-    if (S.tapTempoTapTimes.length >= 2) {
-        const t = S.tapTempoTapTimes;
-        const n = t.length;
-        const avgInterval = (t[n - 1] - t[0]) / (n - 1);
-        if (avgInterval > 0) {
-            S.tapTempoBpm = Math.max(40, Math.min(250, Math.round(60000 / avgInterval)));
-            host_module_set_param('bpm', String(S.tapTempoBpm));
-        }
-    }
-    S.tapTempoFlashTick = S.tickCount;
-    S.tapTempoFlashPad  = padNote;
-    S.screenDirty = true;
+    registerTapTempoImpl(S, createTapTempoDeps(), padNote);
 }
 
 /* True when a clip has no note/hit data. CC-only automation does not count:
@@ -2431,24 +2412,7 @@ function fmtHex(b) {
  *   'picker' — dialog opened, S.pendingInheritPicker set
  *   'blank'  — nothing to inherit; let normal flow proceed */
 function maybeShowInheritPicker(uuid, name) {
-    if (!uuid || !name) return 'blank';
-    if (typeof host_file_exists !== 'function') return 'blank';
-    if (host_file_exists(uuidToStatePath(uuid))) return 'blank';
-    const idx = S.nameIndexCache || (S.nameIndexCache = loadNameIndex());
-    const candidates = findInheritCandidates(name, idx);
-    if (candidates.length === 0) return 'blank';
-    if (candidates.length === 1) {
-        copyStateFiles(candidates[0].uuid, uuid);
-        return 'auto';
-    }
-    S.pendingInheritPicker = {
-        dstUuid: uuid,
-        dstName: name,
-        candidates: candidates,
-        selectedIndex: 0
-    };
-    S.screenDirty = true;
-    return 'picker';
+    return maybeShowInheritPickerImpl(S, createInheritPickerDeps(), uuid, name);
 }
 
 /* Resolve the inherit picker: action is either the candidates index to
@@ -2459,14 +2423,7 @@ function maybeShowInheritPicker(uuid, name) {
  * a clean slate. For inherit, we copy the source's state files first so
  * the load reads the seeded content. */
 function resolveInheritPicker(action) {
-    const p = S.pendingInheritPicker;
-    if (!p) return;
-    if (action >= 0 && action < p.candidates.length) {
-        copyStateFiles(p.candidates[action].uuid, p.dstUuid);
-    }
-    S.pendingSetLoad = true;
-    S.pendingInheritPicker = null;
-    S.screenDirty = true;
+    resolveInheritPickerImpl(S, createInheritPickerDeps(), action);
 }
 
 /* ------------------------------------------------------------------ */
