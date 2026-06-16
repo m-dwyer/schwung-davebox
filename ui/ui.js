@@ -227,6 +227,26 @@ import {
     handleUiJogTapTempo
 } from './ui_jog_cc_workflow.mjs';
 import {
+    handleUiPadArpStepIntervalSeq,
+    handleUiPadArpStepIntervalTarp,
+    handleUiPadCoRunDrumInject,
+    handleUiPadPerfMode,
+    handleUiPadReleaseCoRunDrum,
+    handleUiPadReleaseLoopStep,
+    handleUiPadReleasePadNote,
+    handleUiPadReleasePerfMode,
+    handleUiPadReleaseSeqArpEditor,
+    handleUiPadReleaseStepButton,
+    handleUiPadReleaseTapTempo,
+    handleUiPadReleaseTarpArpEditor,
+    handleUiPadTapTempo,
+    handleUiPadTrackViewCaptureDrumLane,
+    handleUiPadTrackViewDrumLaneClear,
+    handleUiPadTrackViewDrumLaneReset,
+    handleUiPadTrackViewDrumOrMelodic,
+    handleUiPadTrackViewDrumRepeat
+} from './ui_pad_workflow.mjs';
+import {
     renderTrackStepEditView
 } from './ui_step_edit_render.mjs';
 import {
@@ -5234,299 +5254,75 @@ function _onCCMsg(d1, d2) {
 }
 
 
+function createPadWorkflowDeps() {
+    return {
+        /* constants */
+        padModeDrum: PAD_MODE_DRUM,
+        trackPadBase: TRACK_PAD_BASE,
+        drumLanes: DRUM_LANES,
+        numTracks: NUM_TRACKS,
+        banks: BANKS,
+        looperRatesStraight: LOOPER_RATES_STRAIGHT,
+        perfModPadMap: PERF_MOD_PAD_MAP,
+        perfModFullNames: PERF_MOD_FULL_NAMES,
+        perfModPopupTicks: PERF_MOD_POPUP_TICKS,
+        drumTapTicks: DRUM_TAP_TICKS,
+        /* host */
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        injectToMove: typeof move_midi_inject_to_move === 'function' ? move_midi_inject_to_move : null,
+        /* module-global arrays (passed by reference; handlers mutate elements) */
+        padPitch,
+        padPressTick,
+        pendingDrumNoteOffs,
+        drumRecNoteOffs: _drumRecNoteOffs,
+        /* helpers (close over module-global S) */
+        drumPadToLane,
+        resolveDrumPadTarget,
+        effectiveVelocity,
+        stepEntryVelocity,
+        effectiveClip,
+        liveSendNote,
+        recordNoteOn,
+        recordNoteOff,
+        registerTapTempo,
+        selectTrackGesture,
+        readBankParams,
+        writeSidecar,
+        sendPerfMods,
+        forceRedraw,
+        /* sub-workflow thunks (each builds its own deps) */
+        drumLaneFactoryReset: function (t, lane) { return handleDrumLaneFactoryReset(S, createDrumLaneWorkflowDeps(), t, lane); },
+        deleteDrumLaneClear: function (t, lane, opts) { return handleDeleteDrumLaneClear(S, createDrumLaneWorkflowDeps(), t, lane, opts); },
+        drumRepeatPadPress: function (padIdx, d2) { return handleDrumRepeatPadPress(S, createDrumRepeatWorkflowDeps(), S.activeTrack, padIdx, d2); },
+        captureDrumLanePress: function (padIdx, target) { return handleCaptureDrumLanePress(S, createDrumPadPressDeps(), S.activeTrack, padIdx, target); },
+        drumVelocityPadPress: function (padIdx, target) { return handleDrumVelocityPadPress(S, createDrumPadPressDeps(), S.activeTrack, padIdx, target); },
+        drumLaneCopyPaste: function (t, lane) { return handleDrumLaneCopyPaste(S, createDrumLaneWorkflowDeps(), t, lane); },
+        drumLaneMuteSolo: function (t, lane) { return handleDrumLaneMuteSolo(S, createDrumLaneWorkflowDeps(), t, lane); },
+        drumLanePadPress: function (padIdx, d2, target) { return handleDrumLanePadPress(S, createDrumPadPressDeps(), S.activeTrack, padIdx, d2, target); },
+        melodicStepNoteAssignment: function (pitch, vel) { return handleTrackViewMelodicStepNoteAssignment(S, createTrackViewStepWorkflowDeps(), pitch, vel); },
+        loopStepRelease: function (idx) { return handleLoopStepRelease(S, createLoopGestureWorkflowDeps(), idx); },
+        sessionViewStepRelease: function (btn) { return handleSessionViewStepRelease(S, createSessionViewWorkflowDeps(), btn); },
+        trackViewStepRelease: function (btn) { return handleTrackViewStepRelease(S, createTrackViewStepWorkflowDeps(), btn); },
+        drumRepeatPadRelease: function (t, padIdx) { return handleDrumRepeatPadRelease(S, createDrumRepeatWorkflowDeps(), t, padIdx); }
+    };
+}
+
 function _onPadPressTrackView(status, d1, d2) {
-
-    if (d1 >= TRACK_PAD_BASE && d1 < TRACK_PAD_BASE + 32) {
-        const padIdx = d1 - TRACK_PAD_BASE;
-
-
-        /* Drum lane RESET: Shift+Delete+lane pad — full factory reset (length,
-         * loop, pfx, Rpt groove all wiped). midi_note is preserved (lane
-         * identity). */
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.shiftHeld && S.deleteHeld) {
-            const t    = S.activeTrack;
-            const lane = drumPadToLane(padIdx);
-            handleDrumLaneFactoryReset(S, createDrumLaneWorkflowDeps(), t, lane);
-            return;
-        }
-
-        /* Drum lane CLEAR: Delete+lane pad (no shift) — notes-only clear,
-         * preserves length, loop window, pfx params, midi_note. Undoable. */
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && !S.shiftHeld && S.deleteHeld) {
-            const t    = S.activeTrack;
-            const lane = drumPadToLane(padIdx);
-            handleDeleteDrumLaneClear(S, createDrumLaneWorkflowDeps(), t, lane, {
-                markUndo: true,
-                popupArgs: ['LANE', 'CLEARED']
-            });
-            return;
-        }
-        if (handleDrumRepeatPadPress(S, createDrumRepeatWorkflowDeps(), S.activeTrack, padIdx, d2))
-            return;
-        /* Capture + drum pad: silently select lane without playing a note */
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.captureHeld && !S.muteHeld && !S.copyHeld && !S.deleteHeld) {
-            const t = S.activeTrack;
-            const drumPadTarget = resolveDrumPadTarget(padIdx, S.drumLanePage[t], DRUM_LANES);
-            if (handleCaptureDrumLanePress(S, createDrumPadPressDeps(), t, padIdx, drumPadTarget)) {
-                return;
-            }
-        }
-        /* Drum mode pad handling */
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && (!S.shiftHeld || S.muteHeld || S.copyHeld)) {
-            const t = S.activeTrack;
-            const drumPadTarget = resolveDrumPadTarget(padIdx, S.drumLanePage[t], DRUM_LANES);
-            const lane = drumPadTarget.kind === 'lane' ? drumPadTarget.lane : -1;
-            const velZone = drumPadTarget.kind === 'velocity' ? drumPadTarget.zone : -1;
-            if (velZone >= 0) {
-                handleDrumVelocityPadPress(S, createDrumPadPressDeps(), t, padIdx, drumPadTarget);
-            } else if (lane >= 0 && lane < DRUM_LANES && S.copyHeld && !S.muteHeld) {
-                handleDrumLaneCopyPaste(S, createDrumLaneWorkflowDeps(), t, lane);
-            } else if (lane >= 0 && lane < DRUM_LANES && S.muteHeld) {
-                handleDrumLaneMuteSolo(S, createDrumLaneWorkflowDeps(), t, lane);
-            } else if (lane >= 0 && lane < DRUM_LANES) {
-                if (S.deleteHeld) {
-                    handleDeleteDrumLaneClear(S, createDrumLaneWorkflowDeps(), t, lane, {
-                        refreshBankParams: true,
-                        popupArgs: ['LANE CLEARED']
-                    });
-                } else {
-                    handleDrumLanePadPress(S, createDrumPadPressDeps(), t, padIdx, d2, drumPadTarget);
-                }
-            }
-        } else if (S.heldStep >= 0 && !S.shiftHeld) {
-            /* Step edit: tap pad to toggle note assignment for held step */
-            if (S.padNoteMap[padIdx] === 0xFF) return; /* OOB pad — no note to toggle */
-            const _pitchRaw = S.padNoteMap[padIdx] + S.trackOctave[S.activeTrack] * 12;
-            if (_pitchRaw < 0 || _pitchRaw > 127) return; /* OOB after track-octave shift */
-            const pitch = _pitchRaw;
-            const vel = effectiveVelocity(d2);
-            handleTrackViewMelodicStepNoteAssignment(
-                S,
-                createTrackViewStepWorkflowDeps(),
-                pitch,
-                stepEntryVelocity(S.activeTrack, vel, false)
-            );
-            /* Preview note */
-            padPitch[padIdx] = pitch;
-            S.liveActiveNotes.add(pitch);
-            liveSendNote(S.activeTrack, 0x90, pitch, vel);
-        } else if (S.shiftHeld && padIdx >= 24 && padIdx <= 31) {
-            const _padOff = padIdx - 24;
-            const _isDrum = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM;
-            let bankIdx;
-            if (_isDrum) {
-                /* Drum pad map: 92=ALL LANES(7) 93=DRUM LANE(0) 94=NOTE FX(1)
-                                 95=MIDI DLY(3) 96=RPT GROOVE(5) 97=hidden
-                                 98=CC PARAM(6) 99=hidden */
-                const DRUM_PAD_MAP = [7, 0, 1, 3, 5, -1, 6, -1];
-                bankIdx = DRUM_PAD_MAP[_padOff];
-            } else {
-                bankIdx = _padOff;
-            }
-            if (bankIdx >= 0 && bankIdx <= 7 && BANKS[bankIdx]) {
-                if (S.activeBank === bankIdx) {
-                    S.bankSelectTick = -1;
-                } else {
-                    S.activeBank = bankIdx;
-                    S.trackActiveBank[S.activeTrack] = bankIdx;
-                    if (bankIdx === 7) S.allLanesConfirmed = false;
-                    if (bankIdx === 6) S.schLabelFetchLane = 0;
-                    readBankParams(S.activeTrack, bankIdx);
-                    S.bankSelectTick = S.tickCount;
-                    writeSidecar();
-                }
-                S.screenDirty = true;
-            }
-        } else if (S.shiftHeld && padIdx < NUM_TRACKS) {
-            /* Shift + bottom-row pad: select active track (legacy fallback to the
-             * Change #1 side-button track-select; shares selectTrackGesture). */
-            selectTrackGesture(padIdx);
-            S.screenDirty = true;
-        } else if (!S.shiftHeld) {
-            /* Live note — apply per-track octave shift; skip OOB to avoid ghost
-             * dispatches of clamped note 0 (or 127) when multiple pads' shifted
-             * pitches land outside [0,127]. */
-            const basePitch = S.padNoteMap[padIdx];
-            if (basePitch === 0xFF) return; /* OOB base */
-            const _pitchRaw = basePitch + S.trackOctave[S.activeTrack] * 12;
-            if (_pitchRaw < 0 || _pitchRaw > 127) return; /* OOB after track-octave shift */
-            const pitch = _pitchRaw;
-            padPitch[padIdx] = pitch;
-            S.atLastSent[padIdx] = -1;   /* fresh press → next aftertouch always sends */
-            S.lastPlayedNote  = pitch;
-            S.lastPadVelocity = effectiveVelocity(d2);
-            S.liveActiveNotes.add(pitch);
-            liveSendNote(S.activeTrack, 0x90, pitch, effectiveVelocity(d2));
-            /* Record capture: queue into _recNoteOns regardless of count-in
-             * state. Flush is gated on !S.recordCountingIn so events accumulate
-             * during count-in and drain at the count-in→recording transition.
-             * DSP authoritatively filters: on patched Schwung, presses without
-             * an active on_midi slot are dropped (early count-in window etc.),
-             * so JS doesn't need its own (rate-mismatched) timing filter. */
-            if (S.recordArmed && S.activeTrack === S.recordArmedTrack)
-                recordNoteOn(pitch, effectiveVelocity(d2), S.recordArmedTrack);
-        }
-    }
+    const deps = createPadWorkflowDeps();
+    if (handleUiPadTrackViewDrumLaneReset(S, deps, d1)) return;
+    if (handleUiPadTrackViewDrumLaneClear(S, deps, d1)) return;
+    if (handleUiPadTrackViewDrumRepeat(S, deps, d1, d2)) return;
+    if (handleUiPadTrackViewCaptureDrumLane(S, deps, d1)) return;
+    handleUiPadTrackViewDrumOrMelodic(S, deps, d1, d2);
 }
 
 function _onPadPress(status, d1, d2) {
-        /* Move-native co-run + drum-mode active track: inject a plain pad-on
-         * on cable 0 so Move firmware both plays the drum and focuses that
-         * cell for editing. Overture suppresses its own monitor note for this
-         * pad, so the tap is one Move-native hit at the real pad velocity. */
-        if (S.moveCoRunTrack >= 0 &&
-                S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM &&
-                d1 >= 68 && d1 <= 99 && ((d1 - 68) % 8) < 4 &&
-                (status & 0xF0) === 0x90 && d2 > 0 &&
-                typeof move_midi_inject_to_move === 'function') {
-            move_midi_inject_to_move([0x09, 0x90, d1, d2 & 0x7F]);  /* plain pad on */
-            S.moveCoRunDrumHeld = d1;
-        }
-        if (S.tapTempoOpen && d1 >= 68 && d1 <= 99) {
-            registerTapTempo(d1);
-            return;
-        }
-        /* Arp Steps interval mode (jog-clicked into bank 4): pad press = step vel level edit.
-         * Column = step (0..7); row sets level (1=bottom..4=top). Bottom-row
-         * press when already at level 1 → level 0 (step off). Persistent (no Steps Mode gate).
-         * Loop-held: pad column sets step pattern loop length (1..8). */
-        if (!S.sessionView && S.stepIntervalMode && S.activeBank === 4 &&
-                d1 >= 68 && d1 <= 99) {
-            const idx = d1 - 68;
-            const col = idx % 8;
-            const t   = S.activeTrack;
-            const ac  = effectiveClip(t);
-            if (S.loopHeld) {
-                const newLen = col + 1;
-                if (S.seqArpStepLoopLen[t][ac] !== newLen) {
-                    S.seqArpStepLoopLen[t][ac] = newLen;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_seq_arp_step_loop_len', String(newLen));
-                    forceRedraw();
-                }
-                return;
-            }
-            const row = Math.floor(idx / 8);
-            const cur = S.seqArpStepVel[t][ac][col] | 0;
-            const newLvl = (row === 0 && cur === 1) ? 0 : (row + 1);
-            if (newLvl !== cur) {
-                S.seqArpStepVel[t][ac][col] = newLvl;
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + t + '_seq_arp_step_vel', col + ' ' + newLvl);
-                forceRedraw();
-            }
-            return;
-        }
-        /* Arp Steps interval mode (jog-clicked into bank 5 = TARP): pad press = step vel level edit.
-         * Loop-held: pad column sets step pattern loop length (1..8). */
-        if (!S.sessionView && S.stepIntervalMode && S.activeBank === 5 &&
-                d1 >= 68 && d1 <= 99) {
-            const idx = d1 - 68;
-            const col = idx % 8;
-            const t   = S.activeTrack;
-            if (S.loopHeld) {
-                const newLen = col + 1;
-                if (S.tarpStepLoopLen[t] !== newLen) {
-                    S.tarpStepLoopLen[t] = newLen;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('t' + t + '_tarp_step_loop_len', String(newLen));
-                    forceRedraw();
-                }
-                return;
-            }
-            const row = Math.floor(idx / 8);
-            const cur = S.tarpStepVel[t][col] | 0;
-            const newLvl = (row === 0 && cur === 1) ? 0 : (row + 1);
-            if (newLvl !== cur) {
-                S.tarpStepVel[t][col] = newLvl;
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + t + '_tarp_step_vel', col + ' ' + newLvl);
-                forceRedraw();
-            }
-            return;
-        }
-        /* Performance Mode pad intercept: absorb all pad presses when Perf Mode is active. */
-        if (S.sessionView && (S.loopHeld || S.perfViewLocked) && d1 >= 68 && d1 <= 99) {
-            if (d1 >= 68 && d1 <= 75) {
-                /* R0: rate pads 0-4 (arm/stack), hold (5), sync (6), latch (7) */
-                const subIdx = d1 - 68;
-                if (subIdx === 7) {
-                    S.perfLatchPressedTick = S.tickCount;
-                } else if (subIdx === 6) {
-                    S.perfSync = !S.perfSync;
-                    if (typeof host_module_set_param === 'function')
-                        host_module_set_param('looper_sync', S.perfSync ? '1' : '0');
-                } else if (subIdx === 5) {
-                    /* Hold pad: in sticky mode → cancel sticky + stop loop.
-                     * Otherwise → momentary hold (length releases don't pop while held). */
-                    if (S.perfStickyLengths.size > 0) {
-                        S.perfStickyLengths = new Set();
-                        S.perfStack         = [];
-                        if (!S.loopHeld) S.perfViewLocked = false;
-                        if (typeof host_module_set_param === 'function')
-                            host_module_set_param('looper_stop', '1');
-                    } else {
-                        S.perfHoldPadHeld = true;
-                    }
-                } else {
-                    const ticks = LOOPER_RATES_STRAIGHT[subIdx];
-                    if (S.shiftHeld) {
-                        /* Shift+length toggles sticky hold for that length */
-                        if (S.perfStickyLengths.has(subIdx)) {
-                            /* Remove sticky + pop from stack */
-                            S.perfStickyLengths.delete(subIdx);
-                            const sIdx = S.perfStack.findIndex(function(e) { return e.idx === subIdx; });
-                            if (sIdx >= 0) S.perfStack.splice(sIdx, 1);
-                            if (typeof host_module_set_param === 'function') {
-                                if (S.perfStack.length === 0) host_module_set_param('looper_stop', '1');
-                                else host_module_set_param('looper_arm', String(S.perfStack[S.perfStack.length - 1].ticks));
-                            }
-                            if (S.perfStickyLengths.size === 0 && !S.loopHeld) S.perfViewLocked = false;
-                        } else {
-                            /* Add sticky + ensure on stack + lock view */
-                            S.perfStickyLengths.add(subIdx);
-                            if (S.perfStack.findIndex(function(e) { return e.idx === subIdx; }) < 0) {
-                                S.perfStack.push({ idx: subIdx, ticks: ticks });
-                                if (typeof host_module_set_param === 'function')
-                                    host_module_set_param('looper_arm', String(ticks));
-                            }
-                            S.perfViewLocked = true;
-                        }
-                    } else {
-                        const inStack = S.perfStack.findIndex(function(e) { return e.idx === subIdx; }) >= 0;
-                        const inHeld  = S.perfStickyLengths.has(subIdx) || S.perfHoldPadHeld;
-                        if (!inStack) {
-                            S.perfStack.push({ idx: subIdx, ticks: ticks });
-                            if (typeof host_module_set_param === 'function')
-                                host_module_set_param('looper_arm', String(ticks));
-                        } else if (inHeld) {
-                            /* Re-trigger capture for a held loop: atomic stop + arm */
-                            if (typeof host_module_set_param === 'function')
-                                host_module_set_param('looper_retrigger', String(ticks));
-                        }
-                    }
-                }
-            } else {
-                const modIdx = PERF_MOD_PAD_MAP[d1];
-                if (modIdx !== undefined) {
-                    const bit = (1 << modIdx);
-                    if (S.perfLatchMode) {
-                        S.perfModsToggled ^= bit;
-                    } else if (S.perfModsToggled & bit) {
-                        /* Non-latch press on an already-on bit (e.g. from preset recall):
-                         * clear it instead of stacking a momentary held bit on top. */
-                        S.perfModsToggled &= ~bit;
-                    } else {
-                        S.perfModsHeld |= bit;
-                    }
-                    S.perfModPopupName    = PERF_MOD_FULL_NAMES[modIdx] || '';
-                    S.perfModPopupEndTick = S.tickCount + PERF_MOD_POPUP_TICKS;
-                    sendPerfMods();
-                }
-            }
-            forceRedraw();
-            return;
-        }
+        const deps = createPadWorkflowDeps();
+        handleUiPadCoRunDrumInject(S, deps, status, d1, d2);
+        if (handleUiPadTapTempo(S, deps, d1)) return;
+        if (handleUiPadArpStepIntervalSeq(S, deps, d1)) return;
+        if (handleUiPadArpStepIntervalTarp(S, deps, d1)) return;
+        if (handleUiPadPerfMode(S, deps, d1)) return;
         if (handleSessionViewClipPadPress(S, createSessionViewWorkflowDeps(), d1)) {
             return;
         } else {
@@ -5871,141 +5667,15 @@ function _onStepButtons(d1, d2) {
 }
 
 function _onPadRelease(status, d1, d2) {
-    if (S.tapTempoOpen && d1 >= 68 && d1 <= 99) return;
-    /* Co-run drum hold release: if the hold-threshold inject fired, send note-off
-     * to close the held note in Move firmware. Always clear hold state on any
-     * release of the tracked pad, even if the threshold hadn't fired yet. */
-    if (S.moveCoRunTrack >= 0 && S.moveCoRunDrumHeld === d1 &&
-            typeof move_midi_inject_to_move === 'function') {
-        move_midi_inject_to_move([0x08, 0x80, d1, 0]);    /* plain pad off */
-        S.moveCoRunDrumHeld = -1;
-    }
-    /* Step buttons (notes 16-31): if a Loop+step gesture is in flight and
-     * the released step is the held start, resolve the gesture — fire the
-     * length-only fallback when no B-tap landed, or just clear state when
-     * the range already fired on the B-tap. */
-    if (d1 >= 16 && d1 <= 31 && S.loopGestureStart >= 0) {
-        const idx = d1 - 16;
-        handleLoopStepRelease(S, createLoopGestureWorkflowDeps(), idx);
-        return;
-    }
-    /* Swallow pad releases while SEQ ARP step-level editor is open. */
-    if (!S.sessionView && S.activeBank === 4 && S.knobTouched === 4 &&
-            (S.bankParams[S.activeTrack][4][4] | 0) !== 0 &&
-            d1 >= 68 && d1 <= 99) {
-        const _pi = d1 - TRACK_PAD_BASE;
-        if (_pi >= 0 && _pi < 32 && padPitch[_pi] >= 0) {
-            liveSendNote(S.activeTrack, 0x80, padPitch[_pi], 0);
-            S.liveActiveNotes.delete(padPitch[_pi]);
-            padPitch[_pi] = -1;
-        }
-        return;
-    }
-    /* Swallow pad releases while TRACK ARP step-level editor is open. */
-    if (!S.sessionView && S.activeBank === 5 && S.knobTouched === 4 &&
-            (S.bankParams[S.activeTrack][5][4] | 0) !== 0 &&
-            d1 >= 68 && d1 <= 99) {
-        const _pi = d1 - TRACK_PAD_BASE;
-        if (_pi >= 0 && _pi < 32 && padPitch[_pi] >= 0) {
-            liveSendNote(S.activeTrack, 0x80, padPitch[_pi], 0);
-            S.liveActiveNotes.delete(padPitch[_pi]);
-            padPitch[_pi] = -1;
-        }
-        return;
-    }
-    /* Perf Mode pad release: handle R0 rate pad pop + mod pad release. */
-    if (S.sessionView && (S.loopHeld || S.perfViewLocked) && d1 >= 68 && d1 <= 99) {
-        if (d1 >= 68 && d1 <= 75) {
-            const subIdx = d1 - 68;
-            if (subIdx === 7) {
-                /* Latch release: toggle latch mode (mod pads momentary vs sticky). */
-                S.perfLatchMode = !S.perfLatchMode;
-            } else if (subIdx === 5) {
-                /* Hold pad release: drop momentary state + stop all loops it was holding */
-                if (S.perfHoldPadHeld) {
-                    S.perfHoldPadHeld = false;
-                    if (S.perfStack.length > 0) {
-                        S.perfStack = [];
-                        if (typeof host_module_set_param === 'function')
-                            host_module_set_param('looper_stop', '1');
-                    }
-                }
-            } else if (subIdx < 5) {
-                /* Rate pad release: pop from stack — unless sticky-held or hold-pad held */
-                if (!S.perfStickyLengths.has(subIdx) && !S.perfHoldPadHeld) {
-                    const sIdx = S.perfStack.findIndex(function(e) { return e.idx === subIdx; });
-                    if (sIdx >= 0) {
-                        S.perfStack.splice(sIdx, 1);
-                        if (S.perfStack.length === 0) {
-                            if (typeof host_module_set_param === 'function')
-                                host_module_set_param('looper_stop', '1');
-                        } else {
-                            const top = S.perfStack[S.perfStack.length - 1];
-                            if (typeof host_module_set_param === 'function')
-                                host_module_set_param('looper_arm', String(top.ticks));
-                        }
-                    }
-                }
-            }
-        } else {
-            /* Modifier pad release: clear momentary held bit */
-            const modIdx = PERF_MOD_PAD_MAP[d1];
-            if (modIdx !== undefined) {
-                S.perfModsHeld &= ~(1 << modIdx);
-                sendPerfMods();
-            }
-        }
-        forceRedraw();
-        return;
-    }
-    /* Step button release: tap-toggle if within threshold, always exit step edit */
-    if (d1 >= 16 && d1 <= 31) {
-        S.stepOpTick = S.tickCount;
-        const btn = d1 - 16;
-        if (handleSessionViewStepRelease(S, createSessionViewWorkflowDeps(), btn)) {
-            return;
-        }
-        handleTrackViewStepRelease(S, createTrackViewStepWorkflowDeps(), btn);
-    }
-    if (d1 >= TRACK_PAD_BASE && d1 < TRACK_PAD_BASE + 32) {
-        const padIdx = d1 - TRACK_PAD_BASE;
-        const t = S.activeTrack;
-        if (handleDrumRepeatPadRelease(S, createDrumRepeatWorkflowDeps(), t, padIdx))
-            return;
-        const pitch = padPitch[padIdx] >= 0 ? padPitch[padIdx] : S.padNoteMap[padIdx];
-        if (pitch === 0xFF) return; /* OOB pad — press was skipped, nothing to release */
-        S.liveActiveNotes.delete(pitch);
-        if (S.pendingPrerollNote !== null) {
-            const _prRelPitch = S.pendingPrerollNote.laneNote;
-            if (_prRelPitch === pitch)
-                S.pendingPrerollNote.releasedAtTick = S.tickCount;
-        }
-        for (let _pri = 0; _pri < S.pendingPrerollNotes.length; _pri++) {
-            if (S.pendingPrerollNotes[_pri].pitch === pitch) {
-                S.pendingPrerollNotes[_pri].releasedAtTick = S.tickCount;
-                break;
-            }
-        }
-        padPitch[padIdx] = -1;
-        if (!S.sessionView) {
-            const t = S.activeTrack;
-            if (S.trackPadMode[t] === PAD_MODE_DRUM &&
-                    (S.tickCount - padPressTick[padIdx]) < DRUM_TAP_TICKS)
-                pendingDrumNoteOffs[t].push(pitch);
-            else
-                liveSendNote(t, 0x80, pitch, 0);
-        }
-        padPressTick[padIdx] = -1;
-        if (S.recordArmed) {
-            const _t = S.activeTrack;
-            if (S.trackPadMode[_t] === PAD_MODE_DRUM) {
-                if (_t === S.recordArmedTrack)
-                    _drumRecNoteOffs.push({ track: _t, laneNote: pitch });
-            } else {
-                recordNoteOff(pitch);
-            }
-        }
-    }
+    const deps = createPadWorkflowDeps();
+    if (handleUiPadReleaseTapTempo(S, deps, d1)) return;
+    handleUiPadReleaseCoRunDrum(S, deps, d1);
+    if (handleUiPadReleaseLoopStep(S, deps, d1)) return;
+    if (handleUiPadReleaseSeqArpEditor(S, deps, d1)) return;
+    if (handleUiPadReleaseTarpArpEditor(S, deps, d1)) return;
+    if (handleUiPadReleasePerfMode(S, deps, d1)) return;
+    if (handleUiPadReleaseStepButton(S, deps, d1)) return;
+    handleUiPadReleasePadNote(S, deps, d1);
 }
 
 globalThis.onMidiMessageInternal = function (data) { try { _onMidiInternalImpl(data); } catch (e) { captureError('onMidiInternal', e); } };
