@@ -209,6 +209,24 @@ import {
     handleUiKnobStepInterval
 } from './ui_knob_cc_workflow.mjs';
 import {
+    handleUiJogAltToggle,
+    handleUiJogBakeConfirm,
+    handleUiJogBakeScene,
+    handleUiJogClearAutoMenu,
+    handleUiJogConfirmLgto,
+    handleUiJogDeleteReset,
+    handleUiJogGlobalMenu,
+    handleUiJogInheritPicker,
+    handleUiJogMovement,
+    handleUiJogRecordBlocked,
+    handleUiJogShiftDeleteReset,
+    handleUiJogSnapshotPicker,
+    handleUiJogStateWipe,
+    handleUiJogStepIntervalExit,
+    handleUiJogStepIntervalToggle,
+    handleUiJogTapTempo
+} from './ui_jog_cc_workflow.mjs';
+import {
     renderTrackStepEditView
 } from './ui_step_edit_render.mjs';
 import {
@@ -5012,689 +5030,30 @@ function _tickImpl() {
 
 function _onCC_jog(d1, d2) {
     if (S.shiftTrackLEDActive) { S.shiftTrackLEDActive = false; S.screenDirty = true; }
-    /* Inherit picker: jog click confirms selection (-1 = Start blank). */
-    if (d1 === 3 && d2 === 127 && S.pendingInheritPicker) {
-        const p = S.pendingInheritPicker;
-        const action = (p.selectedIndex === p.candidates.length) ? -1 : p.selectedIndex;
-        resolveInheritPicker(action);
-        return;
-    }
-    /* Snapshot picker: jog click resolves a confirm or arms one. */
-    if (d1 === 3 && d2 === 127 && S.snapshotPicker) {
-        snapshotPickerClick();
-        return;
-    }
-    /* CLEAR AUTOMATION modal: jog click toggles a row / executes CLEAR. */
-    if (d1 === 3 && d2 === 127 && S.clearAutoMenu) {
-        clearAutoMenuClick();
-        return;
-    }
-    /* Scene bake confirm: two-phase jog flow — loop count, then wrap yes/no. */
-    if (d1 === 3 && d2 === 127 && S.confirmBakeScene) {
-        if (S.confirmBakeSceneWrapPhase) {
-            /* Wrap dialog: 0=YES, 1=NO, 2=CANCEL */
-            if (S.confirmBakeSceneWrapSel < 2) {
-                const _wrap = S.confirmBakeSceneWrapSel === 0 ? 1 : 0;
-                S.pendingDefaultSetParams.push({
-                    key: 'bake_scene',
-                    val: S.confirmBakeSceneClip + ' ' + S.confirmBakeSceneLoops + ' ' + _wrap
-                });
-                S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-                showActionPopup('SCENE', 'BAKED');
-                S.pendingSceneBakeResync = 2;
-                S.pendingSceneBakeClip   = S.confirmBakeSceneClip;
-            }
-            S.confirmBakeSceneWrapPhase = false;
-            S.confirmBakeScene          = false;
-            S.screenDirty               = true;
-            return;
-        }
-        if (S.confirmBakeSceneSel > 0) {
-            /* Advance to wrap phase, hold loop count for the commit step. */
-            S.confirmBakeSceneLoops     = [1, 2, 4][S.confirmBakeSceneSel - 1];
-            S.confirmBakeSceneWrapPhase = true;
-            S.confirmBakeSceneWrapSel   = 1; /* default: NO */
-            S.screenDirty               = true;
-            return;
-        }
-        S.confirmBakeScene = false;
-        S.screenDirty      = true;
-        return;
-    }
-
-    /* Lgto confirm: jog click commits (OK applies, CANCEL aborts). */
-    if (d1 === 3 && d2 === 127 && S.confirmLgto) {
-        const _sel = S.confirmLgtoSel | 0;
-        S.confirmLgto = false;
-        if (_sel === 0 && typeof host_module_set_param === 'function') {
-            const _t = S.activeTrack;
-            if (S.confirmLgtoIsDrum) {
-                const _l = S.activeDrumLane[_t];
-                host_module_set_param('t' + _t + '_l' + _l + '_lgto_apply', '1');
-                S.pendingDrumResync      = 2;
-                S.pendingDrumResyncTrack = _t;
-            } else {
-                host_module_set_param('t' + _t + '_lgto_apply', '1');
-                S.pendingStepsReread      = 2;
-                S.pendingStepsRereadTrack = _t;
-                S.pendingStepsRereadClip  = S.trackActiveClip[_t];
-            }
-            S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-            showActionPopup('LGTO', 'APPLIED');
-        }
-        S.screenDirty = true;
-        forceRedraw();
-        return;
-    }
-
-    /* State version mismatch dialog: Yes = wipe + clean start; No = exit module. */
-    if (d1 === 3 && d2 === 127 && S.confirmStateWipe) {
-        S.confirmStateWipe = false;
-        if (S.confirmStateWipeSel === 0) {
-            S.pendingSetLoad = true;
-        } else {
-            removeFlagsWrap();
-            clearAllLEDs();
-            if (typeof host_exit_module === 'function') host_exit_module();
-        }
-        S.screenDirty = true;
-        forceRedraw();
-        return;
-    }
-
-    /* REC Unavailable dialog: jog click commits selection (OK = dismiss,
-     * BAKE NOW = open standard bake confirm pre-targeted at active clip). */
-    if (d1 === 3 && d2 === 127 && S.recordBlockedDialog) {
-        const _sel = S.recordBlockedDialogSel | 0;
-        S.recordBlockedDialog = false;
-        if (_sel === 1) {
-            /* Open bake confirm at active clip — same path as Capture-bare-tap. */
-            const _bt = S.activeTrack, _bc = S.trackActiveClip[_bt];
-            const _isDrum = S.trackPadMode[_bt] === PAD_MODE_DRUM;
-            S.confirmBake             = true;
-            S.confirmBakeIsDrum       = _isDrum;
-            S.confirmBakeIsMultiLoop  = !_isDrum;
-            S.confirmBakeSel          = _isDrum ? 2 : 1;
-            S.confirmBakeTrack        = _bt;
-            S.confirmBakeClip         = _bc;
-            S.confirmBakeDrumLoopOpen = false;
-            S.confirmBakeWrapPhase    = false;
-        }
-        S.screenDirty = true;
-        forceRedraw();
-        return;
-    }
-
-    /* Bake confirm: jog click confirms/cancels when dialog is open */
-    if (d1 === 3 && d2 === 127 && S.confirmBake) {
-        if (S.confirmBakeWrapPhase) {
-            /* Wrap dialog: 0=YES, 1=NO, 2=CANCEL */
-            if (S.confirmBakeWrapSel < 2) {
-                const _wrap = S.confirmBakeWrapSel === 0 ? 1 : 0;
-                const _loops = S.confirmBakeLoops;
-                if (S.confirmBakeIsDrum) {
-                    const _laneArg = S.confirmBakeDrumMode === 1 ? ' ' + S.activeDrumLane[S.confirmBakeTrack] : ' 0';
-                    S.pendingDefaultSetParams.push({
-                        key: 'bake',
-                        val: S.confirmBakeTrack + ' ' + S.confirmBakeClip + ' ' + S.confirmBakeDrumMode + ' ' + _loops + _laneArg + ' ' + _wrap
-                    });
-                    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-                    showActionPopup('BAKED', _loops + 'x');
-                    S.pendingBankRefresh = S.confirmBakeTrack;
-                    if (S.confirmBakeClip === S.trackActiveClip[S.confirmBakeTrack]) {
-                        S.pendingDrumResync      = 2;
-                        S.pendingDrumResyncTrack = S.confirmBakeTrack;
-                    }
-                } else {
-                    S.pendingDefaultSetParams.push({
-                        key: 'bake',
-                        val: S.confirmBakeTrack + ' ' + S.confirmBakeClip + ' 0 ' + _loops + ' 0 ' + _wrap
-                    });
-                    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-                    showActionPopup('BAKED', _loops + 'x');
-                    S.pendingBankRefresh      = S.confirmBakeTrack;
-                    S.pendingStepsReread      = 2;
-                    S.pendingStepsRereadTrack = S.confirmBakeTrack;
-                    S.pendingStepsRereadClip  = S.confirmBakeClip;
-                }
-            }
-            S.confirmBakeWrapPhase    = false;
-            S.confirmBakeDrumLoopOpen = false;
-            S.confirmBake  = false;
-            S.screenDirty  = true;
-            return;
-        }
-        if (S.confirmBakeIsMultiLoop) {
-            if (S.confirmBakeSel > 0) {
-                /* advance to wrap dialog */
-                S.confirmBakeLoops     = [1, 2, 4][S.confirmBakeSel - 1];
-                S.confirmBakeWrapPhase = true;
-                S.confirmBakeWrapSel   = 1; /* default: NO */
-                S.screenDirty = true;
-                return;
-            }
-        } else if (!S.confirmBakeIsDrum) {
-            if (S.confirmBakeSel === 0) {
-                host_module_set_param('bake', S.confirmBakeTrack + ' ' + S.confirmBakeClip);
-                S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-                showActionPopup('BAKED');
-                S.pendingBankRefresh = S.confirmBakeTrack;
-                S.pendingStepsReread      = 2;
-                S.pendingStepsRereadTrack = S.confirmBakeTrack;
-                S.pendingStepsRereadClip  = S.confirmBakeClip;
-            }
-        } else if (S.confirmBakeDrumLoopOpen) {
-            /* drum step 2: loop count — 0=CANCEL, 1-3 = 1x/2x/4x → wrap dialog */
-            if (S.confirmBakeDrumLoopSel > 0) {
-                S.confirmBakeLoops     = [1, 2, 4][S.confirmBakeDrumLoopSel - 1];
-                S.confirmBakeWrapPhase = true;
-                S.confirmBakeWrapSel   = 1; /* default: NO */
-                S.screenDirty = true;
-                return;
-            }
-            S.confirmBakeDrumLoopOpen = false;
-            S.confirmBake = false;
-            S.screenDirty = true;
-            return;
-        } else {
-            /* drum step 1: 0=CLIP, 1=LANE, 2=CANCEL */
-            if (S.confirmBakeSel < 2) {
-                S.confirmBakeDrumMode     = S.confirmBakeSel === 0 ? 2 : 1;
-                S.confirmBakeDrumLoopOpen = true;
-                S.confirmBakeDrumLoopSel  = 1;
-                S.screenDirty = true;
-                return;
-            }
-        }
-        S.confirmBake = false;
-        S.screenDirty = true;
-        return;
-    }
-
-    /* CC 3 = jog wheel physical click */
-    if (d1 === 3 && d2 === 127 && S.tapTempoOpen) {
-        closeTapTempo();
-        S.screenDirty = true;
-        return;
-    }
-    if (d1 === 3 && d2 === 127 && S.globalMenuOpen) {
-        if (S.routeCheckOpen) {
-            S.routeCheckOpen = false;
-            S.screenDirty = true;
-            return;
-        }
-        if (S.exportDoneDialog) {            /* OK dismiss */
-            S.exportDoneDialog = false;
-            S.globalMenuOpen   = false;
-            S.screenDirty = true;
-            return;
-        }
-        if (S.confirmClearSession) {
-            if (S.confirmClearSel === 0) doClearSession();
-            else { S.confirmClearSession = false; }
-            S.screenDirty = true;
-            return;
-        }
-        if (S.confirmSaveState) {
-            const _yes = S.confirmSaveSel === 0;
-            S.confirmSaveState = false;
-            if (_yes) openSaveSnapshot();
-            S.screenDirty = true;
-            return;
-        }
-        if (S.confirmConvertToDrum) {
-            const _ct = S.confirmConvertTrack;
-            const _yes = S.confirmConvertToDrumSel === 0;
-            closeConvertConfirm();
-            /* Defer to tick() — this runs in the on_midi path where get_param
-             * (inside convertTrackType -> syncClipsFromDsp) returns null. */
-            if (_yes) S.pendingTrackConvert = { t: _ct, toDrum: true };
-            S.screenDirty = true;
-            return;
-        }
-        if (S.confirmExport) {
-            if (S.confirmExportSel === 0) confirmExportStart();   /* arms pendingExport, drained in tick() */
-            else S.confirmExport = false;
-            S.screenDirty = true;
-            return;
-        }
-        if (S.confirmXpose) {                 /* "Transpose all clips?" Yes/No */
-            if (S.confirmXposeSel === 0) xposeCommit(S.confirmXposeKey, S.confirmXposeScale);
-            else                         xposeCancelPreview();
-            S.confirmXpose = false;
-            if (S.globalMenuState) { S.globalMenuState.editing = false; S.globalMenuState.editValue = null; }
-            S.lastSentMenuEditValue = null; S.bpmWasEditing = false;
-            S.screenDirty = true;
-            return;
-        }
-        /* Key/Scale: intercept the click that would finalize the enum edit.
-         * No change → exit. Has melodic notes → confirm. Empty → commit silently. */
-        {
-            const _it = (S.globalMenuState && S.globalMenuItems)
-                        ? S.globalMenuItems[S.globalMenuState.selectedIndex] : null;
-            if (_it && _it.type === 'action' && _it.onAction) {
-                S.globalMenuState.editing = false;
-                S.globalMenuState.editValue = null;
-                _it.onAction();
-                S.screenDirty = true;
-                return;
-            }
-            if (_it && S.globalMenuState.editing && (_it.label === 'Key' || _it.label === 'Scale')) {
-                const ev    = S.globalMenuState.editValue !== null ? S.globalMenuState.editValue : _it.get();
-                const candK = _it.label === 'Key'   ? ev : S.padKey;
-                const candS = _it.label === 'Scale' ? ev : S.padScale;
-                if (candK === S.padKey && candS === S.padScale) {
-                    xposeCancelPreview();
-                    S.globalMenuState.editing = false; S.globalMenuState.editValue = null;
-                    S.lastSentMenuEditValue = null; S.bpmWasEditing = false;
-                } else if (anyMelodicClipHasContent()) {
-                    S.confirmXpose = true; S.confirmXposeSel = 0;
-                    S.confirmXposeKey = candK; S.confirmXposeScale = candS;
-                    /* keep editing + preview armed under the dialog */
-                } else {
-                    xposeCommit(candK, candS);
-                    S.globalMenuState.editing = false; S.globalMenuState.editValue = null;
-                    S.lastSentMenuEditValue = null; S.bpmWasEditing = false;
-                }
-                S.screenDirty = true;
-                return;
-            }
-        }
-        handleMenuInput({
-            cc: 3, value: d2,
-            items: S.globalMenuItems, state: S.globalMenuState, stack: S.globalMenuStack,
-            onBack: function() { S.globalMenuOpen = false; },
-            shiftHeld: S.shiftHeld
-        });
-        S.screenDirty = true;
-        return;
-    }
-
-    if (d1 === 3 && d2 === 127 && S.shiftHeld && S.deleteHeld && !S.sessionView) {
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-            /* Drum: Shift+Delete+jog = reset all real-time FX banks + Dir/RvSt/SqFl */
-            const _dt = S.activeTrack, _dl = S.activeDrumLane[_dt], _dac = effectiveClip(_dt);
-            resetFxBanks(_dt);
-            S.drumLanePlaybackDir[_dt][_dl] = 0;
-            S.drumLanePlaybackAudioReverse[_dt][_dl] = 0;
-            S.bankParams[_dt][0][6] = 0;
-            S.clipSeqFollow[_dt][_dac] = true;
-            S.bankParams[_dt][0][7] = 1;
-            S.pendingDefaultSetParams.push({ key: 't' + _dt + '_l' + _dl + '_playback_dir', val: '0' });
-            S.pendingDefaultSetParams.push({ key: 't' + _dt + '_l' + _dl + '_playback_audio_reverse', val: '0' });
-            showActionPopup('LANE PARAMS', 'RESET');
-        } else {
-            /* Melodic: full reset — NOTE FX, HARMZ, MIDI DLY, + SEQ ARP */
-            const _arpTrack = S.activeTrack;
-            const _arpParams = Array.from({length: 8}, function(_, k) {
-                const pm = BANKS[4].knobs[k]; return pm ? S.bankParams[_arpTrack][4][k] : 0;
-            });
-            resetFxBanks(_arpTrack);
-            for (let k = 0; k < 8; k++) {
-                const pm = BANKS[4].knobs[k];
-                if (pm) S.bankParams[_arpTrack][4][k] = pm.def;
-            }
-            /* Bank reset also clears ALL automation (CC + AT, + PB later) for the clip. */
-            const _ac2 = effectiveClip(_arpTrack);
-            S.trackCCAutoBits[_arpTrack][_ac2] = 0;
-            S.trackCCLiveVal[_arpTrack] = new Array(8).fill(-1);
-            S.clipCCVal[_arpTrack][_ac2] = new Array(8).fill(-1);
-            S.clipAtHas[_arpTrack][_ac2] = false;
-            S.pendingDefaultSetParams.push({ key: 't' + _arpTrack + '_cc_auto_clear', val: String(_ac2) });
-            S.pendingDefaultSetParams.push({ key: 't' + _arpTrack + '_c' + _ac2 + '_at_clear', val: '1' });
-            S.undoSeqArpSnapshot = { track: _arpTrack, params: _arpParams };
-            const _mac = effectiveClip(_arpTrack);
-            S.clipPlaybackDir[_arpTrack][_mac] = 0;
-            S.clipPlaybackAudioReverse[_arpTrack][_mac] = 0;
-            S.bankParams[_arpTrack][0][6] = 0;
-            S.clipSeqFollow[_arpTrack][_mac] = true;
-            S.bankParams[_arpTrack][0][7] = 1;
-            S.pendingDefaultSetParams.push({ key: 't' + _arpTrack + '_clip_playback_dir', val: '0' });
-            S.pendingDefaultSetParams.push({ key: 't' + _arpTrack + '_clip_playback_audio_reverse', val: '0' });
-            showActionPopup('CLIP PARAMS', 'RESET');
-        }
-        return;
-    }
-    if (d1 === 3 && d2 === 127 && S.deleteHeld && !S.sessionView) {
-        /* CC PARAM bank (bank 6): Delete+jog clears all CC automation for the
-         * active clip. This branch must run regardless of pad mode or drum
-         * perform mode — previously it was nested inside the melodic branch,
-         * so on a drum track in Rpt mode it was silently shadowed by the
-         * repeat-groove reset path. */
-        if (S.activeBank === 6) {
-            /* AUTOMATION bank: Delete+jog clears ALL automation types for the
-             * active clip (CC + AT, and PB once implemented). */
-            const _t = S.activeTrack, _c = effectiveClip(_t);
-            S.trackCCAutoBits[_t][_c] = 0;
-            S.trackCCLiveVal[_t] = new Array(8).fill(-1);
-            /* Reset the resting values too → "—" (cc_auto_clear clears both
-             * automation and rest_val DSP-side). */
-            S.clipCCVal[_t][_c] = new Array(8).fill(-1);
-            S.clipAtHas[_t][_c] = false;
-            /* Defer clear pushes — synchronous from jog handler coalesces. */
-            S.pendingDefaultSetParams.push({ key: 't' + _t + '_cc_auto_clear', val: String(_c) });
-            S.pendingDefaultSetParams.push({ key: 't' + _t + '_c' + _c + '_at_clear', val: '1' });
-            showActionPopup('AUTOMATION', 'CLEAR');
-            invalidateLEDCache();
-            return;
-        }
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-            if (S.drumPerformMode[S.activeTrack] > 0) {
-                /* Rpt/Rpt2 mode: Delete+jog = reset current lane groove params */
-                const _rt = S.activeTrack;
-                const _rl = S.activeDrumLane[_rt];
-                resetDrumRepeatGrooveForLane(S, { showActionPopup }, _rt, _rl);
-            } else {
-                /* Drum: Delete+jog = reset only the active real-time FX bank + Dir/RvSt/SqFl */
-                const REAL_TIME_BANKS = [1, 2, 3];
-                if (REAL_TIME_BANKS.indexOf(S.activeBank) >= 0) {
-                    resetSingleFxBank(S.activeTrack, S.activeBank);
-                }
-                const _bt = S.activeTrack, _bl = S.activeDrumLane[_bt], _bac = effectiveClip(_bt);
-                S.drumLanePlaybackDir[_bt][_bl] = 0;
-                S.drumLanePlaybackAudioReverse[_bt][_bl] = 0;
-                S.bankParams[_bt][0][6] = 0;
-                S.clipSeqFollow[_bt][_bac] = true;
-                S.bankParams[_bt][0][7] = 1;
-                S.pendingDefaultSetParams.push({ key: 't' + _bt + '_l' + _bl + '_playback_dir', val: '0' });
-                S.pendingDefaultSetParams.push({ key: 't' + _bt + '_l' + _bl + '_playback_audio_reverse', val: '0' });
-                showActionPopup('BANK RESET');
-            }
-        } else if (S.activeBank === 5) {
-            /* ARP IN bank: dedicated reset that clears every TARP param
-             * (style/rate/oct/gate/steps_mode/retrigger/latch/sync + step arrays
-             * + loop length). Shift+Delete+jog (above) intentionally leaves
-             * ARP IN alone. */
-            resetTarp(S.activeTrack);
-            showActionPopup('ARP IN', 'RESET');
-        } else {
-            const _mt = S.activeTrack, _mac2 = effectiveClip(_mt);
-            resetFxBanks(_mt);
-            S.undoSeqArpSnapshot = null;
-            S.clipPlaybackDir[_mt][_mac2] = 0;
-            S.clipPlaybackAudioReverse[_mt][_mac2] = 0;
-            S.bankParams[_mt][0][6] = 0;
-            S.clipSeqFollow[_mt][_mac2] = true;
-            S.bankParams[_mt][0][7] = 1;
-            S.pendingDefaultSetParams.push({ key: 't' + _mt + '_clip_playback_dir', val: '0' });
-            S.pendingDefaultSetParams.push({ key: 't' + _mt + '_clip_playback_audio_reverse', val: '0' });
-            showActionPopup('BANK RESET');
-        }
-        return;
-    }
-    /* Plain jog click on SEQ ARP (bank 4) or TARP (bank 5) in Track View toggles
-     * the Arp Steps interval-edit overlay: knobs K1-K8 become per-step scale-degree
-     * offsets (±24), pad grid is the persistent step-vel level editor. Auto-clears
-     * on next jog turn (handled in the main-knob delta branch below). */
-    if (d1 === 3 && d2 === 127 && !S.shiftHeld && !S.deleteHeld && !S.copyHeld && !S.muteHeld &&
-            !S.sessionView && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM &&
-            (S.activeBank === 4 || S.activeBank === 5)) {
-        S.stepIntervalMode = !S.stepIntervalMode;
-        /* Repush padmap so pads stop dispatching notes while the overlay is on. */
-        computePadNoteMap();
-        S.screenDirty = true;
-        forceRedraw();
-        return;
-    }
-    /* Plain jog click on an alt-param bank: toggle sticky alt-param mode.
-     * Perform-mode switching now lives only on Shift+step-8 (see _onStepButtons).
-     * The Arp-Steps block above is gated melodic-only, so on drum tracks bank 5
-     * (REPEAT GROOVE) correctly falls through here to toggle VEL/NUDGE. */
-    if (d1 === 3 && d2 === 127 && !S.shiftHeld && !S.deleteHeld && !S.copyHeld && !S.muteHeld &&
-            !S.sessionView && bankHasAltParams(S.activeTrack, S.activeBank)) {
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && S.activeBank === 7 && !S.allLanesConfirmed) {
-            S.allLanesConfirmed = true;
-            S.screenDirty = true;
-            forceRedraw();
-            return;
-        }
-        S.altMode = !S.altMode;
-        S.screenDirty = true;
-        forceRedraw();
-        return;
-    }
-
-    if (d1 === MoveMainKnob) {
-
-        /* Arp Steps interval mode: jog turn exits the overlay and swallows
-         * the turn so the underlying bank knob param isn't nudged on exit. */
-        if (S.stepIntervalMode) {
-            const delta = decodeDelta(d2);
-            if (delta !== 0) {
-                S.stepIntervalMode = false;
-                computePadNoteMap();
-                S.screenDirty = true;
-                forceRedraw();
-            }
-            return;
-        }
-
-        if (S.pendingInheritPicker) {
-            const delta = decodeDelta(d2);
-            if (delta !== 0) {
-                const p = S.pendingInheritPicker;
-                const total = p.candidates.length + 1;
-                p.selectedIndex = (p.selectedIndex + (delta > 0 ? 1 : total - 1)) % total;
-                S.screenDirty = true;
-            }
-            return;
-        }
-        if (S.snapshotPicker) {
-            snapshotPickerRotate(decodeDelta(d2));
-            return;
-        }
-        if (S.clearAutoMenu) {
-            clearAutoMenuRotate(decodeDelta(d2));
-            return;
-        }
-        if (S.confirmBakeScene) {
-            const delta = decodeDelta(d2);
-            if (delta !== 0) {
-                if (S.confirmBakeSceneWrapPhase)
-                    S.confirmBakeSceneWrapSel = (S.confirmBakeSceneWrapSel + (delta > 0 ? 1 : 2)) % 3;
-                else
-                    S.confirmBakeSceneSel = (S.confirmBakeSceneSel + (delta > 0 ? 1 : 3)) % 4;
-                S.screenDirty = true;
-            }
-            return;
-        }
-        if (S.confirmStateWipe) {
-            const delta = decodeDelta(d2);
-            if (delta !== 0) {
-                S.confirmStateWipeSel = S.confirmStateWipeSel === 0 ? 1 : 0;
-                S.screenDirty = true;
-            }
-            return;
-        }
-        if (S.recordBlockedDialog) {
-            const delta = decodeDelta(d2);
-            if (delta !== 0) {
-                S.recordBlockedDialogSel = S.recordBlockedDialogSel === 0 ? 1 : 0;
-                S.screenDirty = true;
-            }
-            return;
-        }
-        if (S.confirmLgto) {
-            const delta = decodeDelta(d2);
-            if (delta !== 0) {
-                S.confirmLgtoSel = S.confirmLgtoSel === 0 ? 1 : 0;
-                S.screenDirty = true;
-            }
-            return;
-        }
-        if (S.confirmBake && S.confirmBakeWrapPhase) {
-            const delta = decodeDelta(d2);
-            if (delta !== 0) {
-                S.confirmBakeWrapSel = (S.confirmBakeWrapSel + (delta > 0 ? 1 : 2)) % 3;
-                S.screenDirty = true;
-            }
-            return;
-        }
-        if (S.confirmBake && S.confirmBakeIsDrum && S.confirmBakeDrumLoopOpen) {
-            const delta = decodeDelta(d2);
-            if (delta !== 0) {
-                S.confirmBakeDrumLoopSel = (S.confirmBakeDrumLoopSel + (delta > 0 ? 1 : 3)) % 4;
-                S.screenDirty = true;
-            }
-            return;
-        }
-        if (S.confirmBake) {
-            const delta = decodeDelta(d2);
-            if (delta !== 0) {
-                if (S.confirmBakeIsDrum) {
-                    S.confirmBakeSel = (S.confirmBakeSel + (delta > 0 ? 1 : 2)) % 3;
-                } else if (S.confirmBakeIsMultiLoop) {
-                    S.confirmBakeSel = (S.confirmBakeSel + (delta > 0 ? 1 : 3)) % 4;
-                } else {
-                    S.confirmBakeSel = S.confirmBakeSel === 0 ? 1 : 0;
-                }
-                S.screenDirty = true;
-            }
-            return;
-        }
-        if (S.tapTempoOpen && !S.shiftHeld) {
-            const delta = decodeDelta(d2);
-            if (delta !== 0) {
-                S.tapTempoBpm = Math.max(40, Math.min(250, S.tapTempoBpm + delta));
-                host_module_set_param('bpm', String(S.tapTempoBpm));
-                S.screenDirty = true;
-            }
-            return;
-        }
-        if (S.globalMenuOpen) {
-            ensureGlobalMenuFresh();
-            if (S.routeCheckOpen) {
-                const delta = decodeDelta(d2);
-                if (delta !== 0) {
-                    S.routeCheckSelected = Math.max(0, Math.min(7, (S.routeCheckSelected | 0) + delta));
-                    S.screenDirty = true;
-                }
-            } else if (S.exportDoneDialog) {
-                /* single OK button — jog does nothing */
-            } else if (S.confirmClearSession) {
-                const delta = decodeDelta(d2);
-                if (delta !== 0) { S.confirmClearSel = S.confirmClearSel === 0 ? 1 : 0; S.screenDirty = true; }
-            } else if (S.confirmSaveState) {
-                const delta = decodeDelta(d2);
-                if (delta !== 0) { S.confirmSaveSel = S.confirmSaveSel === 0 ? 1 : 0; S.screenDirty = true; }
-            } else if (S.confirmConvertToDrum) {
-                const delta = decodeDelta(d2);
-                if (delta !== 0) { S.confirmConvertToDrumSel = S.confirmConvertToDrumSel === 0 ? 1 : 0; S.screenDirty = true; }
-            } else if (S.confirmExport) {
-                const delta = decodeDelta(d2);
-                if (delta !== 0) { S.confirmExportSel = S.confirmExportSel === 0 ? 1 : 0; S.screenDirty = true; }
-            } else if (S.confirmXpose) {
-                const delta = decodeDelta(d2);
-                if (delta !== 0) { S.confirmXposeSel = S.confirmXposeSel === 0 ? 1 : 0; S.screenDirty = true; }
-            } else if (S.globalMenuState.editing) {
-                const delta = decodeDelta(d2);
-                if (delta !== 0) {
-                    const item = S.globalMenuItems[S.globalMenuState.selectedIndex];
-                    if (item && item.type === 'value') {
-                        const cur = S.globalMenuState.editValue !== null ? S.globalMenuState.editValue : item.get();
-                        S.globalMenuState.editValue = Math.min(item.max, Math.max(item.min, cur + delta));
-                    } else if (item && item.type === 'enum') {
-                        const opts = item.options || [];
-                        const idx  = opts.indexOf(S.globalMenuState.editValue);
-                        const sign = delta > 0 ? 1 : -1;
-                        S.globalMenuState.editValue = opts[((idx + sign) % opts.length + opts.length) % opts.length];
-                    }
-                    S.screenDirty = true;
-                }
-            } else {
-                handleMenuInput({
-                    cc: MoveMainKnob, value: d2,
-                    items: S.globalMenuItems, state: S.globalMenuState, stack: S.globalMenuStack,
-                    onBack: function() { S.globalMenuOpen = false; },
-                    shiftHeld: false
-                });
-                S.screenDirty = true;
-            }
-        } else {
-            const delta = decodeDelta(d2);
-            if (delta !== 0) {
-                if (S.shiftHeld) {
-                    /* Shift + jog (any view): step active track 0–7, clamp at ends */
-                    const next = Math.min(NUM_TRACKS - 1, Math.max(0, S.activeTrack + delta));
-                    if (next !== S.activeTrack) {
-                        extNoteOffAll();
-                        handoffRecordingToTrack(next);
-                        _switchActiveTrack(next);
-                        if (S.trackPadMode[next] === PAD_MODE_DRUM) {
-                            if (S.activeBank === 2 || S.activeBank === 4) S.activeBank = 0;
-                            resyncDrumTrack(next);
-                        } else {
-                            if (S.activeBank === 7) S.activeBank = 0;
-                            refreshPerClipBankParams(next);
-                        }
-                        computePadNoteMap();
-                        S.seqActiveNotes.clear();
-                        S.seqLastStep = -1;
-                        S.seqLastClip = -1;
-                        forceRedraw();
-                    }
-                } else if (S.sessionView) {
-                    S.sceneRow = Math.min(NUM_CLIPS - 4, Math.max(0, S.sceneRow + delta));
-                    forceRedraw();
-                } else if (S.loopHeld) {
-                    handleLoopJog(S, createLoopGestureWorkflowDeps(), delta);
-                } else if (S.heldStep >= 0) {
-                    /* Change #3: a held step reserves the jog for step LENGTH
-                     * (Move's "hold step + wheel = length"), so it no longer
-                     * silently falls through to bank-cycling underneath the Step
-                     * Edit overlay. Only writes when the held step has content; on
-                     * an empty step the jog is simply inert (but never cycles banks). */
-                    const _t    = S.activeTrack;
-                    const _drm  = S.trackPadMode[_t] === PAD_MODE_DRUM;
-                    const _ac   = effectiveClip(_t);
-                    const _lane = S.activeDrumLane[_t];
-                    const _hasContent = _drm
-                        ? (S.drumLaneSteps[_t][_lane][S.heldStep] !== '0')
-                        : (S.heldStepNotes.length > 0);
-                    if (_hasContent) {
-                        const _tps  = (_drm ? S.drumLaneTPS[_t] : S.clipTPS[_t][_ac]) || 24;
-                        const _gmax = Math.min(65535, 256 * _tps);
-                        const _stps = S.stepEditGate / _tps;
-                        const _inc  = _stps <= 16 ? Math.round(_tps / 4) : _stps <= 64 ? _tps : _tps * 8;
-                        let _nv = S.stepEditGate + delta * _inc;
-                        if (_inc > 1) _nv = Math.round(_nv / _inc) * _inc;
-                        S.stepEditGate = Math.max(1, Math.min(_gmax, _nv));
-                        const _key = _drm
-                            ? 't' + _t + '_l' + _lane + '_step_' + S.heldStep + '_gate'
-                            : 't' + _t + '_c' + _ac + '_step_' + S.heldStep + '_gate';
-                        if (typeof host_module_set_param === 'function')
-                            host_module_set_param(_key, String(S.stepEditGate));
-                        forceRedraw();
-                    }
-                } else {
-                    const cur = S.activeBank;
-                    const isDrumJog = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM;
-                    let next;
-                    if (isDrumJog) {
-                        /* Drum bank order: ALL LANES(7) → DRUM LANE(0) → NOTE FX(1) → MIDI DLY(3) → RPT GROOVE(5) → CC PARAM(6) */
-                        const DRUM_BANK_ORDER = [7, 0, 1, 3, 5, 6];
-                        const ci = DRUM_BANK_ORDER.indexOf(cur);
-                        const ni = Math.max(0, Math.min(DRUM_BANK_ORDER.length - 1, (ci >= 0 ? ci : 0) + delta));
-                        next = DRUM_BANK_ORDER[ni];
-                    } else {
-                        next = Math.min(6, Math.max(0, cur + delta));
-                    }
-                    if (next !== cur) {
-                        S.activeBank = next;
-                        S.trackActiveBank[S.activeTrack] = next;
-                        if (next === 7) S.allLanesConfirmed = false;
-                        if (next === 6) S.schLabelFetchLane = 0;
-                        readBankParams(S.activeTrack, next);
-                        S.bankSelectTick = S.tickCount;
-                        writeSidecar();
-                        forceRedraw();
-                    }
-                }
-            }
-        }
-        return;
-    }
-
+    /* Jog wheel: physical CLICK (CC 3 = 127) + relative ROTATE (CC 14). The
+     * click/rotate dispatch ladder is extracted into ui_jog_cc_workflow.mjs;
+     * each handler returns true when it consumes the event (mirrors the
+     * original `return;`). Order matches the original click ladder (LGTO before
+     * STATE-WIPE / REC-BLOCKED — those dialogs are mutually exclusive). The
+     * Arp-Steps interval overlay EXITS on rotate first / TOGGLES on click last,
+     * so it is split across two dispatch slots. */
+    const deps = createJogCcWorkflowDeps();
+    if (handleUiJogStepIntervalExit(S, deps, d1, d2)) return;
+    if (handleUiJogInheritPicker(S, deps, d1, d2)) return;
+    if (handleUiJogSnapshotPicker(S, deps, d1, d2)) return;
+    if (handleUiJogClearAutoMenu(S, deps, d1, d2)) return;
+    if (handleUiJogBakeScene(S, deps, d1, d2)) return;
+    if (handleUiJogConfirmLgto(S, deps, d1, d2)) return;
+    if (handleUiJogStateWipe(S, deps, d1, d2)) return;
+    if (handleUiJogRecordBlocked(S, deps, d1, d2)) return;
+    if (handleUiJogBakeConfirm(S, deps, d1, d2)) return;
+    if (handleUiJogTapTempo(S, deps, d1, d2)) return;
+    if (handleUiJogGlobalMenu(S, deps, d1, d2)) return;
+    if (handleUiJogShiftDeleteReset(S, deps, d1, d2)) return;
+    if (handleUiJogDeleteReset(S, deps, d1, d2)) return;
+    if (handleUiJogStepIntervalToggle(S, deps, d1, d2)) return;
+    if (handleUiJogAltToggle(S, deps, d1, d2)) return;
+    if (handleUiJogMovement(S, deps, d1, d2)) return;
 }
 
 function _onCC_buttons(d1, d2) {
@@ -6413,6 +5772,58 @@ function createKnobCcWorkflowDeps() {
         stepEntryVelocity,
         stretchBlockedTicks: STRETCH_BLOCKED_TICKS,
         tpsValues: TPS_VALUES
+    };
+}
+
+function createJogCcWorkflowDeps() {
+    return {
+        moveMainKnob: MoveMainKnob,
+        padModeDrum: PAD_MODE_DRUM,
+        numTracks: NUM_TRACKS,
+        numClips: NUM_CLIPS,
+        banks: BANKS,
+        decodeDelta,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        exitModule: typeof host_exit_module === 'function' ? host_exit_module : null,
+        forceRedraw,
+        computePadNoteMap,
+        showActionPopup,
+        invalidateLEDCache,
+        effectiveClip,
+        resolveInheritPicker,
+        snapshotPickerClick,
+        snapshotPickerRotate,
+        clearAutoMenuClick,
+        clearAutoMenuRotate,
+        closeTapTempo,
+        removeFlagsWrap,
+        clearAllLEDs,
+        doClearSession,
+        openSaveSnapshot,
+        closeConvertConfirm,
+        confirmExportStart,
+        xposeCommit,
+        xposeCancelPreview,
+        anyMelodicClipHasContent,
+        handleMenuInput,
+        ensureGlobalMenuFresh,
+        resetFxBanks,
+        resetSingleFxBank,
+        resetTarp,
+        resetDrumRepeatGrooveForLane: function (track, lane) {
+            return resetDrumRepeatGrooveForLane(S, { showActionPopup }, track, lane);
+        },
+        bankHasAltParams,
+        extNoteOffAll,
+        handoffRecordingToTrack,
+        switchActiveTrack: _switchActiveTrack,
+        resyncDrumTrack,
+        refreshPerClipBankParams,
+        readBankParams,
+        writeSidecar,
+        handleLoopJog: function (delta) {
+            return handleLoopJog(S, createLoopGestureWorkflowDeps(), delta);
+        }
     };
 }
 
