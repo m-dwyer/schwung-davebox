@@ -379,6 +379,18 @@ import {
     resetPerClipBankParamsToDefaultImpl,
     resetSingleFxBankImpl
 } from './ui_bank_params.mjs';
+import {
+    clearClipImpl,
+    clearRowImpl,
+    copyClipImpl,
+    copyRowImpl,
+    copyStepImpl,
+    cutClipImpl,
+    cutRowImpl,
+    doDoubleFillImpl,
+    hardResetClipImpl,
+    selectClipOnTrackImpl
+} from './ui_clip_edit_ops.mjs';
 
 /* ------------------------------------------------------------------ */
 /* Parameter bank definitions                                           */
@@ -739,6 +751,19 @@ function playMetronomeClick() {
     /* DSP handles click audio via render_block; nothing to do here */
 }
 
+/* Deps for the clip/row/step clipboard-op cluster (ui_clip_edit_ops.mjs).
+ * setParam null-guarded; the per-clip bank refresh/reset wrappers + forceRedraw
+ * close over module-global S. */
+function createClipEditOpsDeps() {
+    return {
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        resetPerClipBankParamsToDefault,
+        refreshPerClipBankParams,
+        forceRedraw,
+        effectiveClip
+    };
+}
+
 /* Clear all steps in a clip. clearClip runs in on_midi context and schedules
  * its tN_cC_clear via pendingDefaultSetParams. The drain at tick() bottom
  * fires on the SAME audio buffer as the synchronous set_param fan-out from
@@ -746,263 +771,37 @@ function playMetronomeClick() {
  * down to a single survivor, eating the queued _clear. clearDrainHold defers
  * the drain by one tick so _clear lands in a clean buffer. */
 function clearClip(t, ac, keepPlaying) {
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    /* Clip CLEAR semantics (matches drum lane Clear, Group I): wipe step
-     * note data only. Preserve length, loop window, ticks_per_step, the
-     * destructive CLIP-bank params (stretch_exp / clock_shift_pos /
-     * nudge_pos), and per-clip pfx (NOTE FX / HARMONY / DELAY / SEQUENCE
-     * ARP). Hard Reset (Shift+Delete) is the gesture that wipes structure. */
-    if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-        const keep = (keepPlaying && S.trackClipPlaying[t] && ac === S.trackActiveClip[t]) ? '1' : '0';
-        S.pendingDefaultSetParams.unshift({ key: 't' + t + '_c' + ac + '_drum_clear', val: keep });
-        S.clearDrainHold = 1;
-        for (let l = 0; l < DRUM_LANES; l++) {
-            for (let s = 0; s < 256; s++) S.drumLaneSteps[t][l][s] = '0';
-            S.drumLaneHasNotes[t][l] = false;
-        }
-        S.drumClipNonEmpty[t][ac] = false;
-        if (ac === S.trackActiveClip[t]) {
-            S.seqActiveNotes.clear();
-        }
-        return;
-    }
-    const cmd = (keepPlaying && S.trackClipPlaying[t] && ac === S.trackActiveClip[t])
-        ? 't' + t + '_c' + ac + '_clear_keep'
-        : 't' + t + '_c' + ac + '_clear';
-    S.pendingDefaultSetParams.unshift({ key: cmd, val: '1' });
-    /* Defer drain 1 tick to keep _clear out of the same audio buffer as any
-     * sync set_param fan-out that might still be in flight. */
-    S.clearDrainHold = 1;
-    const len = S.clipLength[t][ac];
-    for (let s = 0; s < len; s++) S.clipSteps[t][ac][s] = 0;
-    S.clipNonEmpty[t][ac] = false;
-    /* Clip clear now also wipes all automation DSP-side — mirror it so the
-     * AUTOMATION-bank indicators + CC values reflect the clear immediately. */
-    S.trackCCAutoBits[t][ac] = 0;
-    S.clipCCVal[t][ac] = new Array(8).fill(-1);
-    S.clipAtHas[t][ac] = false;
-    invalidateLEDCache();
-    /* Re-read steps from DSP 2 ticks later so step LEDs catch up after _clear
-     * has drained. Belt-and-suspenders against any state that still reads from
-     * DSP after the synchronous JS mirror wipe. */
-    S.pendingStepsReread      = 2;
-    S.pendingStepsRereadTrack = t;
-    S.pendingStepsRereadClip  = ac;
-    if (ac === S.trackActiveClip[t]) {
-        S.seqActiveNotes.clear(); S.seqLastStep = -1; S.seqNoteOnClipTick = -1;
-        /* Focused-clip-by-default: after clearing the focused clip, ensure it
-         * stays playing so the track doesn't go silent. If trackClipPlaying
-         * was true we used _clear_keep (DSP preserves playback). If it was
-         * false (e.g. clip hadn't auto-launched yet), re-launch now while
-         * transport is playing so the cleared clip ticks through empty steps. */
-        if (S.playing && !S.trackClipPlaying[t]
-                && !S.trackWillRelaunch[t]
-                && S.trackQueuedClip[t] === -1) {
-            S.pendingDefaultSetParams.push({ key: 't' + t + '_launch_clip', val: String(ac) });
-            S.trackQueuedClip[t] = ac;
-        }
-    }
+    return clearClipImpl(S, createClipEditOpsDeps(), t, ac, keepPlaying);
 }
 
 /* Full factory reset: clip_init on DSP + JS mirror cleared. Track View only. */
 function hardResetClip(t, ac) {
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-        /* Drum clip reset: clip_init all 32 lanes; midi_note preserved */
-        S.pendingDefaultSetParams.unshift({ key: 't' + t + '_c' + ac + '_drum_reset', val: '1' });
-        S.clearDrainHold = 1;
-        for (let l = 0; l < DRUM_LANES; l++) {
-            for (let s = 0; s < 256; s++) S.drumLaneSteps[t][l][s] = '0';
-            S.drumLaneHasNotes[t][l] = false;
-        }
-        S.drumClipNonEmpty[t][ac] = false;
-        S.clipLengthManuallySet[t][ac] = false;
-        S.drumLaneLengthManuallySet[t]  = false;
-        if (ac === S.trackActiveClip[t]) {
-            S.drumLaneLength[t] = 16;
-            S.drumLaneLoopStart[t] = 0;
-            S.drumLaneTPS[t]    = 24;
-            S.drumStepPage[t]   = 0;
-            S.trackCurrentPage[t] = 0;
-            S.seqActiveNotes.clear();
-        }
-        return;
-    }
-    S.pendingDefaultSetParams.unshift({ key: 't' + t + '_c' + ac + '_hard_reset', val: '1' });
-    S.clearDrainHold = 1;
-    const defaultLen = 16;
-    for (let s = 0; s < NUM_STEPS; s++) S.clipSteps[t][ac][s] = 0;
-    S.clipLength[t][ac] = defaultLen;
-    S.clipLoopStart[t][ac] = 0;
-    S.clipNonEmpty[t][ac] = false;
-    S.clipTPS[t][ac] = 24;
-    S.clipLengthManuallySet[t][ac] = false;
-    for (var _k = 0; _k < 8; _k++) {
-        S.ccLaneLoopStart[t][ac][_k] = 0;
-        S.ccLaneLength[t][ac][_k]    = 0;
-        S.ccLaneTps[t][ac][_k]       = 0;
-    }
-    if (ac === S.trackActiveClip[t]) {
-        S.trackCurrentPage[t] = 0;
-        S.seqActiveNotes.clear(); S.seqLastStep = -1; S.seqNoteOnClipTick = -1;
-        resetPerClipBankParamsToDefault(t);
-    }
+    return hardResetClipImpl(S, createClipEditOpsDeps(), t, ac);
 }
 
 /* Copy clip src→dst (single atomic DSP write, JS mirror update). */
 function copyClip(srcT, srcC, dstT, dstC) {
-    if (srcT === dstT && srcC === dstC) return;
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'clip_copy', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
-    S.clipSteps[dstT][dstC] = S.clipSteps[srcT][srcC].slice();
-    S.clipLength[dstT][dstC] = S.clipLength[srcT][srcC];
-    S.clipLoopStart[dstT][dstC] = S.clipLoopStart[srcT][srcC];
-    S.clipNonEmpty[dstT][dstC] = S.clipNonEmpty[srcT][srcC];
-    S.clipTPS[dstT][dstC] = S.clipTPS[srcT][srcC];
-    for (var _k = 0; _k < 8; _k++) {
-        S.ccLaneLoopStart[dstT][dstC][_k] = S.ccLaneLoopStart[srcT][srcC][_k];
-        S.ccLaneLength[dstT][dstC][_k]    = S.ccLaneLength[srcT][srcC][_k];
-        S.ccLaneTps[dstT][dstC][_k]       = S.ccLaneTps[srcT][srcC][_k];
-    }
-    if (dstC === S.trackActiveClip[dstT]) {
-        S.seqActiveNotes.clear(); S.seqLastStep = -1;
-        refreshPerClipBankParams(dstT);
-    }
+    return copyClipImpl(S, createClipEditOpsDeps(), srcT, srcC, dstT, dstC);
 }
 
 /* Cut clip: copy src→dst then hard-reset src (single atomic DSP write, JS mirror update). */
 function cutClip(srcT, srcC, dstT, dstC) {
-    if (srcT === dstT && srcC === dstC) return;
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'clip_cut', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
-    S.clipSteps[dstT][dstC] = S.clipSteps[srcT][srcC].slice();
-    S.clipLength[dstT][dstC] = S.clipLength[srcT][srcC];
-    S.clipLoopStart[dstT][dstC] = S.clipLoopStart[srcT][srcC];
-    S.clipNonEmpty[dstT][dstC] = S.clipNonEmpty[srcT][srcC];
-    S.clipTPS[dstT][dstC] = S.clipTPS[srcT][srcC];
-    for (var _k = 0; _k < 8; _k++) {
-        S.ccLaneLoopStart[dstT][dstC][_k] = S.ccLaneLoopStart[srcT][srcC][_k];
-        S.ccLaneLength[dstT][dstC][_k]    = S.ccLaneLength[srcT][srcC][_k];
-        S.ccLaneTps[dstT][dstC][_k]       = S.ccLaneTps[srcT][srcC][_k];
-    }
-    if (dstC === S.trackActiveClip[dstT]) {
-        S.seqActiveNotes.clear(); S.seqLastStep = -1;
-        refreshPerClipBankParams(dstT);
-    }
-    for (let s = 0; s < NUM_STEPS; s++) S.clipSteps[srcT][srcC][s] = 0;
-    S.clipLength[srcT][srcC] = 16;
-    S.clipLoopStart[srcT][srcC] = 0;
-    S.clipNonEmpty[srcT][srcC] = false;
-    S.clipTPS[srcT][srcC] = 24;
-    for (var _k2 = 0; _k2 < 8; _k2++) {
-        S.ccLaneLoopStart[srcT][srcC][_k2] = 0;
-        S.ccLaneLength[srcT][srcC][_k2]    = 0;
-        S.ccLaneTps[srcT][srcC][_k2]       = 0;
-    }
-    if (srcC === S.trackActiveClip[srcT]) {
-        S.seqActiveNotes.clear(); S.seqLastStep = -1; S.seqNoteOnClipTick = -1;
-        resetPerClipBankParamsToDefault(srcT);
-    }
+    return cutClipImpl(S, createClipEditOpsDeps(), srcT, srcC, dstT, dstC);
 }
 
 /* Copy all 8 tracks for a scene row (single atomic DSP write, JS mirror update). */
 function copyRow(srcRow, dstRow) {
-    if (srcRow === dstRow) return;
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'row_copy', val: `${srcRow} ${dstRow}` });
-    for (let t = 0; t < NUM_TRACKS; t++) {
-        S.clipSteps[t][dstRow] = S.clipSteps[t][srcRow].slice();
-        S.clipLength[t][dstRow] = S.clipLength[t][srcRow];
-        S.clipLoopStart[t][dstRow] = S.clipLoopStart[t][srcRow];
-        S.clipNonEmpty[t][dstRow] = S.clipNonEmpty[t][srcRow];
-        S.clipTPS[t][dstRow] = S.clipTPS[t][srcRow];
-        S.drumClipNonEmpty[t][dstRow] = S.drumClipNonEmpty[t][srcRow];
-        for (var _k = 0; _k < 8; _k++) {
-            S.ccLaneLoopStart[t][dstRow][_k] = S.ccLaneLoopStart[t][srcRow][_k];
-            S.ccLaneLength[t][dstRow][_k]    = S.ccLaneLength[t][srcRow][_k];
-            S.ccLaneTps[t][dstRow][_k]       = S.ccLaneTps[t][srcRow][_k];
-        }
-        if (dstRow === S.trackActiveClip[t]) {
-            S.seqActiveNotes.clear(); S.seqLastStep = -1;
-            refreshPerClipBankParams(t);
-            if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-                S.pendingDrumResync = 2; S.pendingDrumResyncTrack = t;
-            }
-        }
-    }
+    return copyRowImpl(S, createClipEditOpsDeps(), srcRow, dstRow);
 }
 
 /* Cut row: copy all tracks src→dst then hard-reset src (single atomic DSP write, JS mirror update). */
 function cutRow(srcRow, dstRow) {
-    if (srcRow === dstRow) return;
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'row_cut', val: `${srcRow} ${dstRow}` });
-    for (let t = 0; t < NUM_TRACKS; t++) {
-        S.clipSteps[t][dstRow] = S.clipSteps[t][srcRow].slice();
-        S.clipLength[t][dstRow] = S.clipLength[t][srcRow];
-        S.clipLoopStart[t][dstRow] = S.clipLoopStart[t][srcRow];
-        S.clipNonEmpty[t][dstRow] = S.clipNonEmpty[t][srcRow];
-        S.clipTPS[t][dstRow] = S.clipTPS[t][srcRow];
-        S.drumClipNonEmpty[t][dstRow] = S.drumClipNonEmpty[t][srcRow];
-        for (var _k = 0; _k < 8; _k++) {
-            S.ccLaneLoopStart[t][dstRow][_k] = S.ccLaneLoopStart[t][srcRow][_k];
-            S.ccLaneLength[t][dstRow][_k]    = S.ccLaneLength[t][srcRow][_k];
-            S.ccLaneTps[t][dstRow][_k]       = S.ccLaneTps[t][srcRow][_k];
-        }
-        if (dstRow === S.trackActiveClip[t]) {
-            S.seqActiveNotes.clear(); S.seqLastStep = -1;
-            refreshPerClipBankParams(t);
-            if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-                S.pendingDrumResync = 2; S.pendingDrumResyncTrack = t;
-            }
-        }
-        for (let s = 0; s < NUM_STEPS; s++) S.clipSteps[t][srcRow][s] = 0;
-        S.clipLength[t][srcRow] = 16;
-        S.clipLoopStart[t][srcRow] = 0;
-        S.clipNonEmpty[t][srcRow] = false;
-        S.clipTPS[t][srcRow] = 24;
-        S.drumClipNonEmpty[t][srcRow] = false;
-        for (var _k2 = 0; _k2 < 8; _k2++) {
-            S.ccLaneLoopStart[t][srcRow][_k2] = 0;
-            S.ccLaneLength[t][srcRow][_k2]    = 0;
-            S.ccLaneTps[t][srcRow][_k2]       = 0;
-        }
-        if (srcRow === S.trackActiveClip[t]) {
-            S.seqActiveNotes.clear(); S.seqLastStep = -1; S.seqNoteOnClipTick = -1;
-            resetPerClipBankParamsToDefault(t);
-            if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-                S.pendingDrumResync = 2; S.pendingDrumResyncTrack = t;
-            }
-        }
-    }
+    return cutRowImpl(S, createClipEditOpsDeps(), srcRow, dstRow);
 }
 
 /* Copy step src→dst within same clip (single atomic DSP write, JS mirror update). */
 function copyStep(t, ac, srcAbs, dstAbs) {
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-        const lane = S.activeDrumLane[t];
-        S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + lane + '_step_' + srcAbs + '_copy_to', val: String(dstAbs) });
-        S.drumLaneSteps[t][lane][dstAbs] = S.drumLaneSteps[t][lane][srcAbs];
-        if (S.drumLaneSteps[t][lane][srcAbs] !== '0') S.drumLaneHasNotes[t][lane] = true;
-        S.pendingDrumLaneResync      = 2;
-        S.pendingDrumLaneResyncTrack = t;
-        S.pendingDrumLaneResyncLane  = lane;
-    } else {
-        S.pendingDefaultSetParams.push({ key: 't' + t + '_c' + ac + '_step_' + srcAbs + '_copy_to', val: String(dstAbs) });
-        S.clipSteps[t][ac][dstAbs] = S.clipSteps[t][ac][srcAbs];
-        if (S.clipSteps[t][ac][srcAbs] !== 0) S.clipNonEmpty[t][ac] = true;
-        S.pendingStepsReread      = 2;
-        S.pendingStepsRereadTrack = t;
-        S.pendingStepsRereadClip  = ac;
-    }
+    return copyStepImpl(S, createClipEditOpsDeps(), t, ac, srcAbs, dstAbs);
 }
 
 /* Copy active clip's lane srcLane to dstLane (same track, preserves dst midi_note). */
@@ -1067,25 +866,7 @@ function cutDrumClip(srcT, srcC, dstT, dstC) {
 
 /* Clear all 8 tracks for a scene row (single atomic DSP write, JS mirror update). */
 function clearRow(rowIdx) {
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'row_clear', val: String(rowIdx) });
-    for (let t = 0; t < NUM_TRACKS; t++) {
-        const len = S.clipLength[t][rowIdx];
-        for (let s = 0; s < len; s++) S.clipSteps[t][rowIdx][s] = 0;
-        S.clipNonEmpty[t][rowIdx] = false;
-        S.drumClipNonEmpty[t][rowIdx] = false;
-        S.clipLoopStart[t][rowIdx] = 0;
-        if (rowIdx === S.trackActiveClip[t]) {
-            S.seqActiveNotes.clear(); S.seqLastStep = -1;
-            S.trackCurrentPage[t] = 0;
-            if (S.trackPadMode[t] === PAD_MODE_DRUM) S.drumLaneLoopStart[t] = 0;
-            resetPerClipBankParamsToDefault(t);
-            if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-                S.pendingDrumResync = 2; S.pendingDrumResyncTrack = t;
-            }
-        }
-    }
+    return clearRowImpl(S, createClipEditOpsDeps(), rowIdx);
 }
 
 /* Disarm real-time recording: clear DSP flag (triggers deferred save), update LED. */
@@ -1326,84 +1107,11 @@ function selectTrackGesture(newT) {
  * relaunch clip, else focus + launch. Now reached by tapping a step while a side
  * button is held (S.revealClipsTrack). */
 function selectClipOnTrack(t, clipIdx) {
-    const isActiveClip = S.trackActiveClip[t] === clipIdx;
-    if (S.trackClipPlaying[t] && isActiveClip) {
-        if (S.trackPendingPageStop[t]) {
-            /* Pending stop → cancel by re-launching legato */
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('t' + t + '_launch_clip', String(clipIdx));
-        } else {
-            /* Playing → arm stop at next page boundary */
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('t' + t + '_stop_at_end', '1');
-        }
-    } else if (S.trackWillRelaunch[t] && isActiveClip) {
-        /* Transport stopped, clip primed to restart → cancel */
-        if (typeof host_module_set_param === 'function')
-            host_module_set_param('t' + t + '_deactivate', '1');
-    } else if (S.trackQueuedClip[t] === clipIdx) {
-        /* Queued to launch → cancel */
-        if (typeof host_module_set_param === 'function')
-            host_module_set_param('t' + t + '_deactivate', '1');
-    } else {
-        /* Focus immediately so pads/OLED show the selected clip even while the
-         * prior clip is still playing toward its legato switch boundary; pollDSP
-         * keeps trackActiveClip in sync when DSP crosses the boundary. Page snaps
-         * to the clip's loop_start page (drum: 0, refreshed by pendingDrumResync). */
-        S.trackActiveClip[t]  = clipIdx;
-        S.trackCurrentPage[t] = S.trackPadMode[t] === PAD_MODE_DRUM
-            ? 0
-            : Math.floor((S.clipLoopStart[t][clipIdx] | 0) / 16);
-        refreshPerClipBankParams(t);
-        if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-            S.pendingDrumResync      = 2;
-            S.pendingDrumResyncTrack = t;
-        }
-        if (typeof host_module_set_param === 'function')
-            host_module_set_param('t' + t + '_launch_clip', String(clipIdx));
-    }
+    return selectClipOnTrackImpl(S, createClipEditOpsDeps(), t, clipIdx);
 }
 
 function doDoubleFill() {
-    const _t = S.activeTrack;
-    if (S.trackPadMode[_t] === PAD_MODE_DRUM && S.activeBank === 7) {
-        S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-        host_module_set_param('t' + _t + '_all_lanes_double_fill', '1');
-        S.pendingDrumResync = 2; S.pendingDrumResyncTrack = _t;
-        showActionPopup('LOOP', 'DOUBLED');
-        forceRedraw();
-    } else if (S.trackPadMode[_t] === PAD_MODE_DRUM) {
-        const _l   = S.activeDrumLane[_t];
-        const _len = S.drumLaneLength[_t];
-        if (_len * 2 > 256) {
-            showActionPopup('CLIP FULL');
-        } else {
-            S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-            host_module_set_param('t' + _t + '_l' + _l + '_loop_double_fill', '1');
-            S.drumLaneLength[_t] = _len * 2;
-            S.pendingDrumResync      = 2;
-            S.pendingDrumResyncTrack = _t;
-            showActionPopup('LOOP', 'DOUBLED');
-            forceRedraw();
-        }
-    } else {
-        const _ac  = effectiveClip(_t);
-        const _len = S.clipLength[_t][_ac];
-        if (_len * 2 > 256) {
-            showActionPopup('CLIP FULL');
-        } else {
-            S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('t' + _t + '_loop_double_fill', '1');
-            S.clipLength[_t][_ac] = _len * 2;
-            S.pendingStepsReread      = 2;
-            S.pendingStepsRereadTrack = _t;
-            S.pendingStepsRereadClip  = _ac;
-            refreshPerClipBankParams(_t);
-            showActionPopup('LOOP', 'DOUBLED');
-            forceRedraw();
-        }
-    }
+    return doDoubleFillImpl(S, createClipEditOpsDeps());
 }
 
 function doLaneDoubleFill() {
