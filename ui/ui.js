@@ -65,8 +65,8 @@ import {
     MoveNoteSession, MoveUndo, MoveLoop, MoveCopy, MoveMainTouch, MoveRec,
     MoveCapture, MoveSample, MoveMainButton, MoveMainKnob,
     LED_OFF, LED_STEP_ACTIVE, LED_STEP_CURSOR, SCENE_BTN_FLASH_TICKS,
-    LEDS_PER_FRAME, NUM_TRACKS, NUM_CLIPS, DRUM_LANES, DRUM_BASE_NOTE,
-    FLAG_JUMP_TO_OVERTAKE, FLAG_JUMP_TO_TOOLS, SEQ8_NAV_FLAGS, NUM_STEPS,
+    NUM_TRACKS, NUM_CLIPS, DRUM_LANES, DRUM_BASE_NOTE,
+    FLAG_JUMP_TO_OVERTAKE, FLAG_JUMP_TO_TOOLS, NUM_STEPS,
     TRACK_COLORS, TRACK_DIM_COLORS, SCENE_LETTERS, TRACK_PAD_BASE, TOP_PAD_BASE,
     TPS_VALUES, NOTE_KEYS, SCALE_NAMES, SCALE_DISPLAY, DELAY_LABELS,
     fmtSign, fmtStretch, fmtLen, fmtLgto, fmtRes, fmtPct, fmtNote, fmtPages,
@@ -391,6 +391,13 @@ import {
     openClearAutoMenuImpl
 } from './ui_clear_auto_workflow.mjs';
 import {
+    buildLedInitQueueImpl,
+    clearAllLEDsImpl,
+    drainLedInitImpl,
+    installFlagsWrapImpl,
+    removeFlagsWrapImpl
+} from './ui_led_init_workflow.mjs';
+import {
     applyBankParamImpl,
     applyTrackConfigImpl,
     readBankParamsImpl,
@@ -516,6 +523,19 @@ function createClearAutoMenuDeps() {
         effectiveClip,
         invalidateLEDCache,
         showActionPopup
+    };
+}
+
+function createLedInitDeps() {
+    return {
+        setLED,
+        setButtonLED,
+        setPaletteEntryRGB,
+        reapplyPalette,
+        invalidateLEDCache,
+        clearFlags: typeof shadow_clear_ui_flags === 'function' ? shadow_clear_ui_flags : null,
+        getFlagsFn: function () { return globalThis.shadow_get_ui_flags; },
+        setFlagsFn: function (fn) { globalThis.shadow_get_ui_flags = fn; }
     };
 }
 
@@ -1526,81 +1546,23 @@ function defaultStepNote() {
 
 /* Synchronously zero every LED that SEQ8 owns — call before host_hide_module(). */
 function clearAllLEDs() {
-    let n, c;
-    for (n = 68; n <= 99; n++) setLED(n, LED_OFF);
-    for (n = 16; n <= 31; n++) setLED(n, LED_OFF);
-    for (c = 16; c <= 31; c++) setButtonLED(c, LED_OFF);
-    for (c = 40; c <= 43; c++) setButtonLED(c, LED_OFF);
-    for (const cc of [49, 50, 51, 52, 54, 55, 56, 58, 60, 62, 63])
-        setButtonLED(cc, LED_OFF);
-    for (c = 71; c <= 78; c++) setButtonLED(c, LED_OFF);
-    for (const cc of [85, 86, 88, 118, 119]) setButtonLED(cc, LED_OFF);
+    clearAllLEDsImpl(createLedInitDeps());
 }
 
 function installFlagsWrap() {
-    if (typeof shadow_get_ui_flags !== 'function') return;
-    if (globalThis.shadow_get_ui_flags._seq8) {
-        globalThis.shadow_get_ui_flags._active = true;
-        return;
-    }
-    const orig = globalThis.shadow_get_ui_flags;
-    const wrap = function () {
-        const f = orig();
-        const hit = f & SEQ8_NAV_FLAGS;
-        if (hit && wrap._active) {
-            S.ledInitComplete = false;
-            invalidateLEDCache();
-            clearAllLEDs();
-            if (typeof shadow_clear_ui_flags === 'function') shadow_clear_ui_flags(hit);
-            return f & ~SEQ8_NAV_FLAGS;
-        }
-        return f;
-    };
-    wrap._seq8   = true;
-    wrap._orig   = orig;
-    wrap._active = true;
-    globalThis.shadow_get_ui_flags = wrap;
+    installFlagsWrapImpl(S, createLedInitDeps());
 }
 
 function removeFlagsWrap() {
-    const cur = globalThis.shadow_get_ui_flags;
-    if (typeof cur === 'function' && cur._seq8) {
-        cur._active = false;
-        globalThis.shadow_get_ui_flags = cur._orig;
-    }
+    removeFlagsWrapImpl(createLedInitDeps());
 }
 
 function buildLedInitQueue() {
-    const q = [];
-    for (let n = 68; n <= 99; n++) q.push({ kind: 'note', id: n });
-    for (let n = 16; n <= 31; n++) q.push({ kind: 'note', id: n });
-    for (let c = 16; c <= 31; c++) q.push({ kind: 'cc', id: c });
-    for (let c = 40; c <= 43; c++) q.push({ kind: 'cc', id: c });
-    for (const c of [49, 50, 51, 52, 54, 55, 56, 58, 60, 62, 63])
-        q.push({ kind: 'cc', id: c });
-    for (let c = 71; c <= 78; c++) q.push({ kind: 'cc', id: c });
-    for (const c of [85, 86, 88, 118, 119]) q.push({ kind: 'cc', id: c });
-    return q;
+    return buildLedInitQueueImpl();
 }
 
 function drainLedInit() {
-    const end = Math.min(S.ledInitIndex + LEDS_PER_FRAME, S.ledInitQueue.length);
-    for (let i = S.ledInitIndex; i < end; i++) {
-        const led = S.ledInitQueue[i];
-        if (led.kind === 'cc') setButtonLED(led.id, LED_OFF);
-        else setLED(led.id, LED_OFF);
-    }
-    S.ledInitIndex = end;
-    if (S.ledInitIndex >= S.ledInitQueue.length) {
-        S.ledInitComplete = true;
-        /* Custom scratch palette entry for the Loop button's ambient LED —
-         * Loop's LED renders palette colors brighter than peers (Delete/Copy
-         * idx 16 = dim grey; same idx 16 is invisible on Loop, and 124/DarkGrey
-         * on Loop reads as fully bright). Push a low-RGB entry before
-         * reapplyPalette so the LED hardware picks up index 60 on the refresh. */
-        setPaletteEntryRGB(60, 32, 32, 32);
-        reapplyPalette();
-    }
+    drainLedInitImpl(S, createLedInitDeps());
 }
 
 /* Read per-clip bank params from DSP into S.bankParams for track t.
