@@ -368,6 +368,9 @@ import {
     runTransposePreviewSelfHeal,
     runViewLEDsAndBlinks
 } from './ui_tick_tasks.mjs';
+import {
+    buildGlobalMenuItemsImpl
+} from './ui_global_menu.mjs';
 
 /* ------------------------------------------------------------------ */
 /* Parameter bank definitions                                           */
@@ -420,224 +423,22 @@ function drawMetroIndicator() {
 
 /* Launch quantization: 0=Now, 1=1/16, 2=1/8, 3=1/4, 4=1/2, 5=1-bar; default 0 */
 
+function createGlobalMenuDeps() {
+    return {
+        applyTrackConfig,
+        computePadNoteMap,
+        forceRedraw,
+        editSoundForTrack,
+        openTapTempo,
+        xposePreviewSet,
+        openLoadSnapshot,
+        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null
+    };
+}
+
 function buildGlobalMenuItems() {
-    return [
-        createValue('Channel', {
-            get: function() { return S.trackChannel[S.activeTrack]; },
-            set: function(v) { applyTrackConfig(S.activeTrack, 'channel', v); },
-            min: 1, max: 16, step: 1,
-            format: function(v) { return String(v); }
-        }),
-        createEnum('Route', {
-            get: function() { return S.trackRoute[S.activeTrack]; },
-            set: function(v) { applyTrackConfig(S.activeTrack, 'route', v); },
-            options: [0, 1, 2],
-            format: function(v) { return fmtRoute(v); }
-        }),
-        createEnum('Mode', {
-            get: function() { return S.trackPadMode[S.activeTrack]; },
-            /* Flipping Mode CONVERTS the track's notes (see convertTrackType).
-             * set() is called as a live preview while editing AND on commit
-             * via set(get()); the v===cur guard makes those re-fires no-ops. */
-            set: function(v) {
-                const t = S.activeTrack;
-                if (v === S.trackPadMode[t]) return;
-                if (v === PAD_MODE_DRUM) {
-                    /* Keys -> Drums: warn only if there are notes to lose;
-                     * an empty track converts straight through (no dialog). */
-                    let hasData = false;
-                    for (let c = 0; c < NUM_CLIPS; c++)
-                        if (S.clipNonEmpty[t][c]) { hasData = true; break; }
-                    if (hasData) {
-                        S.confirmConvertToDrum    = true;
-                        S.confirmConvertToDrumSel = 1;   /* default No */
-                        S.confirmConvertTrack     = t;
-                        S.screenDirty = true;
-                    } else {
-                        S.pendingTrackConvert = { t: t, toDrum: true };
-                    }
-                } else {
-                    /* Drums -> Keys: no prompt. Defer to tick() (get_param-safe). */
-                    S.pendingTrackConvert = { t: t, toDrum: false };
-                }
-            },
-            options: [0, 1],
-            format: function(v) { return v ? 'Drums' : 'Keys'; }
-        }),
-        createEnum('Layout', {
-            get: function() { return S.padLayoutChromatic[S.activeTrack] ? 1 : 0; },
-            set: function(v) {
-                if (S.trackPadMode[S.activeTrack] !== 0) return;
-                S.padLayoutChromatic[S.activeTrack] = v !== 0;
-                computePadNoteMap();
-                forceRedraw();
-            },
-            options: [0, 1],
-            format: function(v) {
-                if (S.trackPadMode[S.activeTrack] !== 0) return fmtNA();
-                return v ? 'Chrom' : 'Scale';
-            }
-        }),
-        createValue('VelIn', {
-            get: function() { return S.trackVelOverride[S.activeTrack]; },
-            set: function(v) { applyTrackConfig(S.activeTrack, 'track_vel_override', v); },
-            min: 0, max: 127, step: 1,
-            format: function(v) { return fmtVelOverride(v); }
-        }),
-        createToggle('Looper', {
-            get: function() { return S.trackLooper[S.activeTrack] !== 0; },
-            set: function(v) { applyTrackConfig(S.activeTrack, 'track_looper', v ? 1 : 0); },
-            onLabel: 'On', offLabel: 'Off'
-        }),
-        /* Pad-pressure (aftertouch) send mode — melodic tracks only. On drum
-         * tracks pad pressure is owned by the repeat-velocity system, so the
-         * item is hidden there. Move route supports Off/Poly only (Move
-         * instruments take poly AT); Schwung/External also offer Channel.
-         * Options recompute each menu open (buildGlobalMenuItems re-runs). Mode is
-         * JS-side (carried per-message in tN_live_at) → persisted in the sidecar. */
-        ...(S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM ? [
-            createEnum('AftTch', {
-                get: function() { return S.trackAtMode[S.activeTrack] | 0; },
-                set: function(v) { S.trackAtMode[S.activeTrack] = v | 0; writeSidecar(); },
-                options: S.trackRoute[S.activeTrack] === 1 ? [0, 1] : [0, 1, 2],
-                format: function(v) { return v === 2 ? 'Chan' : v === 1 ? 'Poly' : 'Off'; }
-            })
-        ] : []),
-        /* One user-facing sound-edit command. Route-specific dispatch stays in
-         * editSoundForTrack() so Move-native and Schwung chain-edit co-run keep
-         * their separate internals while the menu exposes one gesture. */
-        ...(canEditSoundRoute(S.trackRoute[S.activeTrack]) ? [
-            createAction('Edit Sound...', function() {
-                editSoundForTrack(S.activeTrack);
-            })
-        ] : []),
-        createDivider('Global'),
-        createValue('BPM', {
-            get: function() {
-                const v = parseFloat(host_module_get_param('bpm'));
-                return (v > 0 && isFinite(v)) ? Math.round(v) : 120;
-            },
-            set: function(v) { host_module_set_param('bpm', String(Math.round(v))); },
-            min: 40, max: 250, step: 1,
-            format: function(v) { return String(Math.round(v)); }
-        }),
-        createAction('Tap Tempo', function() {
-            openTapTempo();
-        }),
-        /* Key/Scale: turning the knob previews a transpose of all melodic clips
-         * (live, uncommitted); the click commits behind a confirm (see the
-         * jog-click intercept + xpose* helpers). set() runs as the menu-edit
-         * live preview AND on edit-exit (set(get()) → candidate==committed →
-         * cancel), so back-out cleanly drops the preview. */
-        createEnum('Key', {
-            get: function() { return S.padKey; },
-            set: function(v) { xposePreviewSet(v, S.padScale); },
-            options: [0,1,2,3,4,5,6,7,8,9,10,11],
-            format: function(v) { return NOTE_KEYS[((v | 0) % 12 + 12) % 12]; }
-        }),
-        createEnum('Scale', {
-            get: function() { return S.padScale; },
-            set: function(v) { xposePreviewSet(S.padKey, v); },
-            options: [0,1,2,3,4,5,6,7,8,9,10,11,12,13],
-            format: function(v) { return SCALE_NAMES[v] || 'Major'; }
-        }),
-        createToggle('Scale Aware', {
-            get: function() { return S.scaleAware !== 0; },
-            set: function(v) {
-                S.scaleAware = v ? 1 : 0;
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('scale_aware', S.scaleAware ? '1' : '0');
-            },
-            onLabel: 'On', offLabel: 'Off'
-        }),
-        createEnum('Launch', {
-            get: function() { return S.launchQuant; },
-            set: function(v) {
-                S.launchQuant = v;
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('launch_quant', String(v));
-            },
-            options: [0, 1, 2, 3, 4, 5],
-            format: function(v) {
-                return ['Now','1/16','1/8','1/4','1/2','1-bar'][v] || '1-bar';
-            }
-        }),
-        createValue('Swing Amt', {
-            get: function() { return S.swingAmt; },
-            set: function(v) { S.swingAmt = v; host_module_set_param('swing_amt', String(v)); },
-            min: 0, max: 100,
-            format: function(v) { return Math.round(50 + v * 0.25) + '%'; }
-        }),
-        createEnum('Swing Res', {
-            get: function() { return S.swingRes; },
-            set: function(v) { S.swingRes = v; host_module_set_param('swing_res', String(v)); },
-            options: [0, 1],
-            format: function(v) { return ['1/16','1/8'][v] || '1/16'; }
-        }),
-        createEnum('MIDI In', {
-            get: function() { return S.midiInChannel; },
-            set: function(v) {
-                S.midiInChannel = v;
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('midi_in_channel', String(v));
-            },
-            options: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],
-            format: function(v) { return v === 0 ? 'All' : String(v); }
-        }),
-        createEnum('Metro', {
-            get: function() { return S.metronomeOn; },
-            set: function(v) {
-                S.metronomeOn = v | 0;
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('metro_on', String(S.metronomeOn));
-            },
-            options: [0, 1, 2, 3],
-            format: function(v) {
-                return ['Off', 'Cnt-In', 'Play', 'Always'][v | 0];
-            }
-        }),
-        createValue('Metro Vol', {
-            get: function() { return S.metronomeVol; },
-            set: function(v) {
-                S.metronomeVol = v | 0;
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('metro_vol', String(S.metronomeVol));
-            },
-            min: 0, max: 150, step: 1,
-            format: function(v) { return String(v | 0) + '%'; }
-        }),
-        createToggle('Beat Marks', {
-            get: function() { return S.beatMarkersEnabled; },
-            set: function(v) { S.beatMarkersEnabled = v; forceRedraw(); },
-            onLabel: 'On', offLabel: 'Off'
-        }),
-        createAction('Route Check', function() {
-            S.routeCheckOpen = true;
-            S.routeCheckSelected = 0;
-            S.screenDirty = true;
-        }),
-        createAction('Export to Ableton', function() {
-            requestExport();
-        }),
-        createAction('Save state', function() {
-            S.confirmSaveCount = loadSnapshotManifest(S.currentSetUuid).length;
-            S.confirmSaveState = true;
-            S.confirmSaveSel   = 1;   /* default No */
-        }),
-        createAction('Load state', function() {
-            openLoadSnapshot();
-        }),
-        createAction('Clear Sess', function() {
-            S.confirmClearSession = true;
-            S.confirmClearSel     = 1;
-            S.screenDirty         = true;
-        }),
-        createAction('Quit', function() {
-            saveState();                       /* sets pendingSuspendSave */
-            S.pendingExitAfterSave = true;     /* drained one tick after save fires */
-            S.globalMenuOpen = false;
-        }),
-    ];
+    return buildGlobalMenuItemsImpl(S, createGlobalMenuDeps());
 }
 
 
