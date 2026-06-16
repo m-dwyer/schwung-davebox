@@ -31,17 +31,22 @@ ENTRY="$TOOL_DIR/ui/ui.js"
 OUT="$TOOL_DIR/dist/overture/ui.js"
 SHARED_EXTERNAL='/data/UserData/schwung/shared/*'
 
-# --- locate esbuild (web is the repo's node workspace) ---
+# --- locate esbuild ---
+# esbuild is the tool's own host build dependency (tool/package.json). Prefer
+# the tool's node_modules; fall back to the web emulator workspace (legacy
+# location) or a PATH/$ESBUILD binary so older checkouts keep building.
 ESBUILD="${ESBUILD:-}"
 if [ -z "$ESBUILD" ]; then
-    if [ -x "$REPO_DIR/web/node_modules/.bin/esbuild" ]; then
+    if [ -x "$TOOL_DIR/node_modules/.bin/esbuild" ]; then
+        ESBUILD="$TOOL_DIR/node_modules/.bin/esbuild"
+    elif [ -x "$REPO_DIR/web/node_modules/.bin/esbuild" ]; then
         ESBUILD="$REPO_DIR/web/node_modules/.bin/esbuild"
     elif command -v esbuild >/dev/null 2>&1; then
         ESBUILD="$(command -v esbuild)"
     fi
 fi
 if [ -z "$ESBUILD" ]; then
-    echo "ERROR: esbuild not found. Run 'pnpm -C web install' from the repo root, or set \$ESBUILD." >&2
+    echo "ERROR: esbuild not found. Run 'pnpm -C tool install', or set \$ESBUILD." >&2
     exit 1
 fi
 
