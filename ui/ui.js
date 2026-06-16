@@ -398,6 +398,12 @@ import {
     removeFlagsWrapImpl
 } from './ui_led_init_workflow.mjs';
 import {
+    anyMelodicClipHasContentImpl,
+    xposeCancelPreviewImpl,
+    xposeCommitImpl,
+    xposePreviewSetImpl
+} from './ui_transpose_workflow.mjs';
+import {
     applyBankParamImpl,
     applyTrackConfigImpl,
     readBankParamsImpl,
@@ -536,6 +542,17 @@ function createLedInitDeps() {
         clearFlags: typeof shadow_clear_ui_flags === 'function' ? shadow_clear_ui_flags : null,
         getFlagsFn: function () { return globalThis.shadow_get_ui_flags; },
         setFlagsFn: function (fn) { globalThis.shadow_get_ui_flags = fn; }
+    };
+}
+
+function createTransposeDeps() {
+    return {
+        numTracks: NUM_TRACKS,
+        numClips: NUM_CLIPS,
+        padModeDrum: PAD_MODE_DRUM,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        computePadNoteMap,
+        forceRedraw
     };
 }
 
@@ -1301,35 +1318,20 @@ function _padDispatchMutedNow() {
 
 /* Any melodic (non-drum) clip on any track with notes? */
 function anyMelodicClipHasContent() {
-    for (let t = 0; t < NUM_TRACKS; t++) {
-        if (S.trackPadMode[t] === PAD_MODE_DRUM) continue;
-        for (let c = 0; c < NUM_CLIPS; c++) if (S.clipNonEmpty[t][c]) return true;
-    }
-    return false;
+    return anyMelodicClipHasContentImpl(S, createTransposeDeps());
 }
 
 /* Arm/refresh preview for candidate (candK,candS). Candidate == committed
  * cancels instead (no-op change). Runs from the menu-edit tick driver. */
 function xposePreviewSet(candK, candS) {
-    if (candK === S.padKey && candS === S.padScale) { xposeCancelPreview(); return; }
-    S.xposePrevKey = candK; S.xposePrevScale = candS;
-    computePadNoteMap();   /* relayout pads to candidate (also pushes padmap) */
-    if (typeof host_module_set_param === 'function')
-        host_module_set_param('t0_xpose_prev',
-            S.padKey + ' ' + S.padScale + ' ' + candK + ' ' + candS);
-    S.screenDirty = true;
+    xposePreviewSetImpl(S, createTransposeDeps(), candK, candS);
 }
 
 /* Drop the preview: DSP returns playback to true pitch; pads back to committed.
  * The apply(flag=0) is queued (drained from tick) — set_param fired directly from
  * the onMidi confirm-click path is unreliable/coalesced. */
 function xposeCancelPreview() {
-    if (S.xposePrevKey === null && S.xposePrevScale === null) return;
-    S.xposePrevKey = null; S.xposePrevScale = null;
-    S.pendingDefaultSetParams.push({ key: 't0_xpose_apply',
-        val: S.padKey + ' ' + S.padScale + ' ' + S.padKey + ' ' + S.padScale + ' 0' });
-    computePadNoteMap();
-    S.screenDirty = true;
+    xposeCancelPreviewImpl(S, createTransposeDeps());
 }
 
 /* Commit: bake the transpose into all melodic clips, adopt the new key/scale.
@@ -1339,13 +1341,7 @@ function xposeCancelPreview() {
  * are unchanged and the pad layout is rebuilt here — so no clip resync is needed
  * (held-step note pitches refresh on the next press). */
 function xposeCommit(candK, candS) {
-    S.pendingDefaultSetParams.push({ key: 't0_xpose_apply',
-        val: S.padKey + ' ' + S.padScale + ' ' + candK + ' ' + candS + ' 1' });
-    S.padKey = candK; S.padScale = candS;
-    S.xposePrevKey = null; S.xposePrevScale = null;
-    computePadNoteMap();
-    forceRedraw();
-    S.screenDirty = true;
+    xposeCommitImpl(S, createTransposeDeps(), candK, candS);
 }
 
 function computePadNoteMap() {
