@@ -645,3 +645,84 @@ export function runSceneCacheRefresh(S, deps) {
         S.cachedSceneAnyPlaying[_i] = deps.sceneAnyPlaying(_i);
     }
 }
+
+export function runSuspendDetection(S, deps) {
+    /* Suspend detection: host swaps clear_screen to a no-op while we're parked.
+     * Save state on the transition edge; let tick run normally (display is
+     * no-oped by host). Returns the live isSuspended flag — the orchestrator
+     * threads it to the terminal drawUI gate (the one cross-block local). */
+    const isSuspended = S._origClearScreen && (deps.clearScreen !== S._origClearScreen);
+    if (isSuspended && !S._wasSuspended) {
+        /* saveState() writes the sidecar synchronously and sets
+         * pendingSuspendSave — drained at end of this tick (block below).
+         * Keeps schema unified with the explicit save paths. */
+        deps.saveState();
+        deps.removeFlagsWrap();
+        if (deps.host_ext_midi_remap_enable) deps.host_ext_midi_remap_enable(0);
+    }
+    if (!isSuspended && S._wasSuspended) {
+        deps.installFlagsWrap();
+        deps.applyExtMidiRemap();
+        /* Clear any held-modifier state that may have got stuck on suspend
+         * (key-up events fire after overtake exits, so onMidiMessage never sees them). */
+        S.shiftHeld = false; S.deleteHeld = false; S.muteHeld = false;
+        S.copyHeld  = false; S.loopHeld  = false; S.loopJogActive = false;
+        S.captureHeld = false; S.shiftTrackLEDActive = false;
+        S.heldStep  = -1;    S.heldStepBtn = -1; S.heldStepNotes = [];
+        S.stepWasEmpty = false; S.stepWasHeld = false;
+        /* Check if the active set changed while we were parked. */
+        const _as = deps.readActiveSet();
+        const _dspUuid = deps.host_module_get_param
+            ? (deps.host_module_get_param('state_uuid') || '') : '';
+        if (_as.uuid && _dspUuid !== _as.uuid) {
+            S.currentSetUuid = _as.uuid;
+            S.currentSetName = _as.name;
+            /* If multiple family candidates, picker opens and state_load is
+             * deferred. Otherwise pendingSetLoad is fine to set immediately
+             * since the auto-inherit branch (or blank branch) is already done. */
+            const _r = deps.maybeShowInheritPicker(_as.uuid, _as.name);
+            if (_r !== 'picker') S.pendingSetLoad = true;
+        }
+        S.ledInitComplete = false;
+        deps.invalidateLEDCache();
+        S.ledInitQueue = deps.buildLedInitQueue();
+        S.ledInitIndex = 0;
+        deps.forceRedraw();
+    }
+    S._wasSuspended = isSuspended;
+    return isSuspended;
+}
+
+export function runOrphanPrune(S, deps) {
+    /* Orphan prune: clean up set_state/<uuid>/seq8-*.json for sets that no
+     * longer exist on disk. Defer until any state_load + initial sync settles
+     * so the prune set_param doesn't collide with state_load coalescing. */
+    if (S.pendingPruneOrphans && !S.pendingSetLoad && S.pendingDspSync === 0 &&
+            deps.host_module_set_param) {
+        S.pendingPruneOrphans = false;
+        deps.host_module_set_param('prune_orphan_states', '1');
+        /* Drop stale entries from the in-memory index so subsequent inheritance
+         * lookups don't find UUIDs whose state file is about to be removed. */
+        if (!S.nameIndexCache) S.nameIndexCache = deps.loadNameIndex();
+        let _dropped = false;
+        for (const _nm in S.nameIndexCache) {
+            const _u = S.nameIndexCache[_nm];
+            if (_u && deps.host_file_exists
+                    && !deps.host_file_exists(deps.uuidToStatePath(_u))) {
+                delete S.nameIndexCache[_nm];
+                _dropped = true;
+            }
+        }
+        if (_dropped) deps.saveNameIndex(S.nameIndexCache);
+    }
+}
+
+export function runAltModeFlash(S, deps) {
+    /* Drive the alt-mode arrow flash: repaint on each blink-phase edge so the
+     * down-arrow animates even when the UI is otherwise idle. Covers both altMode
+     * (most alt banks) and stepIntervalMode (Arp Steps overlay on melodic 4/5). */
+    if (deps.altIndicatorActive(S.activeTrack, S.activeBank)) {
+        const _ph = Math.floor(S.tickCount / 24) % 2;
+        if (_ph !== S._altBlinkPhase) { S._altBlinkPhase = _ph; S.screenDirty = true; }
+    }
+}

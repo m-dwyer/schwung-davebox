@@ -343,10 +343,12 @@ import {
     runExternalRouteQueueDrain,
     runExtMidiRemapReapply,
     runGlobalMenuParamPreview,
+    runAltModeFlash,
     runLiveNoteDrain,
     runMetroBeatDetect,
     runMetroNoteOffTask,
     runMoveCoRunTickTasks,
+    runOrphanPrune,
     runOverlayTimerExpiries,
     runPadMapSelfHealTask,
     runPendingEditSoundAdvance,
@@ -360,6 +362,7 @@ import {
     runSessionStepHoldToSave,
     runSessionViewEdgeTasks,
     runSideButtonHoldThreshold,
+    runSuspendDetection,
     runTransposePreviewSelfHeal
 } from './ui_tick_tasks.mjs';
 
@@ -3987,47 +3990,22 @@ function _tickImpl() {
         computePadNoteMap
     });
 
-    /* Suspend detection: host swaps clear_screen to a no-op while we're parked.
-     * Save state on the transition edge; let tick run normally (display is no-oped by host). */
-    const isSuspended = S._origClearScreen && (clear_screen !== S._origClearScreen);
-    if (isSuspended && !S._wasSuspended) {
-        /* saveState() writes the sidecar synchronously and sets
-         * pendingSuspendSave — drained at end of this tick (block below).
-         * Keeps schema unified with the explicit save paths. */
-        saveState();
-        removeFlagsWrap();
-        if (typeof host_ext_midi_remap_enable === 'function') host_ext_midi_remap_enable(0);
-    }
-    if (!isSuspended && S._wasSuspended) {
-        installFlagsWrap();
-        applyExtMidiRemap();
-        /* Clear any held-modifier state that may have got stuck on suspend
-         * (key-up events fire after overtake exits, so onMidiMessage never sees them). */
-        S.shiftHeld = false; S.deleteHeld = false; S.muteHeld = false;
-        S.copyHeld  = false; S.loopHeld  = false; S.loopJogActive = false;
-        S.captureHeld = false; S.shiftTrackLEDActive = false;
-        S.heldStep  = -1;    S.heldStepBtn = -1; S.heldStepNotes = [];
-        S.stepWasEmpty = false; S.stepWasHeld = false;
-        /* Check if the active set changed while we were parked. */
-        const _as = readActiveSet();
-        const _dspUuid = (typeof host_module_get_param === 'function')
-            ? (host_module_get_param('state_uuid') || '') : '';
-        if (_as.uuid && _dspUuid !== _as.uuid) {
-            S.currentSetUuid = _as.uuid;
-            S.currentSetName = _as.name;
-            /* If multiple family candidates, picker opens and state_load is
-             * deferred. Otherwise pendingSetLoad is fine to set immediately
-             * since the auto-inherit branch (or blank branch) is already done. */
-            const _r = maybeShowInheritPicker(_as.uuid, _as.name);
-            if (_r !== 'picker') S.pendingSetLoad = true;
-        }
-        S.ledInitComplete = false;
-        invalidateLEDCache();
-        S.ledInitQueue = buildLedInitQueue();
-        S.ledInitIndex = 0;
-        forceRedraw();
-    }
-    S._wasSuspended = isSuspended;
+    /* isSuspended is the one cross-block tick local — threaded to the terminal
+     * drawUI gate at the bottom of the orchestrator. */
+    const isSuspended = runSuspendDetection(S, {
+        clearScreen: clear_screen,
+        saveState,
+        removeFlagsWrap,
+        host_ext_midi_remap_enable: (typeof host_ext_midi_remap_enable === 'function') ? host_ext_midi_remap_enable : null,
+        installFlagsWrap,
+        applyExtMidiRemap,
+        readActiveSet,
+        host_module_get_param: (typeof host_module_get_param === 'function') ? host_module_get_param : null,
+        maybeShowInheritPicker,
+        invalidateLEDCache,
+        buildLedInitQueue,
+        forceRedraw
+    });
 
     runMetroNoteOffTask(S, {
         move_midi_inject_to_move: (typeof move_midi_inject_to_move === 'function') ? move_midi_inject_to_move : null
@@ -4531,35 +4509,16 @@ function _tickImpl() {
         LED_OFF
     });
 
-    /* Orphan prune: clean up set_state/<uuid>/seq8-*.json for sets that no
-     * longer exist on disk. Defer until any state_load + initial sync settles
-     * so the prune set_param doesn't collide with state_load coalescing. */
-    if (S.pendingPruneOrphans && !S.pendingSetLoad && S.pendingDspSync === 0 &&
-            typeof host_module_set_param === 'function') {
-        S.pendingPruneOrphans = false;
-        host_module_set_param('prune_orphan_states', '1');
-        /* Drop stale entries from the in-memory index so subsequent inheritance
-         * lookups don't find UUIDs whose state file is about to be removed. */
-        if (!S.nameIndexCache) S.nameIndexCache = loadNameIndex();
-        let _dropped = false;
-        for (const _nm in S.nameIndexCache) {
-            const _u = S.nameIndexCache[_nm];
-            if (_u && typeof host_file_exists === 'function'
-                    && !host_file_exists(uuidToStatePath(_u))) {
-                delete S.nameIndexCache[_nm];
-                _dropped = true;
-            }
-        }
-        if (_dropped) saveNameIndex(S.nameIndexCache);
-    }
+    runOrphanPrune(S, {
+        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        host_file_exists: (typeof host_file_exists === 'function') ? host_file_exists : null,
+        loadNameIndex,
+        uuidToStatePath,
+        saveNameIndex
+    });
 
-    /* Drive the alt-mode arrow flash: repaint on each blink-phase edge so the
-     * down-arrow animates even when the UI is otherwise idle. Covers both altMode
-     * (most alt banks) and stepIntervalMode (Arp Steps overlay on melodic 4/5). */
-    if (altIndicatorActive(S.activeTrack, S.activeBank)) {
-        const _ph = Math.floor(S.tickCount / 24) % 2;
-        if (_ph !== S._altBlinkPhase) { S._altBlinkPhase = _ph; S.screenDirty = true; }
-    }
+    runAltModeFlash(S, { altIndicatorActive });
+
     if (S.screenDirty && !isSuspended) { S.screenDirty = false; drawUI(); }
 
 };
