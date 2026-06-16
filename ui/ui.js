@@ -170,6 +170,9 @@ import {
     handleUiCcMessage
 } from './ui_cc_message_workflow.mjs';
 import {
+    handleUiMidiInternalMessage
+} from './ui_midi_internal_workflow.mjs';
+import {
     handleUiSideButton
 } from './ui_side_button_workflow.mjs';
 import {
@@ -3841,67 +3844,29 @@ function _onPadRelease(status, d1, d2) {
 
 globalThis.onMidiMessageInternal = function (data) { try { _onMidiInternalImpl(data); } catch (e) { captureError('onMidiInternal', e); } };
 function _onMidiInternalImpl(data) {
-    const status = data[0] | 0;
-    const d1     = (data[1] ?? 0) | 0;
-    const d2     = (data[2] ?? 0) | 0;
+    handleUiMidiInternalMessage(S, createMidiInternalWorkflowDeps(), data);
+}
 
-    /* Pad pressure arrives as poly aftertouch (0xA0) with the pad note in d1.
-     * isNoiseMessage() classifies all 0xA0/0xD0 as noise, so handle pressure
-     * here BEFORE that filter would drop it, then return. */
-    if ((status & 0xF0) === 0xA0) {
-        if (d1 >= TRACK_PAD_BASE && d1 < TRACK_PAD_BASE + 32) _onPadAftertouch(d1, d2);
-        return;
-    }
-    if (isNoiseMessage(data)) return;
+function createMidiInternalWorkflowDeps() {
+    return {
+        closeClearAutoMenu,
+        isNoiseMessage,
+        moveDelete: MoveDelete,
+        moveDown: MoveDown,
+        moveMainKnob: MoveMainKnob,
+        moveNoteSession: MoveNoteSession,
+        moveUp: MoveUp,
+        onCc: _onCCMsg,
+        onKnobTouch: _onKnobTouch,
+        onPadAftertouch: _onPadAftertouch,
+        onPadPress: _onPadPress,
+        onPadRelease: _onPadRelease,
+        onStepButtons: _onStepButtons,
+        trackPadBase: TRACK_PAD_BASE
+    };
+}
 
-    /* Master volume knob (CC 79) + its capacitive touch (note 8) are owned by
-     * Move firmware (button_passthrough[79] + the shim's overtake-mode volume
-     * passthrough). Overture does nothing with them, but the host still forwards
-     * the full detent stream to us in overtake mode — processing every one
-     * competes with sequencer/MIDI output and stutters playback. Drop them
-     * immediately so volume adjustment stays entirely Move-native. */
-    if ((status & 0xF0) === 0xB0 && d1 === 79) return;
-    if (((status & 0xF0) === 0x90 || (status & 0xF0) === 0x80) && d1 === 8) return;
-
-    /* AUTO-bank Delete-tap detection: any input other than the Delete button
-     * itself while Delete is armed disqualifies the tap, so Delete+jog /
-     * Delete+knob / Delete+step keep their combos and don't also open the
-     * CLEAR AUTOMATION menu on release. */
-    if (S.deleteTapArmed && (status & 0x80) &&
-            !((status & 0xF0) === 0xB0 && d1 === MoveDelete))
-        S.deleteTapArmed = false;   /* (status & 0x80) ignores the Move's null/heartbeat (0x00) messages */
-
-    /* Snapshot picker is a mid-session modal: swallow all input except the jog
-     * (CC 3 click + CC 14 rotate, → _onCC_jog) and Note/Session (CC 50, closes
-     * it), so pads/steps/transport/knobs can't edit the underlying clip while
-     * the picker is on screen. */
-    if (S.snapshotPicker) {
-        const _ccPick = (status & 0xF0) === 0xB0 &&
-            (d1 === 3 || d1 === MoveMainKnob || d1 === MoveNoteSession);
-        if (!_ccPick) return;
-    }
-
-    /* CLEAR AUTOMATION modal: swallow all input except the jog (CC 3 click +
-     * CC 14 rotate, → _onCC_jog / MoveMainKnob). Exits without changing anything:
-     * Note/Session (the menu button), or tapping Delete again. */
-    if (S.clearAutoMenu) {
-        if ((status & 0xF0) === 0xB0 && d2 === 127 &&
-                (d1 === MoveNoteSession || d1 === MoveDelete)) {
-            closeClearAutoMenu();
-            return;
-        }
-        const _ccMenu = (status & 0xF0) === 0xB0 && (d1 === 3 || d1 === MoveMainKnob);
-        if (!_ccMenu) return;
-    }
-
-    /* While session overview is held, swallow everything except CC 50 release and Up/Down scroll. */
-    if (S.sessionOverlayHeld) {
-        const isRelease = (status === 0xB0 && d1 === MoveNoteSession && d2 === 0);
-        const isScroll  = (status === 0xB0 && (d1 === MoveUp || d1 === MoveDown) && d2 === 127);
-        if (!isRelease && !isScroll) return;
-    }
-
-
+function _onKnobTouch(status, d1, d2) {
     /* Knob touch (notes 0-7). MoveKnob1-8Touch = notes 0-7.
      * Hardware: d2=127 = touch on; d2 in 0-63 (via 0x90 or 0x80) = touch off.
      * Note 9 (jog touch): shows bank overview while held, locked out in global menu. */
@@ -4049,18 +4014,7 @@ function _onMidiInternalImpl(data) {
         }
     }
 
-    if (status === 0xB0) { _onCCMsg(d1, d2); return; }
-
-    /* Step buttons: notes 16-31, note-on only */
-    if ((status & 0xF0) === 0x90 && d1 >= 16 && d1 <= 31 && d2 > 0) { _onStepButtons(d1, d2); return; }
-
-    /* Pad presses: note-on */
-    if ((status & 0xF0) === 0x90 && d2 > 0) { _onPadPress(status, d1, d2); return; }
-
-    /* Pad releases: note-off */
-    if ((status & 0xF0) === 0x80 || ((status & 0xF0) === 0x90 && d2 === 0)) { _onPadRelease(status, d1, d2); return; }
-
-};
+}
 
 /* Pad pressure (poly aftertouch). On drum tracks: routes continuous pressure to
  * the held drum-repeat pad's velocity (Rpt1) or the held repeat lanes (Rpt2). On
