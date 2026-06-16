@@ -521,3 +521,127 @@ export function runTransposePreviewSelfHeal(S, deps) {
         }
     }
 }
+
+export function runOverlayTimerExpiries(S, deps) {
+    /* Bank select display timeout: State 3 → State 4 after ~2000ms */
+    if (S.bankSelectTick >= 0 && (S.tickCount - S.bankSelectTick) >= deps.BANK_DISPLAY_TICKS) {
+        S.bankSelectTick = -1;
+        S.screenDirty = true;
+    }
+    /* Overlay expiry: clear timer here so drawUI() can gate on flag alone */
+    if (S.stretchBlockedEndTick >= 0 && S.tickCount >= S.stretchBlockedEndTick) {
+        S.stretchBlockedEndTick = -1;
+        S.screenDirty = true;
+    }
+    if (S.actionPopupEndTick >= 0 && S.tickCount >= S.actionPopupEndTick) {
+        S.actionPopupEndTick = -1;
+        S.screenDirty = true;
+    }
+    if (S.knobTouched >= 0 && S.knobTurnedTick[S.knobTouched] >= 0 &&
+            (S.tickCount - S.knobTurnedTick[S.knobTouched]) >= deps.KNOB_TURN_HIGHLIGHT_TICKS) {
+        S.knobTouched = -1;
+        S.knobTouchStartTick = -1;
+        S.screenDirty = true;
+    }
+    if (S.knobTouched >= 0 && S.knobTouchStartTick >= 0 &&
+            (S.tickCount - S.knobTouchStartTick) === deps.PARAM_PEEK_DETAIL_TICKS) {
+        S.screenDirty = true;
+    }
+    if (S.noNoteFlashEndTick >= 0 && S.tickCount >= S.noNoteFlashEndTick) {
+        S.noNoteFlashEndTick = -1;
+        S.screenDirty = true;
+    }
+    if (S.stepSaveFlashEndTick >= 0 && S.tickCount >= S.stepSaveFlashEndTick) {
+        S.stepSaveFlashEndTick   = -1;
+        S.stepSaveFlashStartTick = -1;
+    }
+}
+
+export function runSessionStepHoldToSave(S, deps) {
+    /* Session view hold-to-save: fire exactly when threshold reached, not on release */
+    if (S.sessionStepHeld >= 0) {
+        const _ssh = S.sessionStepHeld;
+        if (S.tickCount - S.stepBtnPressedTick[_ssh] >= deps.STEP_SAVE_HOLD_TICKS) {
+            const _ctx = S.sessionStepHeldCtx;
+            S.sessionStepHeld    = -1;
+            S.sessionStepHeldCtx = 0;
+            S.stepBtnPressedTick[_ssh] = -1;
+            if (_ctx === 1) {
+                S.perfSnapshots[_ssh] = S.perfModsToggled | S.perfModsHeld;
+                deps.showActionPopup('PERF PRESET', 'SAVED');
+            } else {
+                const drumEffMutes = [];
+                for (let _t = 0; _t < deps.NUM_TRACKS; _t++) {
+                    const mMask = S.drumLaneMute[_t];
+                    const sMask = S.drumLaneSolo[_t];
+                    let effMask = mMask;
+                    if (sMask) {
+                        let notSoloed = 0;
+                        for (let _l = 0; _l < deps.DRUM_LANES; _l++) {
+                            if (!(sMask & (1 << _l))) notSoloed |= (1 << _l);
+                        }
+                        effMask = (mMask | notSoloed) >>> 0;
+                    }
+                    drumEffMutes.push(effMask >>> 0);
+                }
+                S.snapshots[_ssh] = { mute: S.trackMuted.slice(), solo: S.trackSoloed.slice(), drumEffMute: drumEffMutes };
+                const mStr = S.trackMuted.map(function(m) { return m ? '1' : '0'; }).join(' ');
+                const sStr = S.trackSoloed.map(function(s) { return s ? '1' : '0'; }).join(' ');
+                const dStr = drumEffMutes.join(' ');
+                if (deps.host_module_set_param)
+                    deps.host_module_set_param('snap_save', _ssh + ' ' + mStr + ' ' + sStr + ' ' + dStr);
+                deps.showActionPopup('MUTE STATE', 'SAVED');
+            }
+            S.stepSaveFlashStartTick = S.tickCount;
+            S.stepSaveFlashEndTick   = S.tickCount + deps.STEP_SAVE_FLASH_TICKS;
+            deps.forceRedraw();
+        }
+    }
+}
+
+export function runPendingEditSoundAdvance(S, deps) {
+    const _editSoundAction = deps.advancePendingEditSoundEntry(S.activeTrack);
+    if (_editSoundAction) {
+        if (_editSoundAction.kind === 'move') {
+            deps.enterMoveNativeCoRun(_editSoundAction.track);
+        } else if (_editSoundAction.kind === 'schwung') {
+            deps.enterSchwungCoRun(_editSoundAction.track, _editSoundAction.slot);
+        }
+    }
+}
+
+export function runMetroBeatDetect(S, deps) {
+    /* Metro beat detection: checked every tick via dedicated get_param for minimal jitter */
+    if (S.metronomeOn > 0) {
+        const _mbcRaw = deps.host_module_get_param('metro_beat_count');
+        if (_mbcRaw !== null && _mbcRaw !== undefined) {
+            const _mbc = parseInt(_mbcRaw, 10) | 0;
+            if (_mbc !== S.metroPrevBeat) {
+                S.metroPrevBeat = _mbc;
+                deps.playMetronomeClick();
+                if (S.recordCountingIn) S.countInBeatStartTick = S.tickCount;
+            }
+        }
+    }
+}
+
+export function runSideButtonHoldThreshold(S, deps) {
+    /* Side-button hold threshold (Change #1): once a side button has been held
+     * past STEP_HOLD_TICKS without releasing, promote to the clips-reveal
+     * overlay. revealClipsTrack = the active track (already switched on press),
+     * so the steps render and select that track's 16 clips. */
+    if (S.sideHeldBtn >= 0 && S.revealClipsTrack < 0 && S.sideBtnPressedTick >= 0 &&
+            (S.tickCount - S.sideBtnPressedTick) >= deps.STEP_HOLD_TICKS) {
+        S.revealClipsTrack = S.activeTrack;
+        deps.forceRedraw();
+    }
+}
+
+export function runSceneCacheRefresh(S, deps) {
+    /* Refresh scene state cache for O(1) lookups in LED update functions */
+    for (let _i = 0; _i < 16; _i++) {
+        S.cachedSceneAllPlaying[_i] = deps.sceneAllPlaying(_i);
+        S.cachedSceneAllQueued[_i]  = deps.sceneAllQueued(_i);
+        S.cachedSceneAnyPlaying[_i] = deps.sceneAnyPlaying(_i);
+    }
+}
