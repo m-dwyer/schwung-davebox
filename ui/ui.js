@@ -331,19 +331,30 @@ import {
     readTargetedClipRestorePairFromDsp
 } from './ui_clip_track_sync.mjs';
 import {
+    runCcGradientPalette,
+    runCcLiveValPoll,
     runDefaultSetParamDrain,
+    runDeferredCcBitsRefresh,
     runDeferredContentResyncTasks,
     runDeferredLaneEditReadbackTasks,
     runDeferredDrumNoteOffDrain,
     runDspMirrorResyncTasks,
     runEndOfTickPersistenceTasks,
     runExternalRouteQueueDrain,
+    runExtMidiRemapReapply,
+    runGlobalMenuParamPreview,
     runLiveNoteDrain,
     runMetroNoteOffTask,
     runMoveCoRunTickTasks,
     runPadMapSelfHealTask,
+    runPendingPadNoteMapRecompute,
+    runPendingSetLoad,
+    runPendingTrackConvert,
     runPendingUndoSyncTask,
-    runRepeatRecordingLaneRefreshTask
+    runRepeatRecordingLaneRefreshTask,
+    runSchLabelFetch,
+    runSessionViewEdgeTasks,
+    runTransposePreviewSelfHeal
 } from './ui_tick_tasks.mjs';
 
 /* ------------------------------------------------------------------ */
@@ -3918,7 +3929,7 @@ globalThis.init = function () {
 
     /* Apply cable-2 channel remap for the current active track immediately
      * (tick() change-detect also covers this, but fires one tick later). */
-    _lastRemapTrack = -1;
+    S._lastRemapTrack = -1;
     applyExtMidiRemap();
 
     S.ledInitComplete = false;
@@ -3932,9 +3943,6 @@ globalThis.init = function () {
     S._wasSuspended    = false;
 };
 
-var _lastRemapTrack = -1, _lastRemapRoute = -1, _lastRemapChannel = -1, _lastRemapMidiIn = -2;
-var _lastSessionView = false;
-
 globalThis.tick = function () { try { _tickImpl(); } catch (e) { captureError('tick', e); } };
 function _tickImpl() {
     S.tickCount++;
@@ -3946,27 +3954,11 @@ function _tickImpl() {
      * stopped (guarded in exportSession) so the brief tick stall is benign. */
     pollPendingExport();
 
-    /* Deferred padmap recompute for leaving-DRUM (see applyTrackConfig
-     * else branch). Fire ONLY when the pendingDefaultSetParams queue is
-     * empty — otherwise the tN_padmap push would land in the same tick
-     * as a queue-drained tN_* push for the same track, and the empirically-
-     * observed same-track set_param interference drops the padmap push.
-     * (See the val=1 case: it works because syncDrum* get_params between
-     * the pad_mode and padmap pushes flush the buffer.) */
-    /* Track-type conversion runs here (tick context) so the get_param
-     * round-trips inside convertTrackType -> syncClipsFromDsp work — they
-     * return null on the on_midi path where the triggers fire. */
-    if (S.pendingTrackConvert) {
-        const _pc = S.pendingTrackConvert;
-        S.pendingTrackConvert = null;
-        convertTrackType(_pc.t, _pc.toDrum);
-    }
+    runPendingTrackConvert(S, { convertTrackType });
 
-    if (S.pendingPadNoteMapRecompute && S.pendingDefaultSetParams.length === 0
-            && S.clearDrainHold === 0) {
-        S.pendingPadNoteMapRecompute = false;
-        computePadNoteMap();
-    }
+    /* Recompute must stay BEFORE runDefaultSetParamDrain — its queue-empty gate
+     * avoids same-track set_param interference with a drained tN_* push. */
+    runPendingPadNoteMapRecompute(S, { computePadNoteMap });
 
     /* PHASE-1: edge-detect modal pad-dispatch mute changes that aren't
      * caught by explicit hooks (dialogs, ARP-step-edit, knob-touch state).
@@ -3982,39 +3974,12 @@ function _tickImpl() {
         computePadNoteMap
     });
 
-    /* Reapply cable-2 channel remap if anything affecting it changed. */
-    {
-        const _rt = S.activeTrack;
-        const _rr = S.trackRoute[_rt];
-        const _rc = S.trackChannel[_rt];
-        const _rm = S.midiInChannel;
-        if (_rt !== _lastRemapTrack || _rr !== _lastRemapRoute ||
-                _rc !== _lastRemapChannel || _rm !== _lastRemapMidiIn) {
-            /* TARP latch is per-track musical intent — preserved across track/
-             * route/channel/MIDI-in changes. Only Stop transport and Delete+Play
-             * clear it deliberately. */
-            applyExtMidiRemap();
-            _lastRemapTrack = _rt; _lastRemapRoute = _rr;
-            _lastRemapChannel = _rc; _lastRemapMidiIn = _rm;
-        }
-    }
+    runExtMidiRemapReapply(S, { applyExtMidiRemap });
 
-    /* Reset TARP latch when entering session view */
-    if (S.sessionView && !_lastSessionView) {
-        const _t = S.activeTrack;
-        if (S.bankParams[_t][5][7] | 0) {
-            S.bankParams[_t][5][7] = 0;
-            if (typeof host_module_set_param === 'function')
-                host_module_set_param('t' + _t + '_tarp_latch', '0');
-        }
-    }
-    /* PHASE-1: session-view edge re-pushes padmap so DSP on_midi gates pad
-     * dispatch (session pads launch clips, not notes). Remove with the rest
-     * of the PHASE-1 gates when patches upstreamed. */
-    if (S.sessionView !== _lastSessionView) {
-        computePadNoteMap();
-    }
-    _lastSessionView = S.sessionView;
+    runSessionViewEdgeTasks(S, {
+        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        computePadNoteMap
+    });
 
     /* Suspend detection: host swaps clear_screen to a no-op while we're parked.
      * Save state on the transition edge; let tick run normally (display is no-oped by host). */
@@ -4095,101 +4060,35 @@ function _tickImpl() {
         move_midi_external_send: (typeof move_midi_external_send === 'function') ? move_midi_external_send : null
     });
 
-    /* Clear CC step-edit active flag once the step is released */
-    if (S.ccStepEditActive && S.heldStep < 0)
-        S.ccStepEditActive = false;
+    runDeferredCcBitsRefresh(S, {
+        host_module_get_param: (typeof host_module_get_param === 'function') ? host_module_get_param : null,
+        invalidateLEDCache
+    });
 
-    /* Deferred CC auto-bits/rest re-read (set from MIDI handlers where get_param
-     * is null, e.g. Delete+step whole-step clear). */
-    if (S.pendingCCBitsRefresh >= 0 && typeof host_module_get_param === 'function') {
-        const _rt = S.activeTrack, _rc = S.pendingCCBitsRefresh;
-        S.pendingCCBitsRefresh = -1;
-        const _bits = host_module_get_param('t' + _rt + '_c' + _rc + '_cc_auto_bits');
-        if (_bits !== null) S.trackCCAutoBits[_rt][_rc] = parseInt(_bits, 10) || 0;
-        const _rest = host_module_get_param('t' + _rt + '_c' + _rc + '_cc_rest');
-        if (_rest) {
-            const _rp = _rest.split(' ');
-            for (let _k = 0; _k < 8; _k++) {
-                const _rv = parseInt(_rp[_k], 10);
-                S.clipCCVal[_rt][_rc][_k] = (_rv >= 0 && _rv <= 127) ? _rv : -1;
-            }
-        }
-        invalidateLEDCache();
-    }
+    runCcLiveValPoll(S, { host_module_get_param });
 
-    /* Poll the defined output value at the playhead per knob (255 = "—") for the
-     * realtime display + knob-LED feedback while the CC bank is visible & playing. */
-    if (S.activeBank === 6 && S.playing && !S.sessionView && !S.ccStepEditActive) {
-        const _lv = host_module_get_param('t' + S.activeTrack + '_cc_cur_vals');
-        if (_lv) {
-            const _lp = _lv.split(' ');
-            for (let _k = 0; _k < 8 && _k < _lp.length; _k++) {
-                const _v = parseInt(_lp[_k], 10);
-                S.trackCCLiveVal[S.activeTrack][_k] = (_v >= 0 && _v <= 127) ? _v : -1;
-            }
-        }
-    }
+    runSchLabelFetch(S, {
+        shadow_get_param: (typeof shadow_get_param === 'function') ? shadow_get_param : null,
+        schSlotForTrack
+    });
 
-    /* Sch (chain knob) automation routing: poll cc_auto_cur_val for every
-     * playing track that has Sch lanes, and push values to chain slots via
-     * shadow_set_param. Runs regardless of active bank. */
-    /* Sch label fetch: one shadow_get_param per tick to avoid blocking.
-     * Triggered on bank-6 entry; fetches param name for each Sch lane. */
-    if (S.schLabelFetchLane >= 0 && S.schLabelFetchLane < 8 &&
-            typeof shadow_get_param === 'function') {
-        const _ft = S.activeTrack;
-        const _fk = S.schLabelFetchLane;
-        S.schLabelFetchLane++;
-        if (S.trackCCType[_ft][_fk] === 2) {
-            const _slot = schSlotForTrack(_ft);
-            if (_slot >= 0) {
-                const _name = shadow_get_param(_slot, 'knob_' + S.trackCCAssign[_ft][_fk] + '_param');
-                S.schLabel[_ft][_fk] = _name || null;
-            }
-        }
-        if (S.schLabelFetchLane >= 8) S.schLabelFetchLane = -1;
-        S.screenDirty = true;
-    }
-
-    /* CC-bank step-LED gradient palette: 6 white brightness levels (the playhead
-     * uses the track color instead). Written on bank-6 entry / track switch
-     * (not per frame); the step LEDs themselves are driven in updateStepLEDs. */
-    if (S.activeBank === 6 && !S.sessionView && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM &&
-            S.ccGradPaletteTrack !== S.activeTrack) {
-        S.ccGradPaletteTrack = S.activeTrack;
-        for (let _l = 0; _l < CC_GRADIENT_LEVELS; _l++) {
-            const _w = Math.round(255 * CC_GRADIENT_SCALARS[_l]);
-            setPaletteEntryRGB(CC_GRADIENT_BASE + _l, _w, _w, _w);
-        }
-        reapplyPalette();
-        setButtonLED(MovePlay,   S.playing ? Green : LED_OFF, true);
-        setButtonLED(MoveRec,    (S.recordArmed || S.recordScheduledStop) ? Red : LED_OFF, true);
-        setButtonLED(MoveSample, S.dspMergeState >= 2 ? Green : S.dspMergeState === 1 ? Red : LED_OFF, true);
-        /* reapplyPalette reset the buttonCache — force-resend the 8 knob LEDs
-         * next render (their stopped-state named colors would otherwise be
-         * silently dropped) and the step LEDs. */
-        S._forceKnobReemit = true;
-        invalidateLEDCache();
-    }
+    runCcGradientPalette(S, {
+        PAD_MODE_DRUM, CC_GRADIENT_LEVELS, CC_GRADIENT_SCALARS, CC_GRADIENT_BASE,
+        MovePlay, MoveRec, MoveSample, Green, Red, LED_OFF,
+        setPaletteEntryRGB, reapplyPalette, setButtonLED, invalidateLEDCache
+    });
 
     /* Phase 1 / Bundle 2C-Rpt1: pendingRepeatLane queue removed. Lane swap
      * while holding a rate pad is now fired immediately on press from the
      * lane-pad branch in _onPadPress (different set_param key from the
      * other lane-pad pushes — no coalescing). */
 
-
-    /* Set change detected in init(): send UUID so DSP constructs path and loads.
-     * Suppressed while the inherit picker is open — state_load fires only
-     * after the user picks a source (or "Start blank"). */
-    if (S.pendingSetLoad && !S.pendingInheritPicker && typeof host_module_set_param === 'function') {
-        S.pendingSetLoad = false;
-        S.stateLoading = true;
-        disarmRecord();
-        S.heldStep = -1; S.heldStepBtn = -1; S.heldStepNotes = []; S.stepWasEmpty = false; S.stepWasHeld = false;
-        S.seqActiveNotes.clear(); S.seqLastStep = -1; S.seqLastClip = -1;
-        S.pendingDspSync = 5;
-        host_module_set_param('state_load', S.currentSetUuid || '');
-    }
+    /* Must stay BEFORE runDefaultSetParamDrain (gates on !pendingSetLoad) and
+     * runDspMirrorResyncTasks (decrements the pendingDspSync=5 set here). */
+    runPendingSetLoad(S, {
+        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        disarmRecord
+    });
 
     runDefaultSetParamDrain(S, {
         host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null
@@ -4257,40 +4156,9 @@ function _tickImpl() {
         forceRedraw
     });
 
-    /* Real-time preview while editing any global menu parameter.
-     * Only send set_param when the edit value actually changes — avoids flooding
-     * the DSP param queue (which would starve tN_launch_clip / transport commands). */
-    if (S.globalMenuOpen && S.globalMenuState && S.globalMenuItems) {
-        const item = S.globalMenuItems[S.globalMenuState.selectedIndex];
-        if (item && S.globalMenuState.editing && S.globalMenuState.editValue !== null) {
-            if (item.set && S.globalMenuState.editValue !== S.lastSentMenuEditValue) {
-                item.set(S.globalMenuState.editValue);
-                S.lastSentMenuEditValue = S.globalMenuState.editValue;
-                S.screenDirty = true;
-            }
-            S.bpmWasEditing = true;
-        } else if (S.bpmWasEditing && !S.globalMenuState.editing) {
-            if (item && item.set && item.get) item.set(item.get());
-            S.bpmWasEditing = false;
-            S.lastSentMenuEditValue = null;
-        }
-    }
+    runGlobalMenuParamPreview(S);
 
-    /* Transpose preview self-heal: cancel a stranded preview/dialog if we've left
-     * the Key/Scale edit by any path the edit-exit hook above doesn't cover (whole
-     * menu closed, navigated away). */
-    if (S.xposePrevKey !== null || S.confirmXpose) {
-        const _it = (S.globalMenuOpen && S.globalMenuState && S.globalMenuItems)
-                    ? S.globalMenuItems[S.globalMenuState.selectedIndex] : null;
-        const _onKeyScale = !!(_it && S.globalMenuState.editing &&
-                               (_it.label === 'Key' || _it.label === 'Scale'));
-        if (S.confirmXpose) {
-            /* dialog stranded by Back / menu close (Back isn't a jog-click) → cancel */
-            if (!_onKeyScale) { S.confirmXpose = false; xposeCancelPreview(); }
-        } else if (!_onKeyScale) {
-            xposeCancelPreview();
-        }
-    }
+    runTransposePreviewSelfHeal(S, { xposeCancelPreview });
 
 
     if (!S.ledInitComplete) {

@@ -351,6 +351,13 @@ export const S = {
     snapshots: new Array(16).fill(null),
     _origClearScreen: null,
     _wasSuspended: false,
+    /* Tick-memo state (migrated from ui.js file-scope vars during the _tickImpl
+     * decomposition). cable-2 ext-MIDI remap dedupe + session-view edge detect. */
+    _lastRemapTrack: -1,
+    _lastRemapRoute: -1,
+    _lastRemapChannel: -1,
+    _lastRemapMidiIn: -2,
+    _lastSessionView: false,
     globalMenuOpen: false,
     globalMenuItems: null,
     globalMenuState: null,
