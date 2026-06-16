@@ -247,6 +247,22 @@ import {
     handleUiPadTrackViewDrumRepeat
 } from './ui_pad_workflow.mjs';
 import {
+    pollAutomationAtIndicator,
+    pollCoRunReconcile,
+    pollCountInEnd,
+    pollDeferredBankRefresh,
+    pollDeferredSave,
+    pollMergeStateMachine,
+    pollPlayheadPads,
+    pollRecordPendingPage,
+    pollSeqActiveNotes,
+    pollSeqFollowPage,
+    pollSnapshotClipStates,
+    pollSnapshotTracks,
+    pollStepLedRefresh,
+    pollTransportTransitions
+} from './ui_polldsp_workflow.mjs';
+import {
     renderTrackStepEditView
 } from './ui_step_edit_render.mjs';
 import {
@@ -2119,348 +2135,69 @@ function resetPerClipBankParamsToDefault(t) {
     S.screenDirty = true;
 }
 
+function createPollDspWorkflowDeps() {
+    return {
+        /* constants */
+        numTracks: NUM_TRACKS,
+        numSteps: NUM_STEPS,
+        drumLanes: DRUM_LANES,
+        padModeDrum: PAD_MODE_DRUM,
+        moveSample: MoveSample,
+        ledOff: LED_OFF,
+        corunChainEdit: CORUN_TARGET_CHAIN_EDIT,
+        corunMoveNative: CORUN_TARGET_MOVE_NATIVE,
+        /* host */
+        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        writeFile: typeof host_write_file === 'function' ? host_write_file : null,
+        corunState: typeof shadow_corun_state === 'function' ? shadow_corun_state : null,
+        /* helpers (close over module-global S) */
+        exitSchwungCoRun,
+        exitMoveNativeCoRun,
+        effectiveClip,
+        refreshPerClipBankParams,
+        syncDrumLanesMeta,
+        syncDrumLaneSteps,
+        setButtonLED,
+        showActionPopup,
+        syncClipsFromDsp,
+        clipHasContent,
+        disarmRecord,
+        unlatchAllTracks,
+        focusedClipIsEmpty: _focusedClipIsEmpty,
+        uuidToStatePath,
+        updateNameIndex
+    };
+}
+
+/* Fixed-order DSP reconcile pipeline. NOT a dispatch ladder — the extracted
+ * steps in ui_polldsp_workflow.mjs run unconditionally in this exact sequence
+ * (see that module's header for the ordering/coalescing rationale). This thin
+ * orchestrator keeps the three early-return guards (no get_param, no snapshot,
+ * short snapshot) and threads the two cross-block locals: the parsed snapshot
+ * array `v` and countInDspActive. */
 function pollDSP() {
-    /* Reconcile co-run state with SHM. The shim auto-clears co-run on user
-     * Back press (framework exit gesture), so Overture may discover target=NONE
-     * here without having driven the exit itself. Use the existing exit
-     * helpers for cleanup — they're idempotent on the second SHM write and
-     * carry the palette/LED-cache/modifier-clear work we need either way. */
-    if (typeof shadow_corun_state === 'function') {
-        const _st = shadow_corun_state();
-        const _slot  = (_st && _st.target === CORUN_TARGET_CHAIN_EDIT)  ? _st.id : -1;
-        const _track = (_st && _st.target === CORUN_TARGET_MOVE_NATIVE) ? _st.id : -1;
-        if (_slot < 0 && S.schwungCoRunSlot >= 0) {
-            exitSchwungCoRun();
-            /* Framework exit also closes any global menu we opened to launch it. */
-            S.globalMenuOpen = false;
-            S.lastSentMenuEditValue = null;
-        }
-        if (_track < 0 && S.moveCoRunTrack >= 0) {
-            exitMoveNativeCoRun();
-        }
-    }
+    const deps = createPollDspWorkflowDeps();
+    /* Block A runs BEFORE the get_param guard (uses shadow_corun_state, not get_param). */
+    pollCoRunReconcile(S, deps);
     if (typeof host_module_get_param !== 'function') return;
-    /* Keep the AUTOMATION-bank AT indicator live (it appears as you record). */
-    if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-        const _at = S.activeTrack, _ac = effectiveClip(_at);
-        const _ah = host_module_get_param('t' + _at + '_c' + _ac + '_at_has');
-        if (_ah !== null) S.clipAtHas[_at][_ac] = (parseInt(_ah, 10) === 1);
-    }
+    pollAutomationAtIndicator(S, deps);
     const snap = host_module_get_param('state_snapshot');
     if (!snap) return;
     const v = snap.split(' ');
     if (v.length < 53) return;
-    S.playing = (v[0] === '1');
-    for (let t = 0; t < NUM_TRACKS; t++) {
-        const newStep = parseInt(v[1 + t], 10) | 0;
-        S.trackCurrentStep[t] = newStep;
-        if (S.playing) {
-            const newClip = parseInt(v[9 + t], 10) | 0;
-            S.trackActiveClip[t] = newClip;
-            if (newClip !== S.lastDspActiveClip[t]) {
-                S.lastDspActiveClip[t] = newClip;
-                refreshPerClipBankParams(t);
-                if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-                    syncDrumLanesMeta(t);
-                    syncDrumLaneSteps(t, S.activeDrumLane[t]);
-                }
-            }
-        }
-        const _newQ = parseInt(v[17 + t], 10) | 0;
-        if (_newQ !== S.trackQueuedClip[t]) S.screenDirty = true;
-        S.trackQueuedClip[t]  = _newQ;
-    }
-    const countInDspActive = (v[25] === '1');
-    for (let t = 0; t < NUM_TRACKS; t++) {
-        const _newPlaying  = (v[26 + t] === '1');
-        const _newWR       = (v[34 + t] === '1');
-        if (_newPlaying !== S.trackClipPlaying[t] || _newWR !== S.trackWillRelaunch[t]) {
-            S.screenDirty = true;
-        }
-        S.trackClipPlaying[t]     = _newPlaying;
-        S.trackWillRelaunch[t]    = _newWR;
-        S.trackPendingPageStop[t] = (v[42 + t] === '1');
-    }
-    S.flashEighth    = (v[50] === '1');
-    S.flashSixteenth = (v[51] === '1');
-    if (v.length >= 54) S.masterPos      = (parseInt(v[53], 10) | 0) >>> 0;
-    if (v.length >= 55) S.dspLooperState  = parseInt(v[54], 10) | 0;
-    const _prevMergeState = S.dspMergeState;
-    if (v.length >= 56) S.dspMergeState   = parseInt(v[55], 10) | 0;
-    /* Arm confirmation: no longer fails on "no empty slot" — placement is
-     * deferred until the user picks a row, so arm always succeeds. */
-    if (S.pendingMergeArm) S.pendingMergeArm = false;
-    /* Capture-done transition: DSP went into CAPTURED (4) — show placement
-     * dialog so the user can tap a row to commit. */
-    if (_prevMergeState !== 4 && S.dspMergeState === 4) {
-        S.pendingMergePlacement = true;
-        S.screenDirty = true;
-    }
-    /* Placement complete: DSP transitioned CAPTURED→IDLE (merge_place_row
-     * fired and committed clips). Re-read ALL clips from DSP — any of the 8
-     * tracks may have just received fresh notes at the placement row. The
-     * full re-read also rebuilds clipSteps/clipNonEmpty mirrors so the
-     * Session-View overview lights the newly-populated clip pads. */
-    if (_prevMergeState !== 0 && S.dspMergeState === 0) {
-        setButtonLED(MoveSample, LED_OFF);
-        if (_prevMergeState === 2) showActionPopup('MAX LENGTH', 'REACHED');
-        syncClipsFromDsp();
-        S.screenDirty = true;
-    }
-
-    /* Deferred bank refresh after bake */
-    if (S.pendingBankRefresh >= 0) {
-        refreshPerClipBankParams(S.pendingBankRefresh);
-        S.pendingBankRefresh = -1;
-        S.screenDirty = true;
-    }
-
-    /* Drum playhead: poll active lane's current step for active drum track */
-    if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-        const _dl = S.activeDrumLane[S.activeTrack];
-        const _dcRaw = host_module_get_param('t' + S.activeTrack + '_l' + _dl + '_current_step');
-        if (_dcRaw !== null) {
-            const _newDcs = parseInt(_dcRaw, 10) | 0;
-            if (_newDcs !== S.drumCurrentStep[S.activeTrack]) {
-                S.drumCurrentStep[S.activeTrack] = _newDcs;
-                S.screenDirty = true;
-            }
-        }
-        /* Drum SeqFollow: auto-page to follow playhead */
-        if (S.playing && S.trackClipPlaying[S.activeTrack] && S.clipSeqFollow[S.activeTrack][effectiveClip(S.activeTrack)]) {
-            const _dcs = S.drumCurrentStep[S.activeTrack];
-            if (_dcs >= 0) {
-                const _newPage = Math.floor(_dcs / 16);
-                if (_newPage !== S.drumStepPage[S.activeTrack]) {
-                    S.drumStepPage[S.activeTrack] = _newPage;
-                    S.screenDirty = true;
-                }
-            }
-        }
-        /* M blink: keep screen dirty while any lane is muted so blink animates */
-        if (S.drumLaneMute[S.activeTrack]) S.screenDirty = true;
-        /* Drum pad flash + S.seqActiveNotes: poll which lanes are hitting (single bitmask call) */
-        if (S.playing && S.trackClipPlaying[S.activeTrack]) {
-            const _maskRaw = host_module_get_param('t' + S.activeTrack + '_drum_active_lanes');
-            if (_maskRaw !== null) {
-                const _mask = parseInt(_maskRaw, 10) | 0;
-                S.seqActiveNotes.clear(); /* refresh per poll; stale entries block external recording */
-                for (let _fl = 0; _fl < DRUM_LANES; _fl++) {
-                    if (_mask & (1 << _fl)) {
-                        S.drumLaneFlashTick[S.activeTrack][_fl] = S.tickCount;
-                        S.seqActiveNotes.add(S.drumLaneNote[S.activeTrack][_fl]);
-                        S.screenDirty = true;
-                    }
-                }
-            }
-        }
-    } else {
-        /* TARP held-buffer mirror: poll DSP buffer for active melodic track when
-         * latch + style are both on so source pads light up. Cleared when either
-         * is off (style=0 silences the engine — pad lighting follows suit). Drives
-         * only pad LEDs (updateTrackLEDs reads .has() each tick) — no OLED
-         * dependency so no screenDirty needed here. */
-        const _tat = S.activeTrack;
-        const _tLatch = (S.bankParams[_tat][5][7] | 0) !== 0 &&
-                        (S.bankParams[_tat][5][0] | 0) !== 0;
-        if (_tLatch) {
-            const _hRaw = host_module_get_param('t' + _tat + '_tarp_held');
-            const _set = S.tarpHeldNotes[_tat];
-            _set.clear();
-            if (_hRaw) {
-                const _parts = _hRaw.split(' ');
-                for (let _i = 0; _i < _parts.length; _i++) {
-                    const _p = parseInt(_parts[_i], 10);
-                    if (_p >= 0 && _p <= 127) _set.add(_p);
-                }
-            }
-        } else if (S.tarpHeldNotes[_tat].size > 0) {
-            S.tarpHeldNotes[_tat].clear();
-        }
-    }
-
-    /* SeqFollow: auto-page S.activeTrack to follow playhead */
-    if (S.playing) {
-        const _sft = S.activeTrack;
-        const _sfac = effectiveClip(_sft);
-        if (S.clipSeqFollow[_sft][_sfac] && S.trackClipPlaying[_sft]) {
-            var newPage;
-            if (S.activeBank === 6 && S.trackPadMode[_sft] !== PAD_MODE_DRUM) {
-                var _ccLsf = S.ccActiveLane[_sft];
-                var _dispTpsSf = S.ccLaneTps[_sft][_sfac][_ccLsf] || (S.clipTPS[_sft][_sfac] || 24);
-                var _lTpsSf = S.ccLaneResTps[_sft][_sfac][_ccLsf] || _dispTpsSf;
-                var _effLenSf = S.ccLaneLength[_sft][_sfac][_ccLsf] || S.clipLength[_sft][_sfac];
-                var _lLenTicksSf = _effLenSf * _lTpsSf;
-                var _progressSf = (S.masterPos % _lLenTicksSf) / _lLenTicksSf;
-                var _laneStep = Math.floor(_progressSf * _effLenSf);
-                newPage = Math.floor(_laneStep / 16);
-            } else {
-                var _cs = S.trackCurrentStep[_sft];
-                if (_cs >= 0) newPage = Math.floor(_cs / 16);
-            }
-            if (newPage !== undefined && newPage !== S.trackCurrentPage[_sft]) {
-                S.trackCurrentPage[_sft] = newPage;
-                S.screenDirty = true;
-            }
-        }
-    }
-
-    /* Record-arm pending page boundary: DSP defers recording=1 to next bar.
-     * Clear S.recordPendingPage once DSP has fired (recording_pending_page=0). */
-    if (S.recordPendingPage && S.recordArmedTrack >= 0 && typeof host_module_get_param === 'function') {
-        const _rpp = host_module_get_param('t' + S.recordArmedTrack + '_recording_pending_page');
-        if (_rpp === '0') S.recordPendingPage = false;
-    }
-
-    /* Count-in end: DSP fired transport+recording — sync JS state */
-    if (S.countInDspPrev && !countInDspActive && S.playing) {
-        S.recordCountingIn    = false;
-        S.countInStartTick    = -1;
-        S.countInQuarterTicks = 0;
-    }
-    S.countInDspPrev = countInDspActive;
-
-    /* Transport transitions */
-    if (!S.playingPrev && S.playing) {
-        S.transportStartTick = S.tickCount;
-        /* Focused-clip-by-default on transport start: only the clip the user
-         * is currently *viewing* in Track View auto-launches. Session View
-         * launches whatever is already queued — explicit launch by the user.
-         * The "focused" concept is single-clip: the one open for editing on
-         * the active track in Track View; other tracks aren't focused and
-         * shouldn't auto-launch (otherwise Session-View Delete+Play to
-         * deactivate everything would be undone by the next transport start). */
-        if (!S.sessionView) {
-            const _at = S.activeTrack;
-            if (!S.trackClipPlaying[_at]
-                    && !S.trackWillRelaunch[_at]
-                    && S.trackQueuedClip[_at] === -1
-                    && _focusedClipIsEmpty(_at)) {
-                const _tac = S.trackActiveClip[_at];
-                S.pendingDefaultSetParams.push({ key: 't' + _at + '_launch_clip', val: String(_tac) });
-                S.trackQueuedClip[_at] = _tac;
-            }
-        }
-        /* Auto-launch focused clip if record is armed and clip is inactive */
-        if (S.recordArmed) {
-            const _rT  = S.recordArmedTrack >= 0 ? S.recordArmedTrack : S.activeTrack;
-            const _rAc = S.trackActiveClip[_rT];
-            if (S.clipNonEmpty[_rT][_rAc] &&
-                    !S.trackClipPlaying[_rT] &&
-                    !S.trackWillRelaunch[_rT] &&
-                    S.trackQueuedClip[_rT] !== _rAc) {
-                if (typeof host_module_set_param === 'function')
-                    host_module_set_param('t' + _rT + '_launch_clip', String(_rAc));
-                S.trackQueuedClip[_rT] = _rAc;
-            }
-            /* Adaptive mode for count-in path: enter if clip was empty with no manual length */
-            if (!S.clipAdaptiveMode[_rT][_rAc]) {
-                const _isDrumAdapt = S.trackPadMode[_rT] === PAD_MODE_DRUM;
-                if (_isDrumAdapt ? (!S.drumClipNonEmpty[_rT][_rAc] && !S.drumLaneLengthManuallySet[_rT])
-                                 : (!S.clipNonEmpty[_rT][_rAc] && !S.clipLengthManuallySet[_rT][_rAc]))
-                    S.clipAdaptiveMode[_rT][_rAc] = true;
-            }
-        }
-    }
-    if (S.playingPrev  && !S.playing) {
-        disarmRecord();
-        /* Transport stop unlatches TARP + Rpt1 + Rpt2 on every track so
-         * latched chords/lanes don't drone with transport dead. Shared
-         * helper queues the per-track set_params one-per-tick via
-         * pendingDefaultSetParams to avoid same-buffer coalescing. */
-        unlatchAllTracks(S, NUM_TRACKS);
-    }
-    S.playingPrev = S.playing;
-
-    /* Refresh step LEDs while recording or holding a step (nudge may move note across boundary) */
-    if ((S.recordArmed && S.playing) || S.heldStep >= 0) {
-        const rt = S.activeTrack;
-        const rac = effectiveClip(rt);
-        const bulk = host_module_get_param('t' + rt + '_c' + rac + '_steps');
-        if (bulk && bulk.length >= NUM_STEPS) {
-            for (let rs = 0; rs < NUM_STEPS; rs++)
-                S.clipSteps[rt][rac][rs] = bulk[rs] === '1' ? 1 : (bulk[rs] === '2' ? 2 : 0);
-            S.clipNonEmpty[rt][rac] = clipHasContent(rt, rac);
-            S.screenDirty = true;
-        }
-    }
-
-    /* Track sequencer notes for active track pad highlighting */
-    const t  = S.activeTrack;
-    const ac = S.trackActiveClip[t];
-    const cs = S.trackCurrentStep[t];
-    if (!S.playing) {
-        S.seqActiveNotes.clear();
-        S.seqLastStep = -1;
-        S.seqLastClip = -1;
-        S.seqNoteOnClipTick = -1;
-        S.seqNoteGateTicks  = 0;
-    } else if (cs !== S.seqLastStep || ac !== S.seqLastClip) {
-        const newHasNote = cs >= 0 && S.clipSteps[t][ac][cs] === 1;
-        /* Check whether the previous note's gate is still sounding before clearing */
-        let prevStillSounding = false;
-        if (!newHasNote && S.seqActiveNotes.size > 0 &&
-                S.seqNoteOnClipTick >= 0 && S.seqNoteGateTicks > 0 && ac === S.seqLastClip) {
-            const ctChk = host_module_get_param('t' + t + '_current_clip_tick');
-            if (ctChk !== null && ctChk !== undefined) {
-                const ctv      = parseInt(ctChk, 10) | 0;
-                const clipTks  = S.clipLength[t][ac] * (S.clipTPS[t][ac] || 24);
-                const elapsed  = ctv >= S.seqNoteOnClipTick
-                    ? ctv - S.seqNoteOnClipTick
-                    : clipTks - S.seqNoteOnClipTick + ctv;
-                prevStillSounding = elapsed < S.seqNoteGateTicks;
-            }
-        }
-        S.seqLastStep = cs;
-        S.seqLastClip = ac;
-        if (newHasNote) {
-            /* New step has a note — show it, replacing any sustaining previous note */
-            S.seqActiveNotes.clear();
-            S.seqNoteOnClipTick = -1;
-            S.seqNoteGateTicks  = 0;
-            const raw = host_module_get_param('t' + t + '_c' + ac + '_step_' + cs + '_notes');
-            if (raw && raw.trim().length > 0) {
-                raw.trim().split(' ').forEach(function(sn) {
-                    const pitch = parseInt(sn, 10);
-                    if (pitch >= 0 && pitch <= 127) S.seqActiveNotes.add(pitch);
-                });
-            }
-            const ctStr = host_module_get_param('t' + t + '_current_clip_tick');
-            const gStr  = host_module_get_param('t' + t + '_c' + ac + '_step_' + cs + '_gate');
-            if (ctStr !== null && ctStr !== undefined) S.seqNoteOnClipTick = parseInt(ctStr, 10) | 0;
-            if (gStr  !== null && gStr  !== undefined) S.seqNoteGateTicks  = parseInt(gStr,  10) | 0;
-        } else if (!prevStillSounding) {
-            /* New step empty, previous note expired — clear */
-            S.seqActiveNotes.clear();
-            S.seqNoteOnClipTick = -1;
-            S.seqNoteGateTicks  = 0;
-        }
-        /* else: prevStillSounding — keep old notes + gate tracking across empty step */
-    } else if (S.seqActiveNotes.size > 0 && S.seqNoteOnClipTick >= 0 && S.seqNoteGateTicks > 0) {
-        const ctStr = host_module_get_param('t' + t + '_current_clip_tick');
-        if (ctStr !== null && ctStr !== undefined) {
-            const ct = parseInt(ctStr, 10) | 0;
-            const clipTicks = S.clipLength[t][ac] * (S.clipTPS[t][ac] || 24);
-            const elapsed = ct >= S.seqNoteOnClipTick
-                ? ct - S.seqNoteOnClipTick
-                : clipTicks - S.seqNoteOnClipTick + ct;
-            if (elapsed >= S.seqNoteGateTicks) {
-                S.seqActiveNotes.clear();
-                S.seqNoteOnClipTick = -1;
-                S.seqNoteGateTicks  = 0;
-            }
-        }
-    }
-
-    /* Deferred DSP state save: fetch state_full (DSP serializes only when dirty) */
-    if (typeof host_write_file === 'function' && S.currentSetUuid) {
-        const _st = host_module_get_param('state_full');
-        if (_st && _st.length > 2) {
-            host_write_file(uuidToStatePath(S.currentSetUuid), _st);
-            updateNameIndex();
-        }
-    }
-
+    pollSnapshotTracks(S, deps, v);
+    const countInDspActive = pollSnapshotClipStates(S, deps, v);
+    pollMergeStateMachine(S, deps, v);
+    pollDeferredBankRefresh(S, deps);
+    pollPlayheadPads(S, deps);
+    pollSeqFollowPage(S, deps);
+    pollRecordPendingPage(S, deps);
+    pollCountInEnd(S, deps, countInDspActive);
+    pollTransportTransitions(S, deps);
+    pollStepLedRefresh(S, deps);
+    pollSeqActiveNotes(S, deps);
+    pollDeferredSave(S, deps);
 }
 
 /* Refresh name -> uuid mapping after any successful save so that future
