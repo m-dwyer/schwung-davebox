@@ -303,7 +303,14 @@ import {
     optionalHostWriteFile
 } from './ui_sync_adapters.mjs';
 import {
+    createButtonCcHardwareAdapters,
     createExtMidiRemapHostAdapters,
+    createInputDispatchHardwareAdapters,
+    createJogCcHardwareAdapters,
+    createMidiInternalHardwareAdapters,
+    createNavigationCcHardwareAdapters,
+    createPadHardwareAdapters,
+    createTransportCcHardwareAdapters,
     optionalMoveMidiExternalSend,
     optionalMoveMidiInjectToMove,
     optionalShadowSendMidiToDsp
@@ -2150,9 +2157,9 @@ function _onCCMsg(d1, d2) {
 
 function createPadWorkflowDeps() {
     return {
+        ...createPadHardwareAdapters(),
         /* constants */
         padModeDrum: PAD_MODE_DRUM,
-        trackPadBase: TRACK_PAD_BASE,
         drumLanes: DRUM_LANES,
         numTracks: NUM_TRACKS,
         banks: BANKS,
@@ -2258,6 +2265,7 @@ function createSideButtonWorkflowDeps() {
 
 function createTransportCcWorkflowDeps() {
     return {
+        ...createTransportCcHardwareAdapters(),
         banks: BANKS,
         clearAllMuteSolo,
         closeConvertConfirm,
@@ -2267,12 +2275,6 @@ function createTransportCcWorkflowDeps() {
         focusedClipIsEmpty: _focusedClipIsEmpty,
         forceRedraw,
         getParam: optionalHostModuleGetParam(),
-        moveBack: MoveBack,
-        movePlay: MovePlay,
-        moveMute: MoveMute,
-        moveRec: MoveRec,
-        moveSample: MoveSample,
-        moveUndo: MoveUndo,
         numTracks: NUM_TRACKS,
         padModeDrum: PAD_MODE_DRUM,
         red: Red,
@@ -2291,6 +2293,7 @@ function createTransportCcWorkflowDeps() {
 
 function createButtonCcWorkflowDeps() {
     return {
+        ...createButtonCcHardwareAdapters(),
         clearAllLEDs,
         closeConvertConfirm,
         closeSnapshotPicker,
@@ -2312,14 +2315,6 @@ function createButtonCcWorkflowDeps() {
             return latchHeldDrumRepeatsOnLoopPress(S, { host_module_set_param: optionalHostModuleSetParam() }, track);
         },
         loopTapTicks: LOOP_TAP_TICKS,
-        moveCapture: MoveCapture,
-        moveCopy: MoveCopy,
-        moveDelete: MoveDelete,
-        moveLoop: MoveLoop,
-        moveMenu: 50,
-        moveMute: MoveMute,
-        moveNoteSession: MoveNoteSession,
-        moveShift: MoveShift,
         noteSessionHoldTicks: NOTE_SESSION_HOLD_TICKS,
         openClearAutoMenu,
         openGlobalMenu,
@@ -2340,13 +2335,10 @@ function createButtonCcWorkflowDeps() {
 
 function createNavigationCcWorkflowDeps() {
     return {
+        ...createNavigationCcHardwareAdapters(),
         computePadNoteMap,
         effectiveClip,
         forceRedraw,
-        moveDown: MoveDown,
-        moveLeft: MoveLeft,
-        moveRight: MoveRight,
-        moveUp: MoveUp,
         numClips: NUM_CLIPS,
         padModeDrum: PAD_MODE_DRUM,
         queueLiveNoteOff: function (track, pitch) {
@@ -2427,7 +2419,7 @@ function createKnobCcWorkflowDeps() {
 
 function createJogCcWorkflowDeps() {
     return {
-        moveMainKnob: MoveMainKnob,
+        ...createJogCcHardwareAdapters(),
         padModeDrum: PAD_MODE_DRUM,
         numTracks: NUM_TRACKS,
         numClips: NUM_CLIPS,
@@ -2479,6 +2471,7 @@ function createJogCcWorkflowDeps() {
 
 function createInputDispatchWorkflowDeps() {
     return {
+        ...createInputDispatchHardwareAdapters(),
         createButtonCcWorkflowDeps,
         createJogCcWorkflowDeps,
         createKnobCcWorkflowDeps,
@@ -2496,14 +2489,11 @@ function createInputDispatchWorkflowDeps() {
             return handleLoopStepPress(S, createLoopGestureWorkflowDeps(), idx);
         },
         ledOff: LED_OFF,
-        moveCapture: MoveCapture,
-        moveShift: MoveShift,
         onPadPressTrackView: _onPadPressTrackView,
         selectClipOnTrack,
         sendPerfMods,
         setLED,
         setParam: optionalHostModuleSetParam(),
-        trackPadBase: TRACK_PAD_BASE
     };
 }
 
@@ -2522,20 +2512,15 @@ function _onMidiInternalImpl(data) {
 
 function createMidiInternalWorkflowDeps() {
     return {
+        ...createMidiInternalHardwareAdapters(),
         closeClearAutoMenu,
         isNoiseMessage,
-        moveDelete: MoveDelete,
-        moveDown: MoveDown,
-        moveMainKnob: MoveMainKnob,
-        moveNoteSession: MoveNoteSession,
-        moveUp: MoveUp,
         onCc: _onCCMsg,
         onKnobTouch: _onKnobTouch,
         onPadAftertouch: _onPadAftertouch,
         onPadPress: _onPadPress,
         onPadRelease: _onPadRelease,
-        onStepButtons: _onStepButtons,
-        trackPadBase: TRACK_PAD_BASE
+        onStepButtons: _onStepButtons
     };
 }
 
@@ -2571,8 +2556,8 @@ function _onPadAftertouch(d1, d2) {
 
 function createPadAftertouchWorkflowDeps() {
     return {
+        ...createPadHardwareAdapters(),
         PAD_MODE_DRUM,
-        trackPadBase: TRACK_PAD_BASE,
         padPitch,
         drumPadToLane,
         drumRepeatDeps: createDrumRepeatWorkflowDeps(),
