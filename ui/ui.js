@@ -235,7 +235,6 @@ import {
     handleCaptureDrumLanePress,
     handleDrumLanePadPress,
     handleDrumVelocityPadPress,
-    padDispatchMutedNow as padDispatchMutedNowImpl,
     queueLiveNoteOff,
     resolveDrumPadTarget
 } from './ui_pad_surface.mjs';
@@ -1097,10 +1096,6 @@ function clipHasContent(t, c) {
     return false;
 }
 
-
-function _padDispatchMutedNow() {
-    return padDispatchMutedNowImpl(S);
-}
 
 /* ---- Transpose all melodic clips on global Key/Scale change ----------
  * Browsing the Key/Scale menu item arms a live preview (pads relayout +
@@ -2040,7 +2035,7 @@ function createTickWorkflowDeps() {
         pollPendingExport,
         convertTrackType,
         computePadNoteMap,
-        padDispatchMuted: _padDispatchMutedNow,
+        padDispatchMuted: function() { return padSurfaceRuntime.padDispatchMuted(); },
         applyExtMidiRemap,
         saveState,
         removeFlagsWrap,

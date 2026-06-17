@@ -42,6 +42,9 @@ export function createPadSurfaceRuntime(S, deps) {
 
     return {
         computePadNoteMap: computePadNoteMapRuntime,
+        padDispatchMuted: function() {
+            return padDispatchMutedNow(S);
+        },
         setActiveDrumLane: function(t, lane) {
             return setActiveDrumLaneMirror(S, { host_module_set_param: optionalSetParam() }, t, lane);
         },
