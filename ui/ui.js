@@ -398,11 +398,32 @@ import {
     removeFlagsWrapImpl
 } from './ui_led_init_workflow.mjs';
 import {
+    PERF_MOD_FULL_NAMES,
+    PERF_MOD_PAD_MAP,
+    PERF_MOD_POPUP_TICKS,
+    sendPerfModsImpl,
+    updatePerfModeLEDsImpl
+} from './ui_perf_leds.mjs';
+import {
     anyMelodicClipHasContentImpl,
     xposeCancelPreviewImpl,
     xposeCommitImpl,
     xposePreviewSetImpl
 } from './ui_transpose_workflow.mjs';
+import {
+    beginSnapshotSaveImpl,
+    closeSnapshotPickerImpl,
+    openLoadSnapshotImpl,
+    openSaveSnapshotImpl,
+    snapshotPickerClickImpl,
+    snapshotPickerRotateImpl
+} from './ui_snapshot_workflow.mjs';
+import {
+    enterMoveNativeCoRunImpl,
+    enterSchwungCoRunImpl,
+    exitMoveNativeCoRunImpl,
+    exitSchwungCoRunImpl
+} from './ui_corun_workflow.mjs';
 import {
     applyBankParamImpl,
     applyTrackConfigImpl,
@@ -556,6 +577,37 @@ function createTransposeDeps() {
     };
 }
 
+function createSnapshotDeps() {
+    return {
+        snapshotCap: SNAPSHOT_CAP,
+        stateVersion: STATE_VERSION,
+        now: Date.now,
+        snapshotLabel,
+        saveState,
+        showActionPopup,
+        loadSnapshotManifest,
+        dropSnapshots,
+        applySnapshotToLive
+    };
+}
+
+function createCoRunDeps() {
+    return {
+        corunTargetChainEdit: CORUN_TARGET_CHAIN_EDIT,
+        corunTargetMoveNative: CORUN_TARGET_MOVE_NATIVE,
+        overtureCorunKeepMask: OVERTURE_CORUN_KEEP_MASK,
+        shadowCorunBegin: typeof shadow_corun_begin === 'function' ? shadow_corun_begin : null,
+        shadowCorunEnd: typeof shadow_corun_end === 'function' ? shadow_corun_end : null,
+        shadowSetSkipLedClear: typeof shadow_set_skip_led_clear === 'function' ? shadow_set_skip_led_clear : null,
+        moveMidiInjectToMove: typeof move_midi_inject_to_move === 'function' ? move_midi_inject_to_move : null,
+        computePadNoteMap,
+        showActionPopup,
+        reapplyPalette,
+        invalidateLEDCache,
+        forceRedraw
+    };
+}
+
 
 /* ------------------------------------------------------------------ */
 /* UI state                                                             */
@@ -589,26 +641,10 @@ const OVERTURE_CORUN_KEEP_MASK  = OVERTURE_CORUN_KEEP_DEFAULT | CORUN_KEEP_BACK_
 
 const LOOPER_RATES_STRAIGHT = [12, 24, 48, 96, 192];   /* 1/32, 1/16, 1/8, 1/4, 1/2 */
 const PERF_LATCH_LONG_PRESS = 100;     /* ~510ms → clear all toggled mods + exit Latch mode */
-/* Pad → modifier bit index. R1=bits 0-7 (pitch), R2=bits 8-15 (vel/gate), R3=bits 16-23 (wild). */
-const PERF_MOD_PAD_MAP = Object.freeze({
-    76: 0,  /* Oct↑    */ 77: 1,  /* Oct↓    */ 78: 2,  /* Sc↑     */ 79: 3,  /* Sc↓     */
-    80: 4,  /* 5th     */ 81: 5,  /* Triton  */ 82: 6,  /* Drift   */ 83: 7,  /* Storm   */
-    84: 8,  /* Soft    */ 85: 9,  /* Hard    */ 86: 10, /* Cresc   */ 87: 11, /* Pulse   */
-    88: 12, /* Sdchn   */ 89: 13, /* Stac    */ 90: 14, /* Lgto    */ 91: 15, /* RmpG    */
-    92: 16, /* ½time   */ 93: 17, /* 3Skip   */ 94: 18, /* Phnm    */ 95: 19, /* Sprs    */
-    96: 20, /* Gltch   */ 97: 21, /* Stggr   */ 98: 22, /* Shfl    */ 99: 23, /* Back    */
-});
-const PERF_MOD_FULL_NAMES = [
-    'Octave Up','Octave Down','Scale Up','Scale Down','Fifth','Tritone','Drift','Storm',
-    'Decrescendo','Swell','Crescendo','Pulse','Sidechain','Staccato','Legato','Ramp Gate',
-    'Half Time','3 Skip','Phantom','Sparse','Glitch','Stagger','Shuffle','Backwards',
-];
-
 /* Preset S.snapshots: 16 slots (step buttons 1-16).
  * S.perfRecalledSlot: which slot is active (-1 = none); preset bits are
  * copied into S.perfModsToggled on recall so mod pads can toggle them off.
  * Factory presets populate slots 0-7 (steps 1-8) at init. */
-const PERF_MOD_POPUP_TICKS = 80; /* ~500ms at ~160 ticks/s */
 
 /* View lock: double-tap Loop keeps Perf Mode alive after Loop is released.
  * Single tap while locked → unlock + stop loop. */
@@ -1995,8 +2031,9 @@ function sceneAnyPlaying(sceneIdx) {
 
 /* Send current combined modifier bitmask to DSP. */
 function sendPerfMods() {
-    if (typeof host_module_set_param === 'function')
-        host_module_set_param('perf_mods', String(S.perfModsToggled | S.perfModsHeld));
+    sendPerfModsImpl(S, {
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null
+    });
 }
 
 /* Draw the full 4-row pad grid for Performance Mode.
@@ -2006,58 +2043,7 @@ function sendPerfMods() {
  * R3 (92-99): WILD modifier pads (Cyan family).
  * Also clears step buttons (16-31) — not used in Perf Mode. */
 function updatePerfModeLEDs() {
-    if (!S.ledInitComplete) return;
-    const activeMods = S.perfModsToggled | S.perfModsHeld;
-    /* Step buttons: preset slots. */
-    for (let i = 0; i < 16; i++) {
-        if (i === S.perfRecalledSlot)         setLED(16 + i, White);
-        else if (S.perfSnapshots[i] !== 0)    setLED(16 + i, PurpleBlue);
-        else                                setLED(16 + i, LightGrey);
-    }
-
-    /* R0 (68-75): rate pads 0-4 (1/32..1/2), hold (5), sync (6), latch (7).
-     * Static colors only — no flashing. */
-    for (let i = 0; i < 5; i++) {
-        const rateActive = S.perfStickyLengths.has(i) ||
-                           S.perfStack.some(function(e) { return e.idx === i; });
-        setLED(68 + i, rateActive ? White : DarkGrey);
-    }
-    /* Hold pad (73): bright Red when engaged, dim Red when off. */
-    setLED(73, S.perfHoldPadHeld ? Red : DeepRed);
-    /* Sync (pad 74): bright Green when on, dim Green when off. */
-    setLED(74, S.perfSync ? Green : DeepGreen);
-    /* Latch (pad 75): track-3 bright/dim pair (BrightGreen / DarkOlive). */
-    setLED(75, S.perfLatchMode ? TRACK_COLORS[2] : TRACK_DIM_COLORS[2]);
-
-    /* R1 (76-83): PITCH mods — active = White, inactive = dim Magenta */
-    for (let i = 0; i < 8; i++) {
-        const note = 76 + i;
-        const modIdx = PERF_MOD_PAD_MAP[note];
-        if (modIdx !== undefined)
-            setLED(note, (activeMods >> modIdx) & 1 ? White : DeepMagenta);
-        else
-            setLED(note, LED_OFF);
-    }
-
-    /* R2 (84-91): VEL/GATE mods — active = White, inactive = dim Yellow */
-    for (let i = 0; i < 8; i++) {
-        const note = 84 + i;
-        const modIdx = PERF_MOD_PAD_MAP[note];
-        if (modIdx !== undefined)
-            setLED(note, (activeMods >> modIdx) & 1 ? White : Mustard);
-        else
-            setLED(note, LED_OFF);
-    }
-
-    /* R3 (92-99): WILD mods — active = White, inactive = dim Blue */
-    for (let i = 0; i < 8; i++) {
-        const note = 92 + i;
-        const modIdx = PERF_MOD_PAD_MAP[note];
-        if (modIdx !== undefined)
-            setLED(note, (activeMods >> modIdx) & 1 ? White : DarkBlue);
-        else
-            setLED(note, LED_OFF);
-    }
+    updatePerfModeLEDsImpl(S, { setLED });
 }
 
 function forceRedraw() {
@@ -2410,100 +2396,35 @@ function resolveInheritPicker(action) {
  * by which point seq8_save_state has written the file synchronously.
  * Reusing an existing id overwrites that snapshot in place. */
 function beginSnapshotSave(id) {
-    S.pendingSnapshotCopy = { id: id, label: snapshotLabel() };
-    saveState();
+    beginSnapshotSaveImpl(S, createSnapshotDeps(), id);
 }
 
 /* Save state action. Under the cap → new timestamped snapshot. At the cap →
  * open the overwrite picker to choose which existing one to replace. */
 function openSaveSnapshot() {
-    if (S.pendingSuspendSave || S.pendingSnapshotCopy) return;  /* save already in flight */
-    const snaps = loadSnapshotManifest(S.currentSetUuid);
-    if (snaps.length >= SNAPSHOT_CAP) {
-        S.snapshotPicker = { mode: 'overwrite', snaps: snaps, sel: 0, confirm: null };
-        S.globalMenuOpen = false;
-        S.screenDirty = true;
-        return;
-    }
-    beginSnapshotSave(String(Date.now()));
-    S.globalMenuOpen = false;
-    showActionPopup('STATE', 'SAVED');
+    openSaveSnapshotImpl(S, createSnapshotDeps());
 }
 
 /* Load state action. Empty → popup. If any snapshots predate the current
  * state version, offer to wipe them before showing the list. */
 function openLoadSnapshot() {
-    const snaps = loadSnapshotManifest(S.currentSetUuid);
-    if (snaps.length === 0) {
-        S.globalMenuOpen = false;
-        showActionPopup('NO', 'SNAPSHOTS');
-        return;
-    }
-    const stale = [];
-    for (let i = 0; i < snaps.length; i++)
-        if (snaps[i].sv !== STATE_VERSION) stale.push(snaps[i].id);
-    S.snapshotPicker = { mode: 'load', snaps: snaps, sel: 0, confirm: null };
-    if (stale.length > 0)
-        S.snapshotPicker.confirm = { kind: 'wipe', sel: 1, wipeIds: stale };
-    S.globalMenuOpen = false;
-    S.screenDirty = true;
+    openLoadSnapshotImpl(S, createSnapshotDeps());
 }
 
 function closeSnapshotPicker() {
-    S.snapshotPicker = null;
-    S.screenDirty = true;
+    closeSnapshotPickerImpl(S);
 }
 
 /* Jog rotation inside the picker: toggle a confirm's Yes/No, else move
  * the list selection. */
 function snapshotPickerRotate(delta) {
-    const p = S.snapshotPicker;
-    if (!p || delta === 0) return;
-    if (p.confirm) {
-        p.confirm.sel = p.confirm.sel === 0 ? 1 : 0;
-    } else {
-        const n = p.snaps.length;
-        if (n > 0) p.sel = (p.sel + (delta > 0 ? 1 : n - 1)) % n;
-    }
-    S.screenDirty = true;
+    snapshotPickerRotateImpl(S, delta);
 }
 
 /* Jog click inside the picker: resolve a confirm, or arm one for the
  * selected entry. */
 function snapshotPickerClick() {
-    const p = S.snapshotPicker;
-    if (!p) return;
-    if (p.confirm) {
-        const yes = p.confirm.sel === 0;
-        const kind = p.confirm.kind;
-        if (kind === 'wipe') {
-            if (yes) { p.snaps = dropSnapshots(S.currentSetUuid, p.confirm.wipeIds); p.sel = 0; }
-            p.confirm = null;
-            if (p.snaps.length === 0) closeSnapshotPicker();
-            else S.screenDirty = true;
-            return;
-        }
-        const id = p.confirm.targetId;
-        closeSnapshotPicker();
-        if (kind === 'load' && yes) {
-            applySnapshotToLive(S.currentSetUuid, id);
-            S.pendingSetLoad = true;          /* reuse the normal state_load reload path */
-            showActionPopup('STATE', 'LOADED');
-        } else if (kind === 'overwrite' && yes) {
-            beginSnapshotSave(id);            /* reuse id → overwrite in place */
-            showActionPopup('STATE', 'SAVED');
-        }
-        return;
-    }
-    const snap = p.snaps[p.sel];
-    if (!snap) return;
-    if (p.mode === 'load') {
-        if (snap.sv !== STATE_VERSION) return;   /* incompatible: ignore press */
-        p.confirm = { kind: 'load', sel: 1, targetId: snap.id };
-    } else {
-        p.confirm = { kind: 'overwrite', sel: 1, targetId: snap.id };
-    }
-    S.screenDirty = true;
+    snapshotPickerClickImpl(S, createSnapshotDeps());
 }
 
 /* ---- CLEAR AUTOMATION menu (Delete-tap on the AUTO bank) ---- */
@@ -2520,123 +2441,20 @@ function clearAutoMenuClick() {
     clearAutoMenuClickImpl(S, createClearAutoMenuDeps());
 }
 
-/* Enter co-run for slot N on track t. Persists the track's slot choice,
- * suppresses Overture's OLED drawing + track-button LEDs (handled where each
- * is written), and tells Schwung's shadow_ui to also tick the chain editor. */
 function enterSchwungCoRun(t, slot) {
-    S.schwungCoRunSlot = slot;
-    if (typeof shadow_corun_begin === 'function')
-        shadow_corun_begin(CORUN_TARGET_CHAIN_EDIT, slot, OVERTURE_CORUN_KEEP_MASK);
-    S.screenDirty = true;
+    enterSchwungCoRunImpl(S, createCoRunDeps(), t, slot);
 }
 
-/* Exit co-run. Called on programmatic Overture state changes (track switch,
- * global-menu open, etc.) or by the pollDSP reconcile when the shim's
- * framework Back-handler has ended the session. Calling shadow_corun_end()
- * after the shim already ended is a no-op. */
 function exitSchwungCoRun() {
-    if (S.schwungCoRunSlot < 0) return;
-    S.schwungCoRunSlot = -1;
-    S._coRunChanSlots = 0;
-    if (typeof shadow_corun_end === 'function')
-        shadow_corun_end();
-    /* Modifier-key release CCs the user pressed inside the co-run may have
-     * been routed to Schwung and never reached us — clear defensively so a
-     * stuck Shift/Mute/etc. can't silence pad dispatch on return. Mirrors
-     * the resume-from-suspend clear. */
-    S.shiftHeld = false; S.deleteHeld = false; S.muteHeld = false;
-    S.copyHeld  = false; S.loopHeld  = false; S.loopJogActive = false;
-    S.captureHeld = false; S.shiftTrackLEDActive = false;
-    /* Schwung's chain editor may have rewritten palette scratch entries while
-     * we were ceded. Reapply our palette before invalidating the LED cache
-     * so forceRedraw below repaints with the right colors. */
-    reapplyPalette();
-    invalidateLEDCache();
-    forceRedraw();
+    exitSchwungCoRunImpl(S, createCoRunDeps());
 }
 
-/* Enter Move-native co-run for Overture track t. Asks the shim to (a) yield
- * the OLED to Move firmware and (b) flip its sh_midi filter / shadow_ui
- * forward so the nav-CC + touch-note set routes to Move firmware instead
- * of Overture. Fires one cable-0 track-button tap so Move firmware lands
- * on the preset browser for the relevant track without the user touching
- * the front panel. Move's track-button CC mapping is REVERSED
- * (CC 43 = Track 1 ... CC 40 = Track 4), and Overture tracks 5-8 with
- * ROUTE_MOVE rely on the user's trackChannel to address one of Move's
- * 4 tracks — if trackChannel is outside 1-4 we just enter co-run without
- * an auto-tap and let the user pick the Move track manually. */
 function enterMoveNativeCoRun(t) {
-    if (typeof shadow_corun_begin !== 'function') return;
-    if (typeof move_midi_inject_to_move !== 'function') return;
-    const ch = S.trackChannel[t] | 0;
-    if (ch < 1 || ch > 4) showActionPopup('MOVE CH>4', 'CH ' + ch);
-    S.moveCoRunTrack = t;
-    computePadNoteMap();
-    S.pendingPadNoteMapRecompute = true;
-    shadow_corun_begin(CORUN_TARGET_MOVE_NATIVE, t, OVERTURE_CORUN_KEEP_MASK);
-    /* Let Move firmware's own LED writes (track buttons, knob rings, transport)
-     * reach hardware while it drives the device-edit UI. skip_led_clear makes the
-     * shim's overtake LED-strip loop early-return, so Move's LEDs pass through live.
-     * Toggled back off in exitMoveNativeCoRun(). This is a mid-overtake toggle — it
-     * does NOT hit the entry/exit snapshot path, so the suspend/exit native LED
-     * restore is unaffected. */
-    if (typeof shadow_set_skip_led_clear === 'function') shadow_set_skip_led_clear(1);
-    /* Defer the track-button "press" that lands Move on the device-edit page and
-     * makes it repaint its track + knob LEDs. Injecting it immediately fails: Move's
-     * repaint lands before the shim's co-run LED passthrough + OLED bypass go live
-     * (corun_move_native_track hasn't propagated to the shim yet), so the repaint is
-     * stripped and the LEDs don't show until a manual press. Fire it from tick() a
-     * few ticks later, once co-run is fully active. */
-    S.pendingMoveCoRunInject = 12;
-    S.globalMenuOpen = false;
-    S.lastSentMenuEditValue = null;
-    S.screenDirty = true;
+    enterMoveNativeCoRunImpl(S, createCoRunDeps(), t);
 }
 
-/* Exit Move-native co-run. The shim drops its input split + display
- * bypass the next time it reads corun_move_native_track from SHM, so
- * Move firmware's framebuffer stops reaching the OLED and the nav CCs
- * start flowing to Overture again. We force a full redraw so any LEDs
- * Move firmware was driving (knob rings, track buttons, Shift, Back)
- * get repainted from Overture state right away. */
 function exitMoveNativeCoRun() {
-    if (S.moveCoRunTrack < 0) return;
-    S.moveCoRunTrack = -1;
-    S.pendingMoveCoRunInject = 0;  /* cancel any pending entry inject */
-    S.moveCoRunPressQueue = null;  /* cancel any in-flight track-row press sequence */
-    computePadNoteMap();
-    S.pendingPadNoteMapRecompute = true;
-    if (typeof shadow_corun_end === 'function')
-        shadow_corun_end();
-    /* Resume the shim's overtake LED-strip loop so Overture owns the LEDs again
-     * (mirror of the skip_led_clear(1) in enterMoveNativeCoRun). */
-    if (typeof shadow_set_skip_led_clear === 'function') shadow_set_skip_led_clear(0);
-    /* If a drum pad hold inject was in flight, send the note-off before the
-     * co-run session ends so Move doesn't get a stuck note. */
-    if (S.moveCoRunDrumHeld >= 0 && typeof move_midi_inject_to_move === 'function') {
-        move_midi_inject_to_move([0x08, 0x80, S.moveCoRunDrumHeld, 0]);  /* plain pad off */
-    }
-    S.moveCoRunDrumHeld = -1;
-    /* Modifier-key release CCs the user pressed inside Move firmware never
-     * reach us during co-run — clear defensively so a stuck Shift/Mute/etc.
-     * can't silence pad dispatch on return. Mirrors resume-from-suspend. */
-    S.shiftHeld = false; S.deleteHeld = false; S.muteHeld = false;
-    S.copyHeld  = false; S.loopHeld  = false; S.loopJogActive = false;
-    S.captureHeld = false; S.shiftTrackLEDActive = false;
-    /* Move firmware may have rewritten palette scratch entries (knob rings,
-     * Shift/Back, etc.) while we were ceded. Reapply our palette before
-     * invalidating the LED cache so forceRedraw below repaints with the
-     * right colors, not stale ones left by Move firmware. */
-    reapplyPalette();
-    invalidateLEDCache();
-    /* Force the knob-ring LEDs (CC 71-78) to repaint over Move's native colors on
-     * the next draw. invalidateLEDCache clears the JS LED cache, but reapplyPalette
-     * leaves the hardware buttonCache stale so the normal (non-forced)
-     * cachedSetButtonLED knob writes get dropped — Move's knob colors then persist
-     * until the user happens to change a knob value. One-shot force in updateTrackLEDs
-     * (mirrors the force=true the track-button reclaim already uses). */
-    S._forceKnobReemit = true;
-    forceRedraw();
+    exitMoveNativeCoRunImpl(S, createCoRunDeps());
 }
 
 function restoreUiSidecar(applyDefaultsNow) {
