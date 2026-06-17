@@ -19,6 +19,14 @@ import {
 } from './ui_constants.mjs';
 import { CC_ASSIGN_DEFAULTS } from './ui_state.mjs';
 import { writeSidecar } from './ui_persistence.mjs';
+import {
+    routeCheckExpectedLabel,
+    routeCheckNeedsWarning
+} from './ui_routes.mjs';
+import {
+    altIndicatorActiveImpl,
+    bankHasAltParamsImpl
+} from './ui_bank_state.mjs';
 
 /* Per-clip banks: NOTE FX (2), HARMZ (3), SEQ ARP (4), MIDI DLY (5) */
 const PER_CLIP_BANKS = [1, 2, 3, 4];
@@ -120,6 +128,81 @@ export function resetSingleFxBankImpl(S, deps, t, bankIdx) {
         S.bankParams[t][bankIdx][k] = pm.def;
     }
     S.screenDirty = true;
+}
+
+/* Reset ARP IN (TARP, bank 5) for a melodic track to DSP defaults.
+ * Issues a single tN_tarp_reset which the DSP handler resolves via
+ * arp_init_defaults + held-buffer clear + silence. JS mirrors are
+ * zeroed in parallel so the bank overview reflects defaults immediately. */
+export function resetTarpImpl(S, deps, t) {
+    if (!deps.setParam) return;
+    S.undoAvailable = true; S.redoAvailable = false;
+    S.pendingDefaultSetParams.push({ key: 't' + t + '_tarp_reset', val: '1' });
+    for (let k = 0; k < 8; k++) {
+        const pm = BANKS[5].knobs[k];
+        if (pm) S.bankParams[t][5][k] = pm.def;
+    }
+    for (let s = 0; s < 8; s++) {
+        S.tarpStepVel[t][s] = 4;
+        S.tarpStepInt[t][s] = 0;
+    }
+    S.tarpStepLoopLen[t] = 8;
+    S.tarpHeldNotes[t].clear();
+    S.screenDirty = true;
+}
+
+function routeCheckWarnForTrackImpl(deps, t) {
+    if (routeCheckNeedsWarning(t))
+        deps.showActionPopup('ROUTE CHECK', routeCheckExpectedLabel(t));
+}
+
+function createParameterBankDeps(deps) {
+    return {
+        ...deps.createHostParamAdapters(),
+        hasShadowSetParam: deps.hasShadowSetParam(),
+        refreshDrumLaneBankParams: deps.refreshDrumLaneBankParams,
+        routeCheckWarnForTrack: function(t) { routeCheckWarnForTrackImpl(deps, t); },
+        syncDrumLanesMeta: deps.syncDrumLanesMeta,
+        syncDrumLaneSteps: deps.syncDrumLaneSteps,
+        syncDrumClipContent: deps.syncDrumClipContent,
+        computePadNoteMap: deps.computePadNoteMap,
+        forceRedraw: deps.forceRedraw
+    };
+}
+
+export function createParameterBankRuntime(S, deps) {
+    function bankDeps() {
+        return createParameterBankDeps(deps);
+    }
+    return {
+        resetPerClipBankParamsToDefault: function(t) {
+            return resetPerClipBankParamsToDefaultImpl(S, bankDeps(), t);
+        },
+        resetFxBanks: function(t) {
+            return resetFxBanksImpl(S, bankDeps(), t);
+        },
+        resetTarp: function(t) {
+            return resetTarpImpl(S, bankDeps(), t);
+        },
+        resetSingleFxBank: function(t, bankIdx) {
+            return resetSingleFxBankImpl(S, bankDeps(), t, bankIdx);
+        },
+        readBankParams: function(t, bankIdx) {
+            return readBankParamsImpl(S, bankDeps(), t, bankIdx);
+        },
+        applyTrackConfig: function(t, key, val) {
+            return applyTrackConfigImpl(S, bankDeps(), t, key, val);
+        },
+        applyBankParam: function(t, bankIdx, knobIdx, val) {
+            return applyBankParamImpl(S, bankDeps(), t, bankIdx, knobIdx, val);
+        },
+        bankHasAltParams: function(t, bank) {
+            return bankHasAltParamsImpl(S, t, bank);
+        },
+        altIndicatorActive: function(t, bank) {
+            return altIndicatorActiveImpl(S, t, bank);
+        }
+    };
 }
 
 /* Read all wired params for bankIdx on track t from DSP into S.bankParams. */

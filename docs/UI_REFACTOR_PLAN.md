@@ -46,6 +46,10 @@ all-deps module.
   moving them would cross the Tick Pipeline, Parameter Bank, Drum Lane Workflow,
   Drum Repeat Workflow, Loop Gesture, Track View Step, or public wrapper
   boundaries.
+- Phase 5 Parameter Bank Runtime is complete. Parameter-bank reset/read/apply
+  wrappers, bank alt checks, ARP IN reset behavior, and route-check warning
+  linkage are behind `createParameterBankRuntime()` in `ui_bank_params.mjs`;
+  `ui.js` retains the public wrapper names.
 
 ## Completed: Phase 4 Input Dispatch Dependency Locality
 
@@ -161,6 +165,8 @@ Implementation direction:
 
 ## 5. Parameter Bank Runtime
 
+Status: complete.
+
 Deepen `ui_bank_params.mjs` around Parameter Bank semantics, not just read/write
 functions.
 
@@ -173,6 +179,19 @@ Implementation direction:
   model belongs behind the same Parameter Bank interface.
 - Extend `bank-params.test.ts`, `knob-cc-workflow.test.ts`, and relevant bank
   render tests.
+
+Phase notes:
+
+- Added focused coverage for ARP IN/TARP reset queue ordering and mirror reset
+  behavior before moving the inline wrapper from `ui.js`.
+- Added runtime-level coverage that `applyTrackConfig()` keeps route-check
+  warning popups linked behind the Parameter Bank runtime.
+- Moved the remaining bank-adjacent wrappers behind
+  `createParameterBankRuntime()` while preserving `ui.js` wrapper names and
+  public entrypoints.
+- Left Parameter Bank display rendering separate.
+- Did not move Tick Pipeline dependency construction, Drum Lane Workflow
+  behavior, or Drum Repeat Workflow behavior.
 
 ## 6. Entrypoint Error Wrapper
 

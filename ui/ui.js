@@ -89,9 +89,7 @@ import { renderSplashScreen } from './ui_splash.mjs';
 import { requestExport, confirmExportStart, pollPendingExport } from './ui_export.mjs';
 import {
     canEditSoundRoute,
-    schSlotForTrack,
-    routeCheckExpectedLabel,
-    routeCheckNeedsWarning
+    schSlotForTrack
 } from './ui_routes.mjs';
 import {
     advancePendingEditSoundEntry,
@@ -376,16 +374,9 @@ import {
     exitSchwungCoRunImpl
 } from './ui_corun_workflow.mjs';
 import {
-    applyBankParamImpl,
-    applyTrackConfigImpl,
-    readBankParamsImpl,
-    resetFxBanksImpl,
-    resetPerClipBankParamsToDefaultImpl,
-    resetSingleFxBankImpl
+    createParameterBankRuntime
 } from './ui_bank_params.mjs';
 import {
-    altIndicatorActiveImpl,
-    bankHasAltParamsImpl,
     ccKnobDeltaImpl
 } from './ui_bank_state.mjs';
 import {
@@ -1025,13 +1016,6 @@ function ensureGlobalMenuFresh() {
     return ensureGlobalMenuFreshImpl(S, createGlobalMenuWorkflowDeps());
 }
 
-function routeCheckWarnForTrack(t) {
-    if (routeCheckNeedsWarning(t))
-        showActionPopup('ROUTE CHECK', routeCheckExpectedLabel(t));
-}
-
-
-
 /* "REC Unavailable" two-option dialog (OK | BAKE NOW). Opens when Record
  * is pressed on a clip / lane in any non-Forward direction or Audio reverse
  * style. OK dismisses; BAKE NOW opens the standard bake confirm dialog
@@ -1323,26 +1307,28 @@ function readDrumRepeatRates(t) {
     return getTrackClipSyncFacade().readDrumRepeatRates(t);
 }
 
-/* Deps for the param-bank read/write/reset cluster (ui_bank_params.mjs).
- * Host get/set params null-guarded; helpers close over module-global S. */
-function createBankParamsDeps() {
-    return {
-        ...createHostParamAdapters(),
-        hasShadowSetParam: hasShadowSetParam(),
-        refreshDrumLaneBankParams,
-        routeCheckWarnForTrack,
-        syncDrumLanesMeta,
-        syncDrumLaneSteps,
-        syncDrumClipContent,
-        computePadNoteMap,
-        forceRedraw
-    };
+let _parameterBankRuntime = null;
+function getParameterBankRuntime() {
+    if (!_parameterBankRuntime) {
+        _parameterBankRuntime = createParameterBankRuntime(S, {
+            createHostParamAdapters,
+            hasShadowSetParam,
+            refreshDrumLaneBankParams,
+            syncDrumLanesMeta,
+            syncDrumLaneSteps,
+            syncDrumClipContent,
+            computePadNoteMap,
+            forceRedraw,
+            showActionPopup
+        });
+    }
+    return _parameterBankRuntime;
 }
 
 /* Reset per-clip S.bankParams to defaults for track t (no DSP call needed —
  * DSP already reset them; this just keeps JS mirrors in sync). */
 function resetPerClipBankParamsToDefault(t) {
-    return resetPerClipBankParamsToDefaultImpl(S, createBankParamsDeps(), t);
+    return getParameterBankRuntime().resetPerClipBankParamsToDefault(t);
 }
 
 function createPollDspWorkflowDeps() {
@@ -1403,32 +1389,15 @@ function updateNameIndex() {
  * override is queued after the reset so it lands on a later tick (DSP zeros
  * delay_level during the reset). */
 function resetFxBanks(t) {
-    return resetFxBanksImpl(S, createBankParamsDeps(), t);
+    return getParameterBankRuntime().resetFxBanks(t);
 }
 
-/* Reset ARP IN (TARP, bank 5) for a melodic track to DSP defaults.
- * Issues a single tN_tarp_reset which the DSP handler resolves via
- * arp_init_defaults + held-buffer clear + silence. JS mirrors are
- * zeroed in parallel so the bank overview reflects defaults immediately. */
 function resetTarp(t) {
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false;
-    S.pendingDefaultSetParams.push({ key: 't' + t + '_tarp_reset', val: '1' });
-    for (let k = 0; k < 8; k++) {
-        const pm = BANKS[5].knobs[k];
-        if (pm) S.bankParams[t][5][k] = pm.def;
-    }
-    for (let s = 0; s < 8; s++) {
-        S.tarpStepVel[t][s] = 4;
-        S.tarpStepInt[t][s] = 0;
-    }
-    S.tarpStepLoopLen[t] = 8;
-    S.tarpHeldNotes[t].clear();
-    S.screenDirty = true;
+    return getParameterBankRuntime().resetTarp(t);
 }
 
 function resetSingleFxBank(t, bankIdx) {
-    return resetSingleFxBankImpl(S, createBankParamsDeps(), t, bankIdx);
+    return getParameterBankRuntime().resetSingleFxBank(t, bankIdx);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1437,7 +1406,7 @@ function resetSingleFxBank(t, bankIdx) {
 
 /* Read all wired params for bankIdx on track t from DSP into S.bankParams. */
 function readBankParams(t, bankIdx) {
-    return readBankParamsImpl(S, createBankParamsDeps(), t, bankIdx);
+    return getParameterBankRuntime().readBankParams(t, bankIdx);
 }
 
 function readTrackConfig(t) {
@@ -1445,7 +1414,7 @@ function readTrackConfig(t) {
 }
 
 function applyTrackConfig(t, key, val) {
-    return applyTrackConfigImpl(S, createBankParamsDeps(), t, key, val);
+    return getParameterBankRuntime().applyTrackConfig(t, key, val);
 }
 
 /* Convert a track between melodic and drum, translating note content so the
@@ -1485,16 +1454,16 @@ function applyExtMidiRemap() {
 }
 
 function bankHasAltParams(t, bank) {
-    return bankHasAltParamsImpl(S, t, bank);
+    return getParameterBankRuntime().bankHasAltParams(t, bank);
 }
 
 function altIndicatorActive(t, bank) {
-    return altIndicatorActiveImpl(S, t, bank);
+    return getParameterBankRuntime().altIndicatorActive(t, bank);
 }
 
 /* Send a single param change to DSP and apply any JS-side side-effects. */
 function applyBankParam(t, bankIdx, knobIdx, val) {
-    return applyBankParamImpl(S, createBankParamsDeps(), t, bankIdx, knobIdx, val);
+    return getParameterBankRuntime().applyBankParam(t, bankIdx, knobIdx, val);
 }
 
 function createLiveNoteWorkflowDeps() {
