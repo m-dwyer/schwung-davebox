@@ -410,9 +410,6 @@ import {
     trackHasAnyDataImpl
 } from './ui_track_convert_workflow.mjs';
 import {
-    refreshSeqNotesIfCurrentImpl
-} from './ui_clip_state_sync.mjs';
-import {
     runInitWorkflowImpl
 } from './ui_init_workflow.mjs';
 
@@ -791,7 +788,7 @@ function clearAllMuteSolo() {
 /* Immediately refresh S.seqActiveNotes for the given step if it is the current
  * sequencer position on the active track — call after any step state change. */
 function refreshSeqNotesIfCurrent(t, ac, absIdx) {
-    return refreshSeqNotesIfCurrentImpl(S, createClipStateSyncDeps(), t, ac, absIdx);
+    return getTrackClipSyncFacade().refreshSeqNotesIfCurrent(t, ac, absIdx);
 }
 
 /* Clear all notes from a step and deactivate it (atomic DSP write). */

@@ -13,6 +13,7 @@ import {
     syncDrumLanesMetaImpl
 } from './ui_drum_clip_sync.mjs';
 import {
+    refreshSeqNotesIfCurrentImpl,
     restoreUiSidecarImpl,
     syncClipsFromDspImpl,
     syncClipsTargetedImpl,
@@ -90,6 +91,10 @@ export function createTrackClipSyncFacade(S, deps) {
         };
     }
 
+    function refreshSeqNotesIfCurrent(track, activeClip, absStep) {
+        return refreshSeqNotesIfCurrentImpl(S, createClipStateSyncDeps(), track, activeClip, absStep);
+    }
+
     function resyncDrumTrack(track) {
         return resyncDrumTrackImpl(S, createClipStateSyncDeps(), track);
     }
@@ -116,6 +121,7 @@ export function createTrackClipSyncFacade(S, deps) {
         readDrumRepeatRates,
         readTarpStepVel,
         readTrackConfig,
+        refreshSeqNotesIfCurrent,
         refreshDrumLaneBankParams,
         refreshPerClipBankParams,
         resyncDrumTrack,
