@@ -224,6 +224,28 @@ export function buildDspPadMapPayload(S, deps, padDispatchMuted) {
     return payload;
 }
 
+/* Modal pad owners:
+ * - sessionView                 - pads launch clips
+ * - button-helds (Shift/Delete/Copy/Mute/Capture/Loop) - pads are shortcuts
+ * - tapTempoOpen                - pads are tap input
+ * - ARP step-edit pad mode      - K5 held in SEQ ARP (bank 4) or TRACK ARP
+ *                                  (bank 5) with steps mode != Off; pads edit
+ *                                  step velocity, not play notes
+ * globalMenuOpen is NOT in this list - pads should still play notes in
+ * track view while the menu is open (user confirmed 2026-05-17). */
+export function padDispatchMutedNow(S) {
+    if (S.sessionView) return true;
+    if (S.shiftHeld || S.deleteHeld || S.muteHeld || S.copyHeld
+        || S.captureHeld || S.loopHeld || S.tapTempoOpen) return true;
+    if ((S.activeBank === 4 || S.activeBank === 5)
+        && S.knobTouched === 4
+        && S.bankParams[S.activeTrack]
+        && ((S.bankParams[S.activeTrack][S.activeBank] || [])[4] | 0) !== 0) return true;
+    /* Arp Steps overlay: pads are the persistent vel-level editor, not playable. */
+    if (S.stepIntervalMode && (S.activeBank === 4 || S.activeBank === 5)) return true;
+    return false;
+}
+
 export function applyPadNoteMap(S, deps) {
     updatePadNoteMap(S, deps);
     if (S.dspInboundEnabled && typeof deps.host_module_set_param === 'function') {
@@ -232,4 +254,11 @@ export function applyPadNoteMap(S, deps) {
         deps.host_module_set_param('t' + S.activeTrack + '_padmap', payload);
         S.lastPushedMuted = padDispatchMuted;
     }
+}
+
+export function computePadNoteMap(S, deps) {
+    applyPadNoteMap(S, {
+        ...deps,
+        padDispatchMuted: () => padDispatchMutedNow(S)
+    });
 }

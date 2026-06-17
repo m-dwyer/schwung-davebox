@@ -239,13 +239,14 @@ import {
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
-    applyPadNoteMap,
+    computePadNoteMap as computePadNoteMapImpl,
     createLiveNoteQueues,
     drumPadToLane as padSurfaceDrumPadToLane,
     drumVelZoneToVelocity,
     handleCaptureDrumLanePress,
     handleDrumLanePadPress,
     handleDrumVelocityPadPress,
+    padDispatchMutedNow as padDispatchMutedNowImpl,
     queueLiveNoteOff,
     resolveDrumPadTarget
 } from './ui_pad_surface.mjs';
@@ -1140,26 +1141,8 @@ function clipHasContent(t, c) {
 }
 
 
-/* PHASE-1: helper for the pad-dispatch mute condition. Modal sources:
- * - sessionView                 — pads launch clips
- * - button-helds (Shift/Delete/Copy/Mute/Capture/Loop) — pads are shortcuts
- * - tapTempoOpen                — pads are tap input
- * - ARP step-edit pad mode      — K5 held in SEQ ARP (bank 4) or TRACK ARP
- *                                  (bank 5) with steps mode != Off; pads edit
- *                                  step velocity, not play notes
- * globalMenuOpen is NOT in this list — pads should still play notes in
- * track view while the menu is open (user confirmed 2026-05-17). */
 function _padDispatchMutedNow() {
-    if (S.sessionView) return true;
-    if (S.shiftHeld || S.deleteHeld || S.muteHeld || S.copyHeld
-        || S.captureHeld || S.loopHeld || S.tapTempoOpen) return true;
-    if ((S.activeBank === 4 || S.activeBank === 5)
-        && S.knobTouched === 4
-        && S.bankParams[S.activeTrack]
-        && ((S.bankParams[S.activeTrack][S.activeBank] || [])[4] | 0) !== 0) return true;
-    /* Arp Steps overlay: pads are the persistent vel-level editor, not playable. */
-    if (S.stepIntervalMode && (S.activeBank === 4 || S.activeBank === 5)) return true;
-    return false;
+    return padDispatchMutedNowImpl(S);
 }
 
 /* ---- Transpose all melodic clips on global Key/Scale change ----------
@@ -1197,23 +1180,11 @@ function xposeCommit(candK, candS) {
 }
 
 function computePadNoteMap() {
-    /* Phase 1: push the resolved active-track map to DSP for audio-thread
-     * inbound. DSP only ever indexes pad_note_map[inst->active_track], so
-     * pushing the one active track's map on every recompute is sufficient.
-     * Dormant until the capability gate flips dsp_inbound_enabled in
-     * piece 3. */
-    /* PHASE-1: only push on patched Schwung. The DSP padmap handler doubles
-     * as the capability signal — its presence sets inst->dsp_inbound_enabled,
-     * gating on_midi dispatch. On stock Schwung S.dspInboundEnabled stays
-     * false, the push is skipped, on_midi (which isn't called on stock anyway)
-     * stays dormant, and the JS pendingLiveNotes path keeps working unchanged.
-     * Remove this gate when patches upstreamed. */
-    applyPadNoteMap(S, {
+    computePadNoteMapImpl(S, {
         PAD_MODE_DRUM,
         DRUM_LANES,
         DRUM_BASE_NOTE,
-        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
-        padDispatchMuted: _padDispatchMutedNow
+        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null
     });
 }
 
