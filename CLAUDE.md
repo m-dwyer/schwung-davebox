@@ -74,6 +74,20 @@ shadow_ui runs QuickJS, not V8. Node.js `--check` is NOT a reliable validator.
 
 ## JS internals
 
+- `ui/ui.js` is the UI Runtime composition root. Keep public Schwung entrypoints
+  (`globalThis.init`, `globalThis.tick`, `globalThis.onMidiMessageInternal`,
+  `globalThis.onMidiMessageExternal`) assigned there. Extract by runtime concept
+  and invariant, not by file size; see `docs/adr/0001-refactor-by-runtime-concept.md`.
+- Entrypoint exceptions are intentionally swallowed by
+  `ui_entrypoint_diagnostics.mjs` after deduped logging to
+  `/data/UserData/schwung/seq8-jserr.log`. Preserve the log path, dedupe key
+  `(where|message)`, context fields, and stock-host no-op behavior.
+- Tick Pipeline ordering is load-bearing. In `runTickWorkflow`, pad-map
+  recompute stays before the default set-param drain; `pendingSetLoad` drains
+  before `pendingDefaultSetParams`; DSP mirror resync runs after those drains;
+  `pendingSuspendSave` is an end-of-tick persistence action; final draw is gated
+  by suspend state. Extend the source-order/focused tests before moving any of
+  those calls.
 - **Two-tick deferred pattern** (`_toggle` / `_set_notes`): activate step on tick N, write notes on tick N+1. Phase-2 check must precede phase-1 in tick().
 - `pendingDrumResync` deferred 2 ticks after drum clip switch; `pendingStepsReread` 2 ticks after `_reassign`/`_copy_to`.
 - `bankParams[t][b][k]`: 7 banks, refreshed via `tN_cC_pfx_snapshot`. Track config uses dedicated arrays + `readTrackConfig`/`applyTrackConfig` — NOT in bankParams.

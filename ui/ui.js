@@ -269,6 +269,9 @@ import {
     runTickWorkflow
 } from './ui_tick_workflow.mjs';
 import {
+    createEntrypointErrorWrapper
+} from './ui_entrypoint_diagnostics.mjs';
+import {
     drawUIImpl
 } from './ui_screen_router_workflow.mjs';
 import {
@@ -1936,33 +1939,15 @@ function syncMuteSoloFromDsp() {
 }
 
 /* --- DIAGNOSTIC (2026-05-23 crash investigation) ---------------------------
- * QuickJS swallows unhandled exceptions thrown inside entry-point callbacks:
- * the module silently stops (presents as a hang/freeze; orphaned audio thread
- * then spins → RT throttle). Wrap the top-level entry points so the NEXT
- * failure writes its error to a file we can pull over ssh instead of vanishing.
- * Deduped by (where|message) → a persistent error writes once (no I/O storm).
- * Errors are swallowed so the module survives. REMOVE once the crash is pinned. */
-let _jsErrSeen = {};
-let _jsErrBuf = '';
-function captureError(where, e) {
-    try {
-        const msg = (e && e.message) ? e.message : String(e);
-        const key = where + '|' + msg;
-        if (_jsErrSeen[key]) return;
-        _jsErrSeen[key] = 1;
-        const stack = (e && e.stack) ? ('\n' + e.stack) : '';
-        _jsErrBuf += '[tick=' + (S.tickCount | 0)
-                   + ' sv=' + (S.sessionView ? 1 : 0)
-                   + ' loop=' + (S.loopHeld ? 1 : 0)
-                   + ' lock=' + (S.perfViewLocked ? 1 : 0)
-                   + ' susp=' + (S.pendingSuspendSave ? 1 : 0)
-                   + '] ' + where + ': ' + msg + stack + '\n\n';
-        const writeFile = optionalHostWriteFile();
-        if (writeFile) writeFile('/data/UserData/schwung/seq8-jserr.log', _jsErrBuf);
-    } catch (_e) { /* the logger must never throw */ }
+ * QuickJS swallows unhandled exceptions thrown inside entry-point callbacks.
+ * Keep public callbacks in this file while the capture details live in the
+ * tiny UI Runtime diagnostic module. */
+const _entrypointDiagnostics = createEntrypointErrorWrapper(S);
+function runEntrypoint(where, fn) {
+    return _entrypointDiagnostics.runEntrypoint(where, fn);
 }
 
-globalThis.init = function () { try { runInitWorkflowImpl(S, createInitWorkflowDeps()); } catch (e) { captureError('init', e); } };
+globalThis.init = function () { runEntrypoint('init', function () { runInitWorkflowImpl(S, createInitWorkflowDeps()); }); };
 
 function createTickWorkflowDeps() {
     return {
@@ -2072,7 +2057,7 @@ function createTickWorkflowDeps() {
     };
 }
 
-globalThis.tick = function () { try { _tickImpl(); } catch (e) { captureError('tick', e); } };
+globalThis.tick = function () { runEntrypoint('tick', _tickImpl); };
 function _tickImpl() {
     runTickWorkflow(S, createTickWorkflowDeps());
 }
@@ -2475,7 +2460,7 @@ function _onPadRelease(status, d1, d2) {
     onPadReleaseImpl(S, createInputDispatchWorkflowDeps(), status, d1, d2);
 }
 
-globalThis.onMidiMessageInternal = function (data) { try { _onMidiInternalImpl(data); } catch (e) { captureError('onMidiInternal', e); } };
+globalThis.onMidiMessageInternal = function (data) { runEntrypoint('onMidiInternal', function () { _onMidiInternalImpl(data); }); };
 function _onMidiInternalImpl(data) {
     handleUiMidiInternalMessage(S, createMidiInternalWorkflowDeps(), data);
 }
@@ -2537,7 +2522,7 @@ function createPadAftertouchWorkflowDeps() {
     };
 }
 
-globalThis.onMidiMessageExternal = function (data) { try { _onMidiExternalImpl(data); } catch (e) { captureError('onMidiExternal', e); } };
+globalThis.onMidiMessageExternal = function (data) { runEntrypoint('onMidiExternal', function () { _onMidiExternalImpl(data); }); };
 function _onMidiExternalImpl(data) {
     return onMidiExternalImpl(S, createMidiExternalWorkflowDeps(), data);
 };

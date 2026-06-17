@@ -1,9 +1,8 @@
 # UI Refactor Candidates
 
 This audit ranks larger `ui/ui.js` refactor opportunities by runtime concept,
-testability, and risk. It complements `docs/UI_REFACTOR_PLAN.md`: the goal is
-not smaller files by itself, but deeper modules whose interfaces improve
-locality and leverage.
+testability, and risk. The goal is not smaller files by itself, but deeper
+modules whose interfaces improve locality and leverage.
 
 ## Current Size Map
 

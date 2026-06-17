@@ -313,8 +313,10 @@ test('ui.js keeps the public tick callback and error wrapper while delegating to
     const source = await readFile(new URL('./ui.js', import.meta.url), 'utf8');
     assert.match(
         source,
-        /globalThis\.tick = function \(\) \{ try \{ _tickImpl\(\); \} catch \(e\) \{ captureError\('tick', e\); \} \};/
+        /globalThis\.tick = function \(\) \{ runEntrypoint\('tick', _tickImpl\); \};/
     );
+    assert.match(source, /const _entrypointDiagnostics = createEntrypointErrorWrapper\(S\);/);
+    assert.match(source, /function runEntrypoint\(where, fn\) \{\s*return _entrypointDiagnostics\.runEntrypoint\(where, fn\);\s*\}/);
     assert.match(source, /function _tickImpl\(\) \{\s*runTickWorkflow\(S, createTickWorkflowDeps\(\)\);\s*\}/);
 });
 
