@@ -7,7 +7,7 @@
  * load-bearing sequence. Each function here is therefore an ORDERED STEP, not a
  * returning handler — there is no "return true to consume" semantics. Every step
  * runs unconditionally; correctness comes from preserving the call order. The
- * thin pollDSP() orchestrator in ui.js keeps the three early-return guards
+ * thin pollDSP() wrapper in ui.js delegates to the orchestrator here, which keeps the three early-return guards
  * (no get_param, no snapshot, short snapshot) and threads two cross-block locals:
  * the parsed snapshot array `v` (to the three snapshot steps) and
  * countInDspActive (pollSnapshotClipStates -> pollCountInEnd).
@@ -24,6 +24,29 @@
  * and S.playingPrev is set at the end of pollTransportTransitions.
  *
  * Steps take everything via deps so they can be unit-tested without the host. */
+
+export function pollDspWorkflow(S, deps) {
+    /* Block A runs BEFORE the get_param guard (uses shadow_corun_state, not get_param). */
+    pollCoRunReconcile(S, deps);
+    if (!deps.getParam) return;
+    pollAutomationAtIndicator(S, deps);
+    const snap = deps.getParam('state_snapshot');
+    if (!snap) return;
+    const v = snap.split(' ');
+    if (v.length < 53) return;
+    pollSnapshotTracks(S, deps, v);
+    const countInDspActive = pollSnapshotClipStates(S, deps, v);
+    pollMergeStateMachine(S, deps, v);
+    pollDeferredBankRefresh(S, deps);
+    pollPlayheadPads(S, deps);
+    pollSeqFollowPage(S, deps);
+    pollRecordPendingPage(S, deps);
+    pollCountInEnd(S, deps, countInDspActive);
+    pollTransportTransitions(S, deps);
+    pollStepLedRefresh(S, deps);
+    pollSeqActiveNotes(S, deps);
+    pollDeferredSave(S, deps);
+}
 
 /* Block A — Co-run state reconcile against SHM. Runs BEFORE the get_param guard
  * in the orchestrator. The shim auto-clears co-run on user Back press (framework

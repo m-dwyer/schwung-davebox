@@ -212,20 +212,7 @@ import {
     handleUiKnobTouch
 } from './ui_knob_touch_workflow.mjs';
 import {
-    pollAutomationAtIndicator,
-    pollCoRunReconcile,
-    pollCountInEnd,
-    pollDeferredBankRefresh,
-    pollDeferredSave,
-    pollMergeStateMachine,
-    pollPlayheadPads,
-    pollRecordPendingPage,
-    pollSeqActiveNotes,
-    pollSeqFollowPage,
-    pollSnapshotClipStates,
-    pollSnapshotTracks,
-    pollStepLedRefresh,
-    pollTransportTransitions
+    pollDspWorkflow
 } from './ui_polldsp_workflow.mjs';
 import {
     renderTrackStepEditView
@@ -1424,34 +1411,9 @@ function createPollDspWorkflowDeps() {
     };
 }
 
-/* Fixed-order DSP reconcile pipeline. NOT a dispatch ladder — the extracted
- * steps in ui_polldsp_workflow.mjs run unconditionally in this exact sequence
- * (see that module's header for the ordering/coalescing rationale). This thin
- * orchestrator keeps the three early-return guards (no get_param, no snapshot,
- * short snapshot) and threads the two cross-block locals: the parsed snapshot
- * array `v` and countInDspActive. */
+/* Public wrapper retained for tick-path callers and host-global naming. */
 function pollDSP() {
-    const deps = createPollDspWorkflowDeps();
-    /* Block A runs BEFORE the get_param guard (uses shadow_corun_state, not get_param). */
-    pollCoRunReconcile(S, deps);
-    if (typeof host_module_get_param !== 'function') return;
-    pollAutomationAtIndicator(S, deps);
-    const snap = host_module_get_param('state_snapshot');
-    if (!snap) return;
-    const v = snap.split(' ');
-    if (v.length < 53) return;
-    pollSnapshotTracks(S, deps, v);
-    const countInDspActive = pollSnapshotClipStates(S, deps, v);
-    pollMergeStateMachine(S, deps, v);
-    pollDeferredBankRefresh(S, deps);
-    pollPlayheadPads(S, deps);
-    pollSeqFollowPage(S, deps);
-    pollRecordPendingPage(S, deps);
-    pollCountInEnd(S, deps, countInDspActive);
-    pollTransportTransitions(S, deps);
-    pollStepLedRefresh(S, deps);
-    pollSeqActiveNotes(S, deps);
-    pollDeferredSave(S, deps);
+    return pollDspWorkflow(S, createPollDspWorkflowDeps());
 }
 
 /* Refresh name -> uuid mapping after any successful save so that future
