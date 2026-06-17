@@ -5,10 +5,14 @@
   "type": "module",
   "description": "Overture Schwung tool module — C DSP + JS UI. esbuild is the host-only bundler for ui/ui.js -> dist/overture/ui.js (see scripts/bundle_ui.sh).",
   "scripts": {
-    "bundle": "scripts/bundle_ui.sh"
+    "bundle": "scripts/bundle_ui.sh",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
-    "esbuild": "^0.21.5"
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.21.5",
+    "vitest": "^2.1.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["esbuild"]
