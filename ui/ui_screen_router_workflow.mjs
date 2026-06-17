@@ -32,16 +32,16 @@ export function drawUIImpl(S, deps) {
     }
     S._altPrevBank  = S.activeBank;
     S._altPrevTrack = S.activeTrack;
-    if (S.sessionOverlayHeld) { deps.renderSessionOverview(deps.createSessionOverviewRenderDeps()); return; }
+    if (S.sessionOverlayHeld) { deps.renderSessionOverview(deps.renderSurface()); return; }
     if (S.pendingInheritPicker) { deps.drawInheritPicker(); return; }
     if (S.snapshotPicker) { deps.drawSnapshotPicker(); return; }
     if (S.clearAutoMenu) { deps.drawClearAutoMenu(); return; }
     if (S.pendingSceneBakePicker) {
-        deps.renderSceneBakePickerPrompt(deps.createPromptRenderDeps());
+        deps.renderSceneBakePickerPrompt(deps.renderSurface());
         return;
     }
     if (S.pendingMergePlacement) {
-        deps.renderMergePlacementPrompt(deps.createPromptRenderDeps());
+        deps.renderMergePlacementPrompt(deps.renderSurface());
         return;
     }
     if (S.confirmStateWipe) { deps.drawStateWipeConfirm(); return; }
@@ -52,9 +52,9 @@ export function drawUIImpl(S, deps) {
     if (S.confirmBake) { deps.drawBakeConfirm(); return; }
     if (S.globalMenuOpen || S.tapTempoOpen) { deps.ensureGlobalMenuFresh(); deps.drawGlobalMenu(); return; }
     /* Perf Mode OLED takeover (Session View + Loop held or locked) */
-    if (S.sessionView && (S.loopHeld || S.perfViewLocked)) { deps.renderPerfModeOled(deps.createPerfModeRenderDeps()); return; }
+    if (S.sessionView && (S.loopHeld || S.perfViewLocked)) { deps.renderPerfModeOled(deps.renderSurface()); return; }
     if (S.stateLoading || S.bootSplashTicks > 0) {
-        deps.renderSplashScreen(S, deps.createSplashRenderDeps());
+        deps.renderSplashScreen(S, deps.renderSurface());
         return;
     }
     /* Not in splash mode — clear the entry-edge flag so the next splash rerolls. */
@@ -63,10 +63,10 @@ export function drawUIImpl(S, deps) {
     deps.clear_screen();
     if (S.sessionView) {
         if (S.actionPopupEndTick >= 0) {
-            deps.renderSessionActionPopup(deps.createPopupRenderDeps());
+            deps.renderSessionActionPopup(deps.renderSurface());
             return;
         }
-        deps.renderSessionIdleView(deps.createSessionIdleRenderDeps());
+        deps.renderSessionIdleView(deps.renderSurface());
         return;
     }
 
@@ -76,42 +76,42 @@ export function drawUIImpl(S, deps) {
 
     /* Compress-limit override: highest priority for ~1500ms after a blocked compress */
     if (S.stretchBlockedEndTick >= 0) {
-        deps.renderCompressLimitNotice(deps.createPopupRenderDeps());
+        deps.renderCompressLimitNotice(deps.renderSurface());
         return;
     }
 
     /* Action confirmation pop-up: ~500ms; defers to step edit and active-knob bank overview */
     if (S.actionPopupEndTick >= 0 && S.heldStep < 0 && S.knobTouched < 0) {
-        deps.renderTrackActionPopup(deps.createPopupRenderDeps());
+        deps.renderTrackActionPopup(deps.renderSurface());
         return;
     }
 
     /* No-note flash: ~600ms after pressing an empty step with no prior pad */
     if (S.noNoteFlashEndTick >= 0 && S.activeBank !== 6) {
-        deps.renderNoNoteFlashNotice(deps.createPopupRenderDeps());
+        deps.renderNoNoteFlashNotice(deps.renderSurface());
         return;
     }
 
     if (S.shiftHeld && !S.sessionView && S.heldStep < 0 && S.knobTouched < 0 &&
             !S.deleteHeld && !S.copyHeld && !S.muteHeld && !S.loopHeld) {
-        deps.renderShiftStepHelp(deps.createPromptRenderDeps());
+        deps.renderShiftStepHelp(deps.renderSurface());
         return;
     }
 
     /* Step edit: show assigned notes and step identity */
     if (S.heldStep >= 0) {
         if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-            deps.renderCcStepEditView(deps.createCcStepEditRenderDeps());
+            deps.renderCcStepEditView(deps.renderSurface());
             return;
         } else {
-        if (deps.renderTrackStepEditView(deps.createStepEditRenderDeps())) return;
+        if (deps.renderTrackStepEditView(deps.renderSurface())) return;
         /* Non-empty melodic step, notes still loading at hold threshold: fall through to bank/header. */
     } /* end else (non-bank-6 step edit) */
     }
 
     /* Loop view: own priority state so screen is fully cleared first */
     if (S.loopHeld) {
-        deps.renderLoopView(deps.createLoopRenderDeps());
+        deps.renderLoopView(deps.renderSurface());
         return;
     }
 
@@ -120,14 +120,14 @@ export function drawUIImpl(S, deps) {
      * offsets (±24); pad grid is the persistent step-vel level editor handled in
      * updateTrackLEDs. Renders REGARDLESS of knob-touch / inTimeout (persistent). */
     if (bank >= 0 && S.stepIntervalMode && !S.sessionView && (bank === 4 || bank === 5)) {
-        deps.renderStepIntervalOverlay(deps.createStepIntervalRenderDeps(), bank);
+        deps.renderStepIntervalOverlay(deps.renderSurface(), bank);
         return;
     }
 
     /* Auto bank idle display: lane info + automation graph + progress bar */
     if (bank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM &&
             !S.loopHeld && S.knobTouched < 0 && !inTimeout) {
-        deps.renderMotionIdleView(deps.createMotionIdleRenderDeps());
+        deps.renderMotionIdleView(deps.renderSurface());
         return;
     }
 
@@ -135,10 +135,10 @@ export function drawUIImpl(S, deps) {
             (S.altMode && deps.bankHasAltParams(S.activeTrack, bank)) ||
             (S.shiftHeld && bank === 1 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM))) {
         if (S.knobTouched >= 0 && !S.stepIntervalMode) {
-            deps.renderParamPeek(deps.createPopupRenderDeps());
+            deps.renderParamPeek(deps.renderSurface());
             return;
         }
-        const bankRenderDeps = deps.createBankRenderDeps();
+        const bankRenderDeps = deps.renderSurface();
         if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 5) {
             const t    = S.activeTrack;
             const lane = S.activeDrumLane[t];
@@ -147,8 +147,8 @@ export function drawUIImpl(S, deps) {
         deps.renderTrackBankOverview(bankRenderDeps, bank);
 
     } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-        deps.renderDrumTrackIdleView(deps.createTrackIdleRenderDeps());
+        deps.renderDrumTrackIdleView(deps.renderSurface());
     } else {
-        deps.renderMelodicTrackIdleView(deps.createTrackIdleRenderDeps());
+        deps.renderMelodicTrackIdleView(deps.renderSurface());
     }
 }

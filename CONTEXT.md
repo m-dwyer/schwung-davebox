@@ -68,6 +68,10 @@ _Avoid_: Detail view, edit view
 A bank of eight knob-addressable parameters whose read/write behavior may target global, track, clip, drum-lane, action, or automation state.
 _Avoid_: Knob page, bank component
 
+**Render Surface**:
+The single bag of OLED drawing primitives (`print`, `pixelPrint`, `fill_rect`, `clear_screen`), shared chrome helpers (bank headings, alt arrow, metro indicator, position bar), and render-time param queries (`altIndicatorActive`, `bankHasAltParams`, `midiNoteName`) that every render module draws through. Assembled once at the composition root and memoized; a render module reads only the subset it needs off the one surface. Replaced the former per-render deps factories and their identity adapters.
+_Avoid_: Canvas, graphics context, render deps, draw adapter
+
 **Patched Schwung Capability**:
 A runtime-gated host feature available only when the patched Schwung host exposes the required function.
 _Avoid_: Feature flag, build flag
@@ -86,6 +90,7 @@ _Avoid_: Native mode, passthrough
 - **Track / Clip Sync** refreshes the **DSP Mirror** for clips, tracks, drum lanes, automation, and sidecar-derived UI state.
 - The **UI Sidecar** persists UI-only state and is reconciled with DSP state through **Track / Clip Sync** after state load or resume.
 - **Parameter Bank** read/write behavior depends on track type, active clip, active drum lane, and coalescing-sensitive DSP command rules.
+- Every render module draws through the one **Render Surface**; the composition root assembles it once and passes it wherever a per-render deps bag was formerly built.
 - **Patched Schwung Capability** checks keep the same **Tool Module** working on both stock and patched Schwung hosts.
 
 ## Example Dialogue

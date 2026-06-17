@@ -274,24 +274,7 @@ import {
 import {
     drawUIImpl
 } from './ui_screen_router_workflow.mjs';
-import {
-    createBankChromeRenderDepsImpl,
-    createBankRenderDepsImpl,
-    createCcStepEditRenderDepsImpl,
-    createLoopRenderDepsImpl,
-    createMetroIndicatorRenderDepsImpl,
-    createModalRenderDepsImpl,
-    createMotionIdleRenderDepsImpl,
-    createPerfModeRenderDepsImpl,
-    createPopupRenderDepsImpl,
-    createPromptRenderDepsImpl,
-    createSessionIdleRenderDepsImpl,
-    createSessionOverviewRenderDepsImpl,
-    createSplashRenderDepsImpl,
-    createStepEditRenderDepsImpl,
-    createStepIntervalRenderDepsImpl,
-    createTrackIdleRenderDepsImpl
-} from './ui_render_adapters.mjs';
+import { createRenderSurface } from './ui_render_surface.mjs';
 import {
     createHostParamAdapters,
     createUiFlagAdapters,
@@ -424,23 +407,23 @@ function bankHeader(bankIdx) {
 }
 
 function drawBankStrip(rightX, hdrBgWhite) {
-    return renderDrawBankStrip(createBankChromeRenderDeps(), rightX, hdrBgWhite);
+    return renderDrawBankStrip(renderSurface(), rightX, hdrBgWhite);
 }
 
 function drawBankHeaderRight(showTrack, hdrBgWhite) {
-    renderDrawBankHeaderRight(createBankChromeRenderDeps(), showTrack, hdrBgWhite);
+    renderDrawBankHeaderRight(renderSurface(), showTrack, hdrBgWhite);
 }
 
 function drawBankHeading(name, showTrack) {
-    renderDrawBankHeading(createBankChromeRenderDeps(), name, showTrack);
+    renderDrawBankHeading(renderSurface(), name, showTrack);
 }
 
 function drawBankHeadingInverted(name, showTrack) {
-    renderDrawBankHeadingInverted(createBankChromeRenderDeps(), name, showTrack);
+    renderDrawBankHeadingInverted(renderSurface(), name, showTrack);
 }
 
 function drawAltArrow(x, hdrBgWhite, on) {
-    renderDrawAltArrow(createBankChromeRenderDeps(), x, hdrBgWhite, on);
+    renderDrawAltArrow(renderSurface(), x, hdrBgWhite, on);
 }
 
 /* Iter knob list: 36 entries, raw byte at each position. Index 0 = default (1/1).
@@ -455,7 +438,7 @@ const STEP_ITER_LIST = (function() {
 
 
 function drawMetroIndicator() {
-    renderMetroIndicator(createMetroIndicatorRenderDeps());
+    renderMetroIndicator(renderSurface());
 }
 
 /* ------------------------------------------------------------------ */
@@ -1024,24 +1007,24 @@ function ensureGlobalMenuFresh() {
  * style. OK dismisses; BAKE NOW opens the standard bake confirm dialog
  * pre-targeted at the active clip / drum lane. */
 function drawStateWipeConfirm() {
-    renderStateWipeConfirm(createModalRenderDeps(), S.confirmStateWipeSel);
+    renderStateWipeConfirm(renderSurface(), S.confirmStateWipeSel);
 }
 
 function drawRecordBlockedDialog() {
-    renderRecordBlockedDialog(createModalRenderDeps(), S.recordBlockedDialogSel);
+    renderRecordBlockedDialog(renderSurface(), S.recordBlockedDialogSel);
 }
 
 /* Destructive Lgto confirm dialog. Right-turn of CLIP K8 / DRUM LANE K8
  * opens this. OK applies; CANCEL aborts. Undoable. */
 function drawLgtoConfirm() {
-    renderLgtoConfirm(createModalRenderDeps(), {
+    renderLgtoConfirm(renderSurface(), {
         isDrum: S.confirmLgtoIsDrum,
         selected: S.confirmLgtoSel
     });
 }
 
 function drawBakeConfirm() {
-    renderBakeConfirm(createModalRenderDeps(), {
+    renderBakeConfirm(renderSurface(), {
         wrapPhase: S.confirmBakeWrapPhase,
         wrapSel: S.confirmBakeWrapSel,
         isMultiLoop: S.confirmBakeIsMultiLoop,
@@ -1055,20 +1038,20 @@ function drawBakeConfirm() {
 
 
 function drawInheritPicker() {
-    renderInheritPicker(createModalRenderDeps(), S.pendingInheritPicker);
+    renderInheritPicker(renderSurface(), S.pendingInheritPicker);
 }
 
 function drawSnapshotPicker() {
-    renderSnapshotPicker(createModalRenderDeps(), S.snapshotPicker);
+    renderSnapshotPicker(renderSurface(), S.snapshotPicker);
 }
 
 /* CLEAR AUTOMATION modal — checkable AT / PB(disabled) / CC + a CLEAR action. */
 function drawClearAutoMenu() {
-    renderClearAutomationMenu(createModalRenderDeps(), S.clearAutoMenu);
+    renderClearAutomationMenu(renderSurface(), S.clearAutoMenu);
 }
 
 function drawBakeSceneConfirm() {
-    renderBakeSceneConfirm(createModalRenderDeps(), {
+    renderBakeSceneConfirm(renderSurface(), {
         wrapPhase: S.confirmBakeSceneWrapPhase,
         wrapSel: S.confirmBakeSceneWrapSel,
         sel: S.confirmBakeSceneSel
@@ -1076,7 +1059,7 @@ function drawBakeSceneConfirm() {
 }
 
 function drawXposeConfirm() {
-    renderXposeConfirm(createModalRenderDeps(), {
+    renderXposeConfirm(renderSurface(), {
         key: S.confirmXposeKey,
         scale: S.confirmXposeScale,
         sel: S.confirmXposeSel,
@@ -1583,154 +1566,44 @@ function forceRedraw() {
 /* Display                                                              */
 /* ------------------------------------------------------------------ */
 
-function createBankRenderDeps() {
-    return createBankRenderDepsImpl({
-        print,
-        fill_rect,
-        drawBankHeading,
-        drawBankHeadingInverted,
-        drawAltArrow,
-        altIndicatorActive,
-        bankHasAltParams,
-        midiNoteName
-    });
-}
-
-function createBankChromeRenderDeps() {
-    return createBankChromeRenderDepsImpl({
-        print,
-        fill_rect,
-        altIndicatorActive,
-        bankHasAltParams
-    });
-}
-
-function createMetroIndicatorRenderDeps() {
-    return createMetroIndicatorRenderDepsImpl({
-        pixelPrint,
-        fill_rect
-    });
-}
-
-function createSplashRenderDeps() {
-    return createSplashRenderDepsImpl({
-        clear_screen,
-        fill_rect
-    });
-}
-
-function createTrackIdleRenderDeps() {
-    return createTrackIdleRenderDepsImpl({
-        pixelPrint,
-        fill_rect,
-        drawBankHeading,
-        drawBankHeadingInverted,
-        drawMetroIndicator,
-        drawPositionBar,
-    });
-}
-
-function createSessionIdleRenderDeps() {
-    return createSessionIdleRenderDepsImpl({
-        print,
-        pixelPrint,
-        fill_rect,
-        drawMetroIndicator
-    });
-}
-
-function createSessionOverviewRenderDeps() {
-    return createSessionOverviewRenderDepsImpl({
-        fill_rect
-    });
-}
-
-function createPerfModeRenderDeps() {
-    return createPerfModeRenderDepsImpl({
-        clear_screen,
-        print,
-        pixelPrint,
-        fill_rect
-    });
-}
-
-function createMotionIdleRenderDeps() {
-    return createMotionIdleRenderDepsImpl({
-        print,
-        fill_rect,
-        drawBankHeadingInverted,
-        host_module_get_param: optionalHostModuleGetParam()
-    });
-}
-
-function createPopupRenderDeps() {
-    return createPopupRenderDepsImpl({
-        print,
-        fill_rect
-    });
-}
-
-function createPromptRenderDeps() {
-    return createPromptRenderDepsImpl({
-        clear_screen,
-        fill_rect,
-        print
-    });
-}
-
-function createModalRenderDeps() {
-    return createModalRenderDepsImpl({
-        clear_screen,
-        fill_rect,
-        print,
-        drawMenuHeader
-    });
-}
-
-function createLoopRenderDeps() {
-    return createLoopRenderDepsImpl({
-        print,
-        pixelPrint,
-        fill_rect
-    });
-}
-
-function createStepEditRenderDeps() {
-    return createStepEditRenderDepsImpl({
-        print,
-        pixelPrint,
-        fill_rect
-    });
-}
-
-function createCcStepEditRenderDeps() {
-    return createCcStepEditRenderDepsImpl({
-        print,
-        pixelPrint,
-        fill_rect,
-        host_module_get_param: optionalHostModuleGetParam()
-    });
-}
-
-function createStepIntervalRenderDeps() {
-    return createStepIntervalRenderDepsImpl({
-        print,
-        fill_rect,
-        drawBankHeading
-    });
+/* Render Surface — assembled once from the host drawing primitives, the local
+ * chrome helpers, and the render-time param queries. Memoized: the references are
+ * stable for the runtime's life, so every render module shares the one surface
+ * instead of rebuilding a bespoke deps bag each frame. Built lazily on first draw
+ * so the optional host param read resolves after the host globals exist. */
+let _renderSurface = null;
+function renderSurface() {
+    if (_renderSurface === null) {
+        _renderSurface = createRenderSurface({
+            print,
+            pixelPrint,
+            fill_rect,
+            clear_screen,
+            drawBankHeading,
+            drawBankHeadingInverted,
+            drawAltArrow,
+            drawMenuHeader,
+            drawMetroIndicator,
+            drawPositionBar,
+            altIndicatorActive,
+            bankHasAltParams,
+            midiNoteName,
+            host_module_get_param: optionalHostModuleGetParam(),
+        });
+    }
+    return _renderSurface;
 }
 
 function drawUI() {
     return drawUIImpl(S, {
+        renderSurface,
         paintCoRunSideButtons,
         renderSessionOverview,
-        createSessionOverviewRenderDeps,
         drawInheritPicker,
         drawSnapshotPicker,
         drawClearAutoMenu,
         renderSceneBakePickerPrompt,
         renderMergePlacementPrompt,
-        createPromptRenderDeps,
         drawStateWipeConfirm,
         drawRecordBlockedDialog,
         drawLgtoConfirm,
@@ -1740,36 +1613,25 @@ function drawUI() {
         ensureGlobalMenuFresh,
         drawGlobalMenu,
         renderPerfModeOled,
-        createPerfModeRenderDeps,
         renderSplashScreen,
-        createSplashRenderDeps,
         clear_screen,
         renderSessionActionPopup,
         renderSessionIdleView,
-        createPopupRenderDeps,
-        createSessionIdleRenderDeps,
         renderCompressLimitNotice,
         renderTrackActionPopup,
         renderNoNoteFlashNotice,
         renderShiftStepHelp,
         renderCcStepEditView,
-        createCcStepEditRenderDeps,
         renderTrackStepEditView,
-        createStepEditRenderDeps,
         renderLoopView,
-        createLoopRenderDeps,
         renderStepIntervalOverlay,
-        createStepIntervalRenderDeps,
         renderMotionIdleView,
-        createMotionIdleRenderDeps,
         bankHasAltParams,
         renderParamPeek,
-        createBankRenderDeps,
         syncDrumRepeatState: function(t, lane) { return syncDrumRepeatState(t, lane); },
         renderTrackBankOverview,
         renderDrumTrackIdleView,
-        renderMelodicTrackIdleView,
-        createTrackIdleRenderDeps
+        renderMelodicTrackIdleView
     });
 }
 
