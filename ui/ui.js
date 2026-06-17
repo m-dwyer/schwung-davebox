@@ -230,8 +230,6 @@ import {
 } from './ui_track_chrome_render.mjs';
 import {
     handleTrackViewStepRelease,
-    handleTrackViewStepHoldThreshold,
-    handleTrackViewChordFirstStepTick,
     handleTrackViewMelodicStepNoteAssignment
 } from './ui_track_view_step_workflow.mjs';
 import {
@@ -278,43 +276,8 @@ import {
     refreshPerClipBankParamsFromDsp
 } from './ui_clip_track_sync.mjs';
 import {
-    runCcGradientPalette,
-    runCcLiveValPoll,
-    runDefaultSetParamDrain,
-    runDeferredCcBitsRefresh,
-    runDeferredContentResyncTasks,
-    runDeferredLaneEditReadbackTasks,
-    runDeferredDrumNoteOffDrain,
-    runDspMirrorResyncTasks,
-    runEndOfTickPersistenceTasks,
-    runExternalRouteQueueDrain,
-    runExtMidiRemapReapply,
-    runGlobalMenuParamPreview,
-    runAltModeFlash,
-    runLiveNoteDrain,
-    runMetroBeatDetect,
-    runMetroNoteOffTask,
-    runMoveCoRunTickTasks,
-    runOrphanPrune,
-    runOverlayTimerExpiries,
-    runPadMapSelfHealTask,
-    runPendingEditSoundAdvance,
-    runPendingPadNoteMapRecompute,
-    runPendingSetLoad,
-    runPendingTrackConvert,
-    runPendingUndoSyncTask,
-    runRecordingEventFlush,
-    runRepeatRecordingLaneRefreshTask,
-    runSceneCacheRefresh,
-    runSchLabelFetch,
-    runSessionStepHoldToSave,
-    runSessionViewEdgeTasks,
-    runSideButtonHoldThreshold,
-    runSuspendDetection,
-    runTransportButtonLEDs,
-    runTransposePreviewSelfHeal,
-    runViewLEDsAndBlinks
-} from './ui_tick_tasks.mjs';
+    runTickWorkflow
+} from './ui_tick_workflow.mjs';
 import {
     buildGlobalMenuItemsImpl
 } from './ui_global_menu.mjs';
@@ -2373,151 +2336,83 @@ function captureError(where, e) {
 
 globalThis.init = function () { try { runInitWorkflowImpl(S, createInitWorkflowDeps()); } catch (e) { captureError('init', e); } };
 
-globalThis.tick = function () { try { _tickImpl(); } catch (e) { captureError('tick', e); } };
-function _tickImpl() {
-    S.tickCount++;
-    if (S.bootSplashTicks > 0) S.bootSplashTicks--;
-
-    /* Ableton .ablbundle export runs here (tick context) so get_param('bpm')
-     * resolves — it returns null on the on_midi path where the menu action
-     * fires. host_system_cmd blocks for the python packager; transport is
-     * stopped (guarded in exportSession) so the brief tick stall is benign. */
-    pollPendingExport();
-
-    runPendingTrackConvert(S, { convertTrackType });
-
-    /* Recompute must stay BEFORE runDefaultSetParamDrain — its queue-empty gate
-     * avoids same-track set_param interference with a drained tN_* push. */
-    runPendingPadNoteMapRecompute(S, { computePadNoteMap });
-
-    /* PHASE-1: edge-detect modal pad-dispatch mute changes that aren't
-     * caught by explicit hooks (dialogs, ARP-step-edit, knob-touch state).
-     * Cheap check — boolean compare. Tick is ~10.6 ms, more than fast
-     * enough for non-button-CC modal transitions (dialog open / knob touch). */
-    /* Self-heal: every 5 ticks (~50ms), read back DSP's pad_dispatch_muted
-     * and pad_note_map_0 via get_param and re-push the padmap if either
-     * diverges from JS truth. */
-    runPadMapSelfHealTask(S, {
+function createTickWorkflowDeps() {
+    return {
+        NUM_TRACKS,
+        NUM_STEPS,
+        DRUM_LANES,
         PAD_MODE_DRUM,
+        TPS_VALUES,
+        POLL_INTERVAL,
+        BANK_DISPLAY_TICKS,
+        KNOB_TURN_HIGHLIGHT_TICKS,
+        PARAM_PEEK_DETAIL_TICKS,
+        STEP_SAVE_HOLD_TICKS,
+        STEP_SAVE_FLASH_TICKS,
+        STEP_HOLD_TICKS,
+        CC_GRADIENT_LEVELS,
+        CC_GRADIENT_SCALARS,
+        CC_GRADIENT_BASE,
+        MovePlay,
+        MoveRec,
+        MoveSample,
+        MoveLoop,
+        MoveCapture,
+        MoveMute,
+        MoveShift,
+        MoveNoteSession,
+        MoveUndo,
+        MoveDelete,
+        MoveCopy,
+        MoveUp,
+        MoveDown,
+        MoveLeft,
+        MoveRight,
+        Green,
+        Red,
+        DarkGrey,
+        White,
+        VividYellow,
+        LED_OFF,
+        TRACK_COLORS,
         host_module_get_param: (typeof host_module_get_param === 'function') ? host_module_get_param : null,
-        padDispatchMuted: _padDispatchMutedNow,
-        computePadNoteMap
-    });
-
-    runExtMidiRemapReapply(S, { applyExtMidiRemap });
-
-    runSessionViewEdgeTasks(S, {
         host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
-        computePadNoteMap
-    });
-
-    /* isSuspended is the one cross-block tick local — threaded to the terminal
-     * drawUI gate at the bottom of the orchestrator. */
-    const isSuspended = runSuspendDetection(S, {
+        host_ext_midi_remap_enable: (typeof host_ext_midi_remap_enable === 'function') ? host_ext_midi_remap_enable : null,
+        host_exit_module: (typeof host_exit_module === 'function') ? host_exit_module : null,
+        host_hide_module: (typeof host_hide_module === 'function') ? host_hide_module : null,
+        host_file_exists: (typeof host_file_exists === 'function') ? host_file_exists : null,
+        move_midi_inject_to_move: (typeof move_midi_inject_to_move === 'function') ? move_midi_inject_to_move : null,
+        move_midi_external_send: (typeof move_midi_external_send === 'function') ? move_midi_external_send : null,
+        shadow_get_param: (typeof shadow_get_param === 'function') ? shadow_get_param : null,
         clearScreen: clear_screen,
+        pendingLiveNotes,
+        pendingDrumNoteOffs,
+        drumRecNoteOns: _drumRecNoteOns,
+        drumRecNoteOffs: _drumRecNoteOffs,
+        pollPendingExport,
+        convertTrackType,
+        computePadNoteMap,
+        padDispatchMuted: _padDispatchMutedNow,
+        applyExtMidiRemap,
         saveState,
         removeFlagsWrap,
-        host_ext_midi_remap_enable: (typeof host_ext_midi_remap_enable === 'function') ? host_ext_midi_remap_enable : null,
         installFlagsWrap,
-        applyExtMidiRemap,
         readActiveSet,
-        host_module_get_param: (typeof host_module_get_param === 'function') ? host_module_get_param : null,
         maybeShowInheritPicker,
         invalidateLEDCache,
         buildLedInitQueue,
-        forceRedraw
-    });
-
-    runMetroNoteOffTask(S, {
-        move_midi_inject_to_move: (typeof move_midi_inject_to_move === 'function') ? move_midi_inject_to_move : null
-    });
-
-    /* Flush live note batches; one set_param per track so no coalescing.
-     * Defer for 1 tick after any step button event so the step set_param clears its audio
-     * block before live_notes fires — otherwise live_notes can overwrite step toggles.
-     *
-     * Collision-aware ordering: a pitch with both an off and an on in this drain
-     * emits its events in arrival order so a same-tick press+release (on then off)
-     * doesn't get inverted into off→on. DSP's pfx_note_off_imm is a silent no-op
-     * on inactive notes, so an inverted off→on activates the note and never gets
-     * a follow-up off — the note hangs on Move. Pitches with only offs or only
-     * ons keep the legacy offs-first sort, which still protects release-before-
-     * retrigger semantics across different pitches. */
-    runLiveNoteDrain(S, {
-        NUM_TRACKS,
-        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
-        pendingLiveNotes
-    });
-
-    runDeferredDrumNoteOffDrain({
-        NUM_TRACKS,
-        pendingDrumNoteOffs,
-        liveSendNote
-    });
-
-    /* Drain ROUTE_EXTERNAL queue: DSP enqueues sequenced notes; JS sends via USB-A.
-     * PHASE-2: skipped on patched Schwung — DSP calls g_host->midi_send_external
-     * directly and the shim's ovext_worker thread drains its own ring off the
-     * audio thread, so ext_queue stays empty. Remove the gate (and the whole
-     * block) when patches upstreamed. */
-    runExternalRouteQueueDrain(S, {
-        host_module_get_param: (typeof host_module_get_param === 'function') ? host_module_get_param : null,
-        move_midi_external_send: (typeof move_midi_external_send === 'function') ? move_midi_external_send : null
-    });
-
-    runDeferredCcBitsRefresh(S, {
-        host_module_get_param: (typeof host_module_get_param === 'function') ? host_module_get_param : null,
-        invalidateLEDCache
-    });
-
-    runCcLiveValPoll(S, { host_module_get_param });
-
-    runSchLabelFetch(S, {
-        shadow_get_param: (typeof shadow_get_param === 'function') ? shadow_get_param : null,
-        schSlotForTrack
-    });
-
-    runCcGradientPalette(S, {
-        PAD_MODE_DRUM, CC_GRADIENT_LEVELS, CC_GRADIENT_SCALARS, CC_GRADIENT_BASE,
-        MovePlay, MoveRec, MoveSample, Green, Red, LED_OFF,
-        setPaletteEntryRGB, reapplyPalette, setButtonLED, invalidateLEDCache
-    });
-
-    /* Phase 1 / Bundle 2C-Rpt1: pendingRepeatLane queue removed. Lane swap
-     * while holding a rate pad is now fired immediately on press from the
-     * lane-pad branch in _onPadPress (different set_param key from the
-     * other lane-pad pushes — no coalescing). */
-
-    /* Must stay BEFORE runDefaultSetParamDrain (gates on !pendingSetLoad) and
-     * runDspMirrorResyncTasks (decrements the pendingDspSync=5 set here). */
-    runPendingSetLoad(S, {
-        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
-        disarmRecord
-    });
-
-    runDefaultSetParamDrain(S, {
-        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null
-    });
-
-    runDspMirrorResyncTasks(S, {
-        host_module_get_param: (typeof host_module_get_param === 'function') ? host_module_get_param : null,
-        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
+        forceRedraw,
+        liveSendNote,
+        schSlotForTrack,
+        setPaletteEntryRGB,
+        reapplyPalette,
+        setButtonLED,
+        setLED,
+        disarmRecord,
         pollDSP,
         syncClipsFromDsp,
         syncMuteSoloFromDsp,
         restoreUiSidecar,
-        computePadNoteMap,
-        invalidateLEDCache,
-        forceRedraw
-    });
-
-    runMoveCoRunTickTasks(S, {
-        move_midi_inject_to_move: (typeof move_midi_inject_to_move === 'function') ? move_midi_inject_to_move : null
-    });
-
-    runPendingUndoSyncTask(S, {
-        host_module_get_param,
-        host_module_set_param,
         syncClipsTargeted,
         clearRecordingNoteBuffers: function () {
             _recordingNoteTrack.clear();
@@ -2526,135 +2421,45 @@ function _tickImpl() {
             _drumRecNoteOns.length  = 0;
             _drumRecNoteOffs.length = 0;
         },
-        invalidateLEDCache,
-        forceRedraw
-    });
-
-    runDeferredLaneEditReadbackTasks(S, {
-        host_module_get_param,
-        showActionPopup
-    });
-
-    runDeferredContentResyncTasks(S, {
-        NUM_TRACKS,
-        NUM_STEPS,
-        PAD_MODE_DRUM,
-        TPS_VALUES,
-        host_module_get_param,
+        showActionPopup,
         syncDrumClipContent,
         syncDrumLanesMeta,
         syncDrumLaneSteps,
         refreshDrumLaneBankParams,
         refreshPerClipBankParams,
         clipHasContent,
-        forceRedraw
-    });
-
-    /* pendingClearLength drain removed (Group B): Clip Clear now preserves
-     * length and loop window so the deferred length=16 reset is no longer
-     * needed. The pendingClearLengthTrack/Clip fields are kept in ui_state
-     * defaults (-1) but no setter remains. */
-
-    runRepeatRecordingLaneRefreshTask(S, {
-        PAD_MODE_DRUM,
-        syncDrumLaneSteps,
-        forceRedraw
-    });
-
-    runGlobalMenuParamPreview(S);
-
-    runTransposePreviewSelfHeal(S, { xposeCancelPreview });
-
-
-    if (!S.ledInitComplete) {
-        drainLedInit();
-    } else {
-        runOverlayTimerExpiries(S, {
-            BANK_DISPLAY_TICKS, KNOB_TURN_HIGHLIGHT_TICKS, PARAM_PEEK_DETAIL_TICKS
-        });
-
-        runSessionStepHoldToSave(S, {
-            STEP_SAVE_HOLD_TICKS, NUM_TRACKS, DRUM_LANES, STEP_SAVE_FLASH_TICKS,
-            host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
-            showActionPopup, forceRedraw
-        });
-
-        if ((S.tickCount % POLL_INTERVAL) === 0) { pollDSP(); S.screenDirty = true; }
-
-        /* Schwung co-run: refresh the channel-matched slot bitmask for the
-         * side-button blink (shadow_get_slots is a cheap shared-memory read;
-         * gate to the poll cadence to match the LED force cadence). */
-        if (S.schwungCoRunSlot >= 0 && (S.tickCount % POLL_INTERVAL) === 0) {
-            refreshSchwungCoRunSlotMask(S.activeTrack);
-        }
-
-        runPendingEditSoundAdvance(S, {
-            advancePendingEditSoundEntry, enterMoveNativeCoRun, enterSchwungCoRun
-        });
-
-        runMetroBeatDetect(S, { host_module_get_param, playMetronomeClick });
-
-        runSideButtonHoldThreshold(S, { STEP_HOLD_TICKS, forceRedraw });
-
-        /* Step hold threshold: once elapsed, close the tap window so release won't toggle.
-         * Also auto-assign empty step now so knobs work immediately in step edit. */
-        handleTrackViewStepHoldThreshold(S, createTrackViewStepWorkflowDeps());
-
-        handleTrackViewChordFirstStepTick(S, createTrackViewStepWorkflowDeps());
-
-        runSceneCacheRefresh(S, { sceneAllPlaying, sceneAllQueued, sceneAnyPlaying });
-
-        runTransportButtonLEDs(S, {
-            setButtonLED, flashAtRate, host_module_get_param, POLL_INTERVAL,
-            Green, LED_OFF, Red, DarkGrey, White, VividYellow, TRACK_COLORS,
-            MovePlay, MoveRec, MoveSample, MoveLoop, MoveCapture, MoveMute,
-            MoveShift, MoveNoteSession, MoveUndo, MoveDelete, MoveCopy,
-            MoveUp, MoveDown, MoveLeft, MoveRight
-        });
-
-        runViewLEDsAndBlinks(S, {
-            updateSessionLEDs, updatePerfModeLEDs, updateSceneMapLEDs,
-            updateStepLEDs, updateTrackLEDs, setLED,
-            PAD_MODE_DRUM, White, LED_OFF
-        });
-    }
-    runRecordingEventFlush(S, {
-        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
-        host_module_get_param,
-        drumRecNoteOns: _drumRecNoteOns,
-        drumRecNoteOffs: _drumRecNoteOffs,
-        PAD_MODE_DRUM,
-        disarmRecord,
-        invalidateLEDCache,
-        forceRedraw
-    });
-
-    runEndOfTickPersistenceTasks(S, {
-        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
-        host_exit_module: (typeof host_exit_module === 'function') ? host_exit_module : null,
-        host_hide_module: (typeof host_hide_module === 'function') ? host_hide_module : null,
+        xposeCancelPreview,
+        drainLedInit,
+        refreshSchwungCoRunSlotMask,
+        advancePendingEditSoundEntry,
+        enterMoveNativeCoRun,
+        enterSchwungCoRun,
+        playMetronomeClick,
+        createTrackViewStepWorkflowDeps,
+        sceneAllPlaying,
+        sceneAllQueued,
+        sceneAnyPlaying,
+        flashAtRate,
+        updateSessionLEDs,
+        updatePerfModeLEDs,
+        updateSceneMapLEDs,
+        updateStepLEDs,
+        updateTrackLEDs,
         updateNameIndex,
-        removeFlagsWrap,
-        invalidateLEDCache,
         clearAllLEDs,
-        setButtonLED,
         commitSnapshot,
-        LED_OFF
-    });
-
-    runOrphanPrune(S, {
-        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
-        host_file_exists: (typeof host_file_exists === 'function') ? host_file_exists : null,
         loadNameIndex,
         uuidToStatePath,
-        saveNameIndex
-    });
+        saveNameIndex,
+        altIndicatorActive,
+        drawUI
+    };
+}
 
-    runAltModeFlash(S, { altIndicatorActive });
-
-    if (S.screenDirty && !isSuspended) { S.screenDirty = false; drawUI(); }
-
-};
+globalThis.tick = function () { try { _tickImpl(); } catch (e) { captureError('tick', e); } };
+function _tickImpl() {
+    runTickWorkflow(S, createTickWorkflowDeps());
+}
 
 /* ------------------------------------------------------------------ */
 /* MIDI input                                                           */
