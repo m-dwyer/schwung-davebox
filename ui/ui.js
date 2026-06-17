@@ -176,6 +176,12 @@ import {
     onMidiExternalImpl
 } from './ui_midi_external_workflow.mjs';
 import {
+    clearAllMuteSoloImpl,
+    effectiveMuteImpl,
+    setTrackMuteImpl,
+    setTrackSoloImpl
+} from './ui_mute_solo_workflow.mjs';
+import {
     createLiveNoteRecordingState,
     extNoteOffAllImpl,
     liveSendNoteImpl,
@@ -814,43 +820,27 @@ function midiNoteName(n) {
     return names[n % 12] + (Math.floor(n / 12) - 1);
 }
 
+function createMuteSoloWorkflowDeps() {
+    return {
+        numTracks: NUM_TRACKS,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null
+    };
+}
+
 function effectiveMute(t) {
-    const anySolo = S.trackSoloed.some(function(s) { return s; });
-    return S.trackMuted[t] || (anySolo && !S.trackSoloed[t]);
+    return effectiveMuteImpl(S, t);
 }
 
 function setTrackMute(t, on) {
-    S.trackMuted[t] = on;
-    if (on && S.trackSoloed[t]) {
-        S.trackSoloed[t] = false;
-        if (typeof host_module_set_param === 'function')
-            host_module_set_param('t' + t + '_solo', '0');
-    }
-    if (typeof host_module_set_param === 'function')
-        host_module_set_param('t' + t + '_mute', on ? '1' : '0');
-    S.screenDirty = true;
+    return setTrackMuteImpl(S, createMuteSoloWorkflowDeps(), t, on);
 }
 
 function setTrackSolo(t, on) {
-    S.trackSoloed[t] = on;
-    if (on && S.trackMuted[t]) {
-        S.trackMuted[t] = false;
-        if (typeof host_module_set_param === 'function')
-            host_module_set_param('t' + t + '_mute', '0');
-    }
-    if (typeof host_module_set_param === 'function')
-        host_module_set_param('t' + t + '_solo', on ? '1' : '0');
-    S.screenDirty = true;
+    return setTrackSoloImpl(S, createMuteSoloWorkflowDeps(), t, on);
 }
 
 function clearAllMuteSolo() {
-    for (let _t = 0; _t < NUM_TRACKS; _t++) {
-        S.trackMuted[_t]  = false;
-        S.trackSoloed[_t] = false;
-    }
-    if (typeof host_module_set_param === 'function')
-        host_module_set_param('mute_all_clear', '1');
-    S.screenDirty = true;
+    return clearAllMuteSoloImpl(S, createMuteSoloWorkflowDeps());
 }
 
 /* Immediately refresh S.seqActiveNotes for the given step if it is the current
