@@ -172,6 +172,13 @@ export function readDrumActiveLaneFromDsp(S, deps, track) {
     deps.refreshDrumLaneBankParams(track, lane);
 }
 
+export function resyncDrumTrackImpl(S, deps, track) {
+    deps.syncDrumLanesMeta(track);
+    deps.syncDrumLaneSteps(track, S.activeDrumLane[track]);
+    deps.syncDrumClipContent(track);
+    deps.refreshDrumLaneBankParams(track, S.activeDrumLane[track]);
+}
+
 export function readTargetedClipRestorePairFromDsp(S, deps, track, clip, isDrum) {
     if (isDrum) {
         readDrumActiveLaneFromDsp(S, deps, track);

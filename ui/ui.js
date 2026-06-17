@@ -265,12 +265,8 @@ import {
     unlatchAllTracks
 } from './ui_latch_workflows.mjs';
 import {
-    readDrumRepeatRatesFromDsp,
-    readTrackArpStepConfigFromDsp,
-    readTrackConfigFromDsp,
-    refreshDrumLaneBankParamsFromDsp,
-    refreshPerClipBankParamsFromDsp
-} from './ui_clip_track_sync.mjs';
+    createTrackClipSyncFacade
+} from './ui_track_clip_sync_facade.mjs';
 import {
     runTickWorkflow
 } from './ui_tick_workflow.mjs';
@@ -414,16 +410,7 @@ import {
     trackHasAnyDataImpl
 } from './ui_track_convert_workflow.mjs';
 import {
-    syncDrumClipContentImpl,
-    syncDrumLaneStepsImpl,
-    syncDrumLanesMetaImpl
-} from './ui_drum_clip_sync.mjs';
-import {
-    refreshSeqNotesIfCurrentImpl,
-    restoreUiSidecarImpl,
-    syncClipsFromDspImpl,
-    syncClipsTargetedImpl,
-    syncMuteSoloFromDspImpl
+    refreshSeqNotesIfCurrentImpl
 } from './ui_clip_state_sync.mjs';
 import {
     runInitWorkflowImpl
@@ -1154,14 +1141,32 @@ function computePadNoteMap() {
 
 /* Drum helpers --------------------------------------------------------------- */
 
+let _trackClipSyncFacade = null;
+function getTrackClipSyncFacade() {
+    if (!_trackClipSyncFacade) {
+        _trackClipSyncFacade = createTrackClipSyncFacade(S, {
+            TPS_VALUES,
+            createHostParamAdapters,
+            optionalHostFileExists,
+            optionalHostModuleGetParam,
+            optionalHostModuleGetParamUndefined,
+            optionalHostReadFile,
+            setActiveDrumLane,
+            clipHasContent,
+            readBankParams
+        });
+    }
+    return _trackClipSyncFacade;
+}
+
 /** Sync one drum lane's step data and length from DSP. */
 function syncDrumLaneSteps(t, l) {
-    return syncDrumLaneStepsImpl(S, createDrumClipSyncDeps(), t, l);
+    return getTrackClipSyncFacade().syncDrumLaneSteps(t, l);
 }
 
 /** Sync lane notes and hit-presence for all lanes of track t (active clip). */
 function syncDrumLanesMeta(t) {
-    return syncDrumLanesMetaImpl(S, createDrumClipSyncDeps(), t);
+    return getTrackClipSyncFacade().syncDrumLanesMeta(t);
 }
 
 
@@ -1171,28 +1176,11 @@ function drumPadToLane(padIdx) {
 }
 
 function createDrumClipSyncDeps() {
-    return {
-        getParam: optionalHostModuleGetParam()
-    };
+    return getTrackClipSyncFacade().createDrumClipSyncDeps();
 }
 
 function createClipStateSyncDeps() {
-    return {
-        ...createHostParamAdapters(),
-        readFile: optionalHostReadFile(),
-        fileExists: optionalHostFileExists(),
-        setActiveDrumLane,
-        syncDrumClipContent,
-        syncDrumLanesMeta,
-        syncDrumLaneSteps,
-        clipHasContent,
-        readTrackConfig,
-        readBankParams,
-        readTarpStepVel,
-        readDrumRepeatRates,
-        refreshPerClipBankParams,
-        refreshDrumLaneBankParams
-    };
+    return getTrackClipSyncFacade().createClipStateSyncDeps();
 }
 
 function createDrumPadPressDeps() {
@@ -1287,7 +1275,7 @@ function setDrumLanePage(t, page) {
 
 /** Sync S.drumClipNonEmpty[t] for all clips — called on track switch and state load. */
 function syncDrumClipContent(t) {
-    return syncDrumClipContentImpl(S, createDrumClipSyncDeps(), t);
+    return getTrackClipSyncFacade().syncDrumClipContent(t);
 }
 
 function drumNoteLabel(midiNote) {
@@ -1325,44 +1313,30 @@ function drainLedInit() {
 /* Read per-clip bank params from DSP into S.bankParams for track t.
  * Reads from clip[active_clip].pfx_params directly — immune to pfx_sync timing. */
 function refreshDrumLaneBankParams(t, lane) {
-    refreshDrumLaneBankParamsFromDsp(S, {
-        host_module_get_param: optionalHostModuleGetParamUndefined(),
-        TPS_VALUES
-    }, t, lane);
+    return getTrackClipSyncFacade().refreshDrumLaneBankParams(t, lane);
 }
 
 /* Full drum-track resync after track switches. Side-button selection,
  * Shift+pad, and Shift+jog all need the same lane metadata, active-lane
  * steps, clip-content dots, and bank params. */
 function resyncDrumTrack(t) {
-    syncDrumLanesMeta(t);
-    syncDrumLaneSteps(t, S.activeDrumLane[t]);
-    syncDrumClipContent(t);
-    refreshDrumLaneBankParams(t, S.activeDrumLane[t]);
+    return getTrackClipSyncFacade().resyncDrumTrack(t);
 }
 
 function refreshPerClipBankParams(t) {
-    refreshPerClipBankParamsFromDsp(S, {
-        host_module_get_param: optionalHostModuleGetParamUndefined(),
-        PAD_MODE_DRUM,
-        TPS_VALUES
-    }, t);
+    return getTrackClipSyncFacade().refreshPerClipBankParams(t);
 }
 
 /* Read TRACK ARP step_vel[8] from DSP for track t. Called on init and track switch. */
 function readTarpStepVel(t) {
-    readTrackArpStepConfigFromDsp(S, {
-        host_module_get_param: optionalHostModuleGetParamUndefined()
-    }, t);
+    return getTrackClipSyncFacade().readTarpStepVel(t);
 }
 
 /* Read Rpt2 per-lane rate idx[32] from DSP for track t. Called after state
  * load so the rate-pad LED highlight matches the persisted DSP state.
  * (Rpt1's per-track last-rate lives only in DSP — JS has no mirror for it.) */
 function readDrumRepeatRates(t) {
-    readDrumRepeatRatesFromDsp(S, {
-        host_module_get_param: optionalHostModuleGetParamUndefined()
-    }, t);
+    return getTrackClipSyncFacade().readDrumRepeatRates(t);
 }
 
 /* Deps for the param-bank read/write/reset cluster (ui_bank_params.mjs).
@@ -1483,9 +1457,7 @@ function readBankParams(t, bankIdx) {
 }
 
 function readTrackConfig(t) {
-    readTrackConfigFromDsp(S, {
-        host_module_get_param: optionalHostModuleGetParamUndefined()
-    }, t);
+    return getTrackClipSyncFacade().readTrackConfig(t);
 }
 
 function applyTrackConfig(t, key, val) {
@@ -1950,11 +1922,11 @@ function exitMoveNativeCoRun() {
 }
 
 function restoreUiSidecar(applyDefaultsNow) {
-    return restoreUiSidecarImpl(S, createClipStateSyncDeps(), applyDefaultsNow);
+    return getTrackClipSyncFacade().restoreUiSidecar(applyDefaultsNow);
 }
 
 function syncClipsFromDsp() {
-    return syncClipsFromDspImpl(S, createClipStateSyncDeps());
+    return getTrackClipSyncFacade().syncClipsFromDsp();
 }
 
 function createTrackConvertWorkflowDeps() {
@@ -2003,11 +1975,11 @@ function createInitWorkflowDeps() {
  * infoStr format: "d t c" (drum) or "m t0 c0 t1 c1 ..." (melodic, 1-16 pairs).
  * Falls back to full syncClipsFromDsp() if infoStr is missing or unparseable. */
 function syncClipsTargeted(infoStr) {
-    return syncClipsTargetedImpl(S, createClipStateSyncDeps(), infoStr);
+    return getTrackClipSyncFacade().syncClipsTargeted(infoStr);
 }
 
 function syncMuteSoloFromDsp() {
-    return syncMuteSoloFromDspImpl(S, createClipStateSyncDeps());
+    return getTrackClipSyncFacade().syncMuteSoloFromDsp();
 }
 
 /* --- DIAGNOSTIC (2026-05-23 crash investigation) ---------------------------
