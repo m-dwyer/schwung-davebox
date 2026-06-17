@@ -1230,48 +1230,28 @@ function createDrumRepeatWorkflowDeps() {
     };
 }
 
-/* Bundle 2A: single setter for S.activeDrumLane that also pushes the
+/* Pad Surface runtime setter for S.activeDrumLane that also pushes the
  * value to DSP via tN_active_drum_lane so on_midi.drum_pad_event can
- * fire vel-pad preview at the active lane's note. Replaces every direct
- * S.activeDrumLane[t] = X write site. PHASE-1: remove the set_param push
- * (and revert to direct writes) when patches are upstreamed and the JS
- * input path is deleted. */
+ * fire vel-pad preview at the active lane's note. Keep this wrapper name for
+ * ui.js callers; the runtime owns the mutation/write invariant. */
 function setActiveDrumLane(t, lane) {
-    if (S.activeDrumLane[t] === lane) return;
-    /* NB: written via array-ref alias so a future `replace_all` on the
-     * pattern `S.activeDrumLane[t] = lane;` can't accidentally turn this
-     * line into a recursive call to setActiveDrumLane (which is what
-     * happened on the first 2A deploy — stack overflow on init). */
-    const arr = S.activeDrumLane;
-    arr[t] = lane;
-    if (typeof host_module_set_param === 'function')
-        host_module_set_param('t' + t + '_active_drum_lane', String(lane));
+    return padSurfaceRuntime.setActiveDrumLane(t, lane);
 }
 
-/* Bundle 2A: single setter for S.drumPerformMode that also pushes the
+/* Pad Surface runtime setter for S.drumPerformMode that also pushes the
  * value to DSP via tN_drum_perform_mode so on_midi.drum_pad_event can
  * gate the vel-zone preview branch correctly (Rpt modes skip the
- * preview; only NORMAL fires it). Same array-ref-alias pattern as
- * setActiveDrumLane to avoid replace_all self-recursion. */
+ * preview; only NORMAL fires it). */
 function setDrumPerformMode(t, mode) {
-    if (S.drumPerformMode[t] === mode) return;
-    const arrPm = S.drumPerformMode;
-    arrPm[t] = mode;
-    if (typeof host_module_set_param === 'function')
-        host_module_set_param('t' + t + '_drum_perform_mode', String(mode));
+    return padSurfaceRuntime.setDrumPerformMode(t, mode);
 }
 
-/* Bundle 2C-Rpt2: single setter for S.drumLanePage that also pushes the
+/* Pad Surface runtime setter for S.drumLanePage that also pushes the
  * value to DSP via tN_drum_lane_page so on_midi.drum_pad_event can
  * translate left-half padIdx → absolute drum lane index (Rpt2 lane-pad
- * classification + Rpt1 lane-swap-while-holding). Same array-ref-alias
- * pattern as setActiveDrumLane to avoid replace_all self-recursion. */
+ * classification + Rpt1 lane-swap-while-holding). */
 function setDrumLanePage(t, page) {
-    if (S.drumLanePage[t] === page) return;
-    const arrLp = S.drumLanePage;
-    arrLp[t] = page;
-    if (typeof host_module_set_param === 'function')
-        host_module_set_param('t' + t + '_drum_lane_page', String(page));
+    return padSurfaceRuntime.setDrumLanePage(t, page);
 }
 
 /** Sync S.drumClipNonEmpty[t] for all clips — called on track switch and state load. */

@@ -27,18 +27,59 @@ export function createPadRuntimeState() {
 }
 
 export function createPadSurfaceRuntime(S, deps) {
+    function optionalSetParam() {
+        return deps.optionalHostModuleSetParam();
+    }
+
     function computePadNoteMapRuntime() {
         return computePadNoteMap(S, {
             PAD_MODE_DRUM: deps.PAD_MODE_DRUM,
             DRUM_LANES: deps.DRUM_LANES,
             DRUM_BASE_NOTE: deps.DRUM_BASE_NOTE,
-            host_module_set_param: deps.optionalHostModuleSetParam()
+            host_module_set_param: optionalSetParam()
         });
     }
 
     return {
-        computePadNoteMap: computePadNoteMapRuntime
+        computePadNoteMap: computePadNoteMapRuntime,
+        setActiveDrumLane: function(t, lane) {
+            return setActiveDrumLaneMirror(S, { host_module_set_param: optionalSetParam() }, t, lane);
+        },
+        setDrumPerformMode: function(t, mode) {
+            return setDrumPerformModeMirror(S, { host_module_set_param: optionalSetParam() }, t, mode);
+        },
+        setDrumLanePage: function(t, page) {
+            return setDrumLanePageMirror(S, { host_module_set_param: optionalSetParam() }, t, page);
+        }
     };
+}
+
+export function setActiveDrumLaneMirror(S, deps, t, lane) {
+    if (S.activeDrumLane[t] === lane) return;
+    /* NB: written via array-ref alias so a future `replace_all` on the
+     * pattern `S.activeDrumLane[t] = lane;` can't accidentally turn this
+     * line into a recursive call to setActiveDrumLane (which is what
+     * happened on the first 2A deploy — stack overflow on init). */
+    const arr = S.activeDrumLane;
+    arr[t] = lane;
+    if (typeof deps.host_module_set_param === 'function')
+        deps.host_module_set_param('t' + t + '_active_drum_lane', String(lane));
+}
+
+export function setDrumPerformModeMirror(S, deps, t, mode) {
+    if (S.drumPerformMode[t] === mode) return;
+    const arrPm = S.drumPerformMode;
+    arrPm[t] = mode;
+    if (typeof deps.host_module_set_param === 'function')
+        deps.host_module_set_param('t' + t + '_drum_perform_mode', String(mode));
+}
+
+export function setDrumLanePageMirror(S, deps, t, page) {
+    if (S.drumLanePage[t] === page) return;
+    const arrLp = S.drumLanePage;
+    arrLp[t] = page;
+    if (typeof deps.host_module_set_param === 'function')
+        deps.host_module_set_param('t' + t + '_drum_lane_page', String(page));
 }
 
 export function queueLiveNoteOn(queues, track, pitch, vel) {
