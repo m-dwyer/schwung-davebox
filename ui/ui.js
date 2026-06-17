@@ -463,6 +463,12 @@ import {
     selectClipOnTrackImpl
 } from './ui_clip_edit_ops.mjs';
 import {
+    clipIsEmptyImpl,
+    focusedClipIsEmptyImpl,
+    selectTrackGestureImpl,
+    switchActiveTrackImpl
+} from './ui_track_selection_workflow.mjs';
+import {
     syncDrumClipContentImpl,
     syncDrumLaneStepsImpl,
     syncDrumLanesMetaImpl
@@ -1109,13 +1115,11 @@ function registerTapTempo(padNote) {
  * this gates implicit focused-clip launches so clips intentionally left off
  * stay off when browsing tracks or starting transport. */
 function _clipIsEmpty(t, c) {
-    return (S.trackPadMode[t] === PAD_MODE_DRUM)
-        ? !S.drumClipNonEmpty[t][c]
-        : !S.clipNonEmpty[t][c];
+    return clipIsEmptyImpl(S, createTrackSelectionWorkflowDeps(), t, c);
 }
 
 function _focusedClipIsEmpty(t) {
-    return _clipIsEmpty(t, S.trackActiveClip[t]);
+    return focusedClipIsEmptyImpl(S, createTrackSelectionWorkflowDeps(), t);
 }
 
 /* Save the current S.activeBank into the outgoing track's per-track slot,
@@ -1123,26 +1127,7 @@ function _focusedClipIsEmpty(t) {
  * Existing post-switch validity checks (e.g. drum-track hidden banks → 0)
  * still apply to the loaded value. Use at every site that assigns S.activeTrack. */
 function _switchActiveTrack(newT) {
-    S.trackActiveBank[S.activeTrack] = S.activeBank;
-    S.activeTrack = newT | 0;
-    S.activeBank = S.trackActiveBank[S.activeTrack] | 0;
-    if (S.activeBank === 7) S.allLanesConfirmed = false;
-    /* Focused-clip-by-default: ONLY while transport is running — entering a track
-     * launches its focused clip so it's live. While stopped we do NOT arm (passive
-     * track-scrolling must not queue clips for the next transport start); the
-     * displayed clip is instead armed at transport start (see _onCC_transport).
-     * Skip if already live, in Session View, or if the focused clip has note
-     * data (a clip intentionally left off must not be re-launched by scroll). */
-    if (S.playing && !S.sessionView
-            && !S.trackClipPlaying[S.activeTrack]
-            && !S.trackWillRelaunch[S.activeTrack]
-            && S.trackQueuedClip[S.activeTrack] === -1
-            && _focusedClipIsEmpty(S.activeTrack)) {
-        const _ac = S.trackActiveClip[S.activeTrack];
-        if (typeof host_module_set_param === 'function')
-            host_module_set_param('t' + S.activeTrack + '_launch_clip', String(_ac));
-        S.trackQueuedClip[S.activeTrack] = _ac;
-    }
+    return switchActiveTrackImpl(S, createTrackSelectionWorkflowDeps(), newT);
 }
 
 /* Full active-track switch for a user navigation gesture (side button / bottom-pad).
@@ -1152,24 +1137,7 @@ function _switchActiveTrack(newT) {
  * no-op switch (same track) returns early. Mirrors the Shift+bottom-pad path
  * (the most complete of the legacy sites) so drum tracks render their lanes. */
 function selectTrackGesture(newT) {
-    newT = Math.min(NUM_TRACKS - 1, Math.max(0, newT | 0));
-    if (newT === S.activeTrack) return;
-    extNoteOffAll();
-    handoffRecordingToTrack(newT);
-    _switchActiveTrack(newT);
-    if (S.trackPadMode[newT] === PAD_MODE_DRUM) {
-        /* Fall back from banks hidden on drum tracks */
-        if (S.activeBank === 2 || S.activeBank === 4) S.activeBank = 0;
-        resyncDrumTrack(newT);
-    } else {
-        if (S.activeBank === 7) S.activeBank = 0;
-        refreshPerClipBankParams(newT);
-    }
-    computePadNoteMap();
-    S.seqActiveNotes.clear();
-    S.seqLastStep = -1;
-    S.seqLastClip = -1;
-    forceRedraw();
+    return selectTrackGestureImpl(S, createTrackSelectionWorkflowDeps(), newT);
 }
 
 /* Track-View clip select/launch/toggle for the Change #1 hold-reveal overlay.
@@ -1918,6 +1886,20 @@ function extNoteOffAll() {
     return extNoteOffAllImpl(S, liveNoteRecordingState, {
         liveSendNote
     });
+}
+
+function createTrackSelectionWorkflowDeps() {
+    return {
+        computePadNoteMap,
+        extNoteOffAll,
+        forceRedraw,
+        handoffRecordingToTrack,
+        numTracks: NUM_TRACKS,
+        padModeDrum: PAD_MODE_DRUM,
+        refreshPerClipBankParams,
+        resyncDrumTrack,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null
+    };
 }
 
 function createMidiExternalWorkflowDeps() {
