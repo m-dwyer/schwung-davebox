@@ -311,6 +311,7 @@ import {
     createNavigationCcHardwareAdapters,
     createPadHardwareAdapters,
     createTransportCcHardwareAdapters,
+    optionalHostExitModule,
     optionalMoveMidiExternalSend,
     optionalMoveMidiInjectToMove,
     optionalShadowSendMidiToDsp
@@ -2301,7 +2302,7 @@ function createButtonCcWorkflowDeps() {
         computePadNoteMap,
         editSoundForTrack,
         effectiveClip,
-        exitModule: typeof host_exit_module === 'function' ? host_exit_module : null,
+        exitModule: optionalHostExitModule(),
         exitSchwungCoRun,
         forceRedraw,
         handleDeleteLoopDrumRepeatStop: function (track) {
@@ -2426,7 +2427,7 @@ function createJogCcWorkflowDeps() {
         banks: BANKS,
         decodeDelta,
         setParam: optionalHostModuleSetParam(),
-        exitModule: typeof host_exit_module === 'function' ? host_exit_module : null,
+        exitModule: optionalHostExitModule(),
         forceRedraw,
         computePadNoteMap,
         showActionPopup,

@@ -34,6 +34,10 @@ export function optionalShadowSendMidiToDsp() {
     return typeof shadow_send_midi_to_dsp === 'function' ? shadow_send_midi_to_dsp : null;
 }
 
+export function optionalHostExitModule() {
+    return typeof host_exit_module === 'function' ? host_exit_module : null;
+}
+
 export function createExtMidiRemapHostAdapters() {
     return {
         clear: typeof host_ext_midi_remap_clear === 'function' ? host_ext_midi_remap_clear : null,
