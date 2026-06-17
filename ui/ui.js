@@ -253,14 +253,16 @@ import {
     handleDeleteDrumLaneClear,
     handleDrumLaneFactoryReset,
     handleDrumLaneCopyPaste,
-    handleDrumLaneMuteSolo
+    handleDrumLaneMuteSolo,
+    copyDrumClipImpl,
+    copyDrumLaneImpl,
+    cutDrumClipImpl,
+    cutDrumLaneImpl
 } from './ui_drum_lane_workflows.mjs';
 import {
     handleDrumRepeat2LaneAftertouch,
     handleDrumRepeatPadAftertouch,
     resetDrumRepeatGrooveForLane,
-    copyDrumRepeatGrooveMirrors,
-    moveDrumRepeatGrooveMirrors,
     editDrumRepeatGrooveStep,
     handleDrumRepeatPadPress,
     handleDrumRepeatPadRelease,
@@ -857,62 +859,22 @@ function copyStep(t, ac, srcAbs, dstAbs) {
 
 /* Copy active clip's lane srcLane to dstLane (same track, preserves dst midi_note). */
 function copyDrumLane(t, srcLane, dstLane) {
-    if (srcLane === dstLane) return;
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + srcLane + '_copy_to', val: String(dstLane) });
-    const steps = S.drumLaneSteps[t];
-    for (let s = 0; s < 256; s++) steps[dstLane][s] = steps[srcLane][s];
-    S.drumLaneHasNotes[t][dstLane] = S.drumLaneHasNotes[t][srcLane];
-    if (S.drumLaneHasNotes[t][srcLane]) S.drumClipNonEmpty[t][S.trackActiveClip[t]] = true;
-    copyDrumRepeatGrooveMirrors(S, t, srcLane, dstLane);
-    S.pendingDrumLaneResync = 2; S.pendingDrumLaneResyncTrack = t; S.pendingDrumLaneResyncLane = dstLane;
+    return copyDrumLaneImpl(S, createDrumLaneWorkflowDeps(), t, srcLane, dstLane);
 }
 
 /* Cut active clip's lane srcLane into dstLane (copy then clear src). */
 function cutDrumLane(t, srcLane, dstLane) {
-    if (srcLane === dstLane) return;
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + srcLane + '_cut_to', val: String(dstLane) });
-    const steps = S.drumLaneSteps[t];
-    for (let s = 0; s < 256; s++) { steps[dstLane][s] = steps[srcLane][s]; steps[srcLane][s] = '0'; }
-    S.drumLaneHasNotes[t][dstLane] = S.drumLaneHasNotes[t][srcLane];
-    S.drumLaneHasNotes[t][srcLane] = false;
-    let anyHits = false;
-    for (let l = 0; l < DRUM_LANES; l++) if (S.drumLaneHasNotes[t][l]) { anyHits = true; break; }
-    S.drumClipNonEmpty[t][S.trackActiveClip[t]] = anyHits;
-    moveDrumRepeatGrooveMirrors(S, t, srcLane, dstLane);
-    S.pendingDrumLaneResync = 2; S.pendingDrumLaneResyncTrack = t; S.pendingDrumLaneResyncLane = dstLane;
+    return cutDrumLaneImpl(S, createDrumLaneWorkflowDeps(), t, srcLane, dstLane);
 }
 
 /* Copy all 32 lanes of drum_clips[srcC] on srcT to drum_clips[dstC] on dstT; preserve dst midi_notes. */
 function copyDrumClip(srcT, srcC, dstT, dstC) {
-    if (srcT === dstT && srcC === dstC) return;
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'drum_clip_copy', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
-    S.drumClipNonEmpty[dstT][dstC] = S.drumClipNonEmpty[srcT][srcC];
-    if (dstC === S.trackActiveClip[dstT]) { S.pendingDrumResync = 2; S.pendingDrumResyncTrack = dstT; }
+    return copyDrumClipImpl(S, createDrumLaneWorkflowDeps(), srcT, srcC, dstT, dstC);
 }
 
 /* Cut all 32 lanes of drum_clips[srcC] on srcT into drum_clips[dstC] on dstT; undo dst only. */
 function cutDrumClip(srcT, srcC, dstT, dstC) {
-    if (srcT === dstT && srcC === dstC) return;
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'drum_clip_cut', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
-    S.drumClipNonEmpty[dstT][dstC] = S.drumClipNonEmpty[srcT][srcC];
-    S.drumClipNonEmpty[srcT][srcC] = false;
-    if (srcC === S.trackActiveClip[srcT]) {
-        for (let l = 0; l < DRUM_LANES; l++) {
-            for (let s = 0; s < 256; s++) S.drumLaneSteps[srcT][l][s] = '0';
-            S.drumLaneHasNotes[srcT][l] = false;
-        }
-        S.drumLaneLength[srcT] = 16;
-        S.drumLaneTPS[srcT]    = 24;
-    }
-    if (dstC === S.trackActiveClip[dstT]) { S.pendingDrumResync = 2; S.pendingDrumResyncTrack = dstT; }
+    return cutDrumClipImpl(S, createDrumLaneWorkflowDeps(), srcT, srcC, dstT, dstC);
 }
 
 /* Clear all 8 tracks for a scene row (single atomic DSP write, JS mirror update). */

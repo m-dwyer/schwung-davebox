@@ -1,6 +1,68 @@
 import {
+    copyDrumRepeatGrooveMirrors,
+    moveDrumRepeatGrooveMirrors,
     resetDrumRepeatGrooveMirrorsForLane
 } from './ui_drum_repeat_workflows.mjs';
+
+/* Copy active clip's lane srcLane to dstLane (same track, preserves dst midi_note). */
+export function copyDrumLaneImpl(S, deps, t, srcLane, dstLane) {
+    if (srcLane === dstLane) return;
+    if (typeof deps.host_module_set_param !== 'function') return;
+    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+    S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + srcLane + '_copy_to', val: String(dstLane) });
+    const steps = S.drumLaneSteps[t];
+    for (let s = 0; s < 256; s++) steps[dstLane][s] = steps[srcLane][s];
+    S.drumLaneHasNotes[t][dstLane] = S.drumLaneHasNotes[t][srcLane];
+    if (S.drumLaneHasNotes[t][srcLane]) S.drumClipNonEmpty[t][S.trackActiveClip[t]] = true;
+    copyDrumRepeatGrooveMirrors(S, t, srcLane, dstLane);
+    S.pendingDrumLaneResync = 2; S.pendingDrumLaneResyncTrack = t; S.pendingDrumLaneResyncLane = dstLane;
+}
+
+/* Cut active clip's lane srcLane into dstLane (copy then clear src). */
+export function cutDrumLaneImpl(S, deps, t, srcLane, dstLane) {
+    if (srcLane === dstLane) return;
+    if (typeof deps.host_module_set_param !== 'function') return;
+    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+    S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + srcLane + '_cut_to', val: String(dstLane) });
+    const steps = S.drumLaneSteps[t];
+    for (let s = 0; s < 256; s++) { steps[dstLane][s] = steps[srcLane][s]; steps[srcLane][s] = '0'; }
+    S.drumLaneHasNotes[t][dstLane] = S.drumLaneHasNotes[t][srcLane];
+    S.drumLaneHasNotes[t][srcLane] = false;
+    let anyHits = false;
+    for (let l = 0; l < deps.DRUM_LANES; l++) if (S.drumLaneHasNotes[t][l]) { anyHits = true; break; }
+    S.drumClipNonEmpty[t][S.trackActiveClip[t]] = anyHits;
+    moveDrumRepeatGrooveMirrors(S, t, srcLane, dstLane);
+    S.pendingDrumLaneResync = 2; S.pendingDrumLaneResyncTrack = t; S.pendingDrumLaneResyncLane = dstLane;
+}
+
+/* Copy all 32 lanes of drum_clips[srcC] on srcT to drum_clips[dstC] on dstT; preserve dst midi_notes. */
+export function copyDrumClipImpl(S, deps, srcT, srcC, dstT, dstC) {
+    if (srcT === dstT && srcC === dstC) return;
+    if (typeof deps.host_module_set_param !== 'function') return;
+    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+    S.pendingDefaultSetParams.push({ key: 'drum_clip_copy', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
+    S.drumClipNonEmpty[dstT][dstC] = S.drumClipNonEmpty[srcT][srcC];
+    if (dstC === S.trackActiveClip[dstT]) { S.pendingDrumResync = 2; S.pendingDrumResyncTrack = dstT; }
+}
+
+/* Cut all 32 lanes of drum_clips[srcC] on srcT into drum_clips[dstC] on dstT; undo dst only. */
+export function cutDrumClipImpl(S, deps, srcT, srcC, dstT, dstC) {
+    if (srcT === dstT && srcC === dstC) return;
+    if (typeof deps.host_module_set_param !== 'function') return;
+    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+    S.pendingDefaultSetParams.push({ key: 'drum_clip_cut', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
+    S.drumClipNonEmpty[dstT][dstC] = S.drumClipNonEmpty[srcT][srcC];
+    S.drumClipNonEmpty[srcT][srcC] = false;
+    if (srcC === S.trackActiveClip[srcT]) {
+        for (let l = 0; l < deps.DRUM_LANES; l++) {
+            for (let s = 0; s < 256; s++) S.drumLaneSteps[srcT][l][s] = '0';
+            S.drumLaneHasNotes[srcT][l] = false;
+        }
+        S.drumLaneLength[srcT] = 16;
+        S.drumLaneTPS[srcT] = 24;
+    }
+    if (dstC === S.trackActiveClip[dstT]) { S.pendingDrumResync = 2; S.pendingDrumResyncTrack = dstT; }
+}
 
 export function handleDrumLaneFactoryReset(S, deps, track, lane) {
     if (lane < 0 || lane >= deps.DRUM_LANES) return false;
