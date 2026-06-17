@@ -19,6 +19,13 @@ export function createLiveNoteQueues(numTracks) {
     return Array.from({length: numTracks}, () => []);
 }
 
+export function createPadRuntimeState() {
+    return {
+        padPitch: new Array(32).fill(-1),
+        padPressTick: new Array(32).fill(-1)
+    };
+}
+
 export function queueLiveNoteOn(queues, track, pitch, vel) {
     queues[track].push({ isOff: false, pitch, vel });
 }

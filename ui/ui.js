@@ -230,6 +230,7 @@ import {
 import {
     computePadNoteMap as computePadNoteMapImpl,
     createLiveNoteQueues,
+    createPadRuntimeState,
     drumPadToLane as padSurfaceDrumPadToLane,
     handleCaptureDrumLanePress,
     handleDrumLanePadPress,
@@ -623,9 +624,11 @@ function scaleNudgeNote(note, dir, key, scale) {
 }
 
 
-/* Per-pad pitch sent at note-on — ensures matching note-off even if map changes mid-hold. */
-const padPitch = new Array(32).fill(-1);
-const padPressTick = new Array(32).fill(-1);  /* tick when each pad was pressed, for drum tap-vs-hold detection */
+/* Per-pad press runtime owned by Pad Surface. padPitch ensures matching note-off
+ * even if the map changes mid-hold; padPressTick powers drum tap-vs-hold. */
+const padSurfaceRuntime = createPadRuntimeState();
+const padPitch = padSurfaceRuntime.padPitch;
+const padPressTick = padSurfaceRuntime.padPressTick;
 const DRUM_TAP_TICKS = 10;  /* ~30ms — taps shorter than this suppress the release note-off */
 
 /* S.clipSteps[track][clip][step] — JS-authoritative mirror of DSP step data */
