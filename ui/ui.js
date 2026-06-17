@@ -469,6 +469,11 @@ import {
     switchActiveTrackImpl
 } from './ui_track_selection_workflow.mjs';
 import {
+    closeConvertConfirmImpl,
+    convertTrackTypeImpl,
+    trackHasAnyDataImpl
+} from './ui_track_convert_workflow.mjs';
+import {
     syncDrumClipContentImpl,
     syncDrumLaneStepsImpl,
     syncDrumLanesMetaImpl
@@ -1767,45 +1772,17 @@ function applyTrackConfig(t, key, val) {
  * there is no coalescing drop. We then resync JS from DSP — syncClipsFromDsp()'s
  * get_param round-trips double as the audio-thread sync barrier. */
 function trackHasAnyData(t) {
-    for (let c = 0; c < NUM_CLIPS; c++)
-        if (S.clipNonEmpty[t][c] || S.drumClipNonEmpty[t][c]) return true;
-    return false;
+    return trackHasAnyDataImpl(S, createTrackConvertWorkflowDeps(), t);
 }
 
 function convertTrackType(t, toDrum) {
-    if (typeof host_module_set_param !== 'function') return;
-    host_module_set_param('t' + t + (toDrum ? '_convert_to_drum' : '_convert_to_melodic'), '1');
-    S.trackPadMode[t] = toDrum ? PAD_MODE_DRUM : PAD_MODE_MELODIC_SCALE;
-    /* Resync inline (this runs in tick(), so get_param works): the first get
-     * in syncClipsFromDsp flushes the queued convert, then reads post-convert
-     * state — it also runs the drum-side syncs when the result is a drum track.
-     * Empty tracks skip the heavy all-track resync but still need a get_param
-     * barrier so the convert set_param drains before computePadNoteMap pushes
-     * tN_padmap (without the barrier, same-buffer coalescing drops the convert). */
-    if (trackHasAnyData(t)) syncClipsFromDsp();
-    else host_module_get_param('t' + t + '_pad_mode');
-    if (toDrum) {
-        if (t === S.activeTrack && (S.activeBank === 2 || S.activeBank === 4)) S.activeBank = 0;
-    } else {
-        if (t === S.activeTrack && S.activeBank === 7) S.activeBank = 0;
-        /* DSP zeroed active_drum_lane/drum_perform_mode inside the convert
-         * handler; only JS-side mirror state needs clearing here. */
-        S.drumVelZoneArmed[t] = false;
-        S.drumLastVelZone[t]  = 0;
-    }
-    computePadNoteMap();   /* get_param-free — rebuild pad LEDs immediately */
-    invalidateLEDCache();
-    forceRedraw();
+    return convertTrackTypeImpl(S, createTrackConvertWorkflowDeps(), t, toDrum);
 }
 
 /* Tear down the Keys->Drums confirm dialog and the menu's edit state so a
  * lingering enum edit doesn't replay. Call on Yes, No, and Back-cancel. */
 function closeConvertConfirm() {
-    S.confirmConvertToDrum = false;
-    if (S.globalMenuState) S.globalMenuState.editing = false;
-    if (S.globalMenuState) S.globalMenuState.editValue = null;
-    S.lastSentMenuEditValue = null;
-    S.bpmWasEditing = false;
+    return closeConvertConfirmImpl(S);
 }
 
 /* Rewrite the cable-2 channel remap table for the active track.
@@ -2384,6 +2361,20 @@ function restoreUiSidecar(applyDefaultsNow) {
 
 function syncClipsFromDsp() {
     return syncClipsFromDspImpl(S, createClipStateSyncDeps());
+}
+
+function createTrackConvertWorkflowDeps() {
+    return {
+        computePadNoteMap,
+        forceRedraw,
+        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
+        invalidateLEDCache,
+        numClips: NUM_CLIPS,
+        padModeDrum: PAD_MODE_DRUM,
+        padModeMelodicScale: PAD_MODE_MELODIC_SCALE,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        syncClipsFromDsp
+    };
 }
 
 /* Targeted re-sync after undo/redo: re-read only the affected clips rather than all 64.
