@@ -194,12 +194,17 @@ import {
     setTrackSoloImpl
 } from './ui_mute_solo_workflow.mjs';
 import {
-    createLiveNoteRecordingState,
     extNoteOffAllImpl,
     liveSendNoteImpl,
     recordNoteOffImpl,
     recordNoteOnImpl
 } from './ui_live_note_workflow.mjs';
+import {
+    clearRecordingNoteBuffers,
+    createRecordingWorkflowState,
+    disarmRecordImpl,
+    handoffRecordingToTrackImpl
+} from './ui_recording_workflow.mjs';
 import {
     handleUiKnobTouch
 } from './ui_knob_touch_workflow.mjs';
@@ -733,8 +738,9 @@ const NOTE_SESSION_HOLD_TICKS = 40;  /* ~200ms at 196Hz */
 
 const pendingLiveNotes = createLiveNoteQueues(NUM_TRACKS);  /* buffered live notes flushed each tick */
 const pendingDrumNoteOffs = Array.from({length: NUM_TRACKS}, () => []);  /* drum tap note-offs deferred 1 tick to avoid coalescing with note-on */
-const _drumRecNoteOns  = [];  /* { track, laneNote, vel } — queued drum recording note-ons */
-const _drumRecNoteOffs = [];  /* { track, laneNote } — queued drum recording note-offs */
+const recordingWorkflowState = createRecordingWorkflowState();
+const _drumRecNoteOns  = recordingWorkflowState.drumRecNoteOns;  /* { track, laneNote, vel } — queued drum recording note-ons */
+const _drumRecNoteOffs = recordingWorkflowState.drumRecNoteOffs;  /* { track, laneNote } — queued drum recording note-offs */
 
 
 /* ------------------------------------------------------------------ */
@@ -914,58 +920,22 @@ function clearRow(rowIdx) {
     return clearRowImpl(S, createClipEditOpsDeps(), rowIdx);
 }
 
-/* Disarm real-time recording: clear DSP flag (triggers deferred save), update LED. */
-function disarmRecord() {
-    if (!S.recordArmed) return;
-    const t = S.recordArmedTrack;
-    const _wasCountingIn   = S.recordCountingIn;
-    S.recordArmed          = false;
-    S.recordPendingPage    = false;
-    S.recordCountingIn     = false;
-    S.recordArmedTrack     = -1;
-    S.countInStartTick    = -1;
-    S.countInQuarterTicks = 0;
-    _recordingNoteTrack.clear();
-    S._recNoteOns.length   = 0;
-    S._recNoteOffs.length  = 0;
-    _drumRecNoteOns.length  = 0;
-    _drumRecNoteOffs.length = 0;
-    S.pendingPrerollNote          = null;
-    S.pendingPrerollNotes         = [];
-    S.pendingPrerollToggleQueue   = [];
-    S.pendingPrerollGate          = null;
-    if (t >= 0) {
-        const _dat = S.trackActiveClip[t];
-        S.clipAdaptiveMode[t][_dat] = false;
-        if (S.trackPadMode[t] === PAD_MODE_DRUM) {
-            S.pendingDrumResync      = 2;
-            S.pendingDrumResyncTrack = t;
-        }
-    }
-    S.recordScheduledStop       = false;
-    S.recordScheduledStopTarget = -1;
-    S.pendingScheduledDisarm    = false;
-    if (typeof host_module_set_param === 'function') {
-        if (_wasCountingIn) {
-            /* Count-in active: only cancel is needed; sending _recording 0 would coalesce it away */
-            host_module_set_param('record_count_in_cancel', '1');
-        } else {
-            if (t >= 0) host_module_set_param('t' + t + '_recording', '0');
-        }
-    }
-    setButtonLED(MoveRec, LED_OFF);
+function createRecordingWorkflowDeps() {
+    return {
+        padModeDrum: PAD_MODE_DRUM,
+        moveRec: MoveRec,
+        ledOff: LED_OFF,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setButtonLED
+    };
 }
 
-/* Move recording to a different track while staying armed. No-op if not actively recording. */
+function disarmRecord() {
+    return disarmRecordImpl(S, recordingWorkflowState, createRecordingWorkflowDeps());
+}
+
 function handoffRecordingToTrack(newTrack) {
-    if (!S.recordArmed || S.recordCountingIn || newTrack === S.recordArmedTrack) return;
-    const old = S.recordArmedTrack;
-    _recordingNoteTrack.clear();
-    S.recordArmedTrack      = newTrack;
-    if (typeof host_module_set_param === 'function') {
-        if (old >= 0) host_module_set_param('t' + old + '_recording', '0');
-        host_module_set_param('t' + newTrack + '_recording', '1');
-    }
+    return handoffRecordingToTrackImpl(S, recordingWorkflowState, createRecordingWorkflowDeps(), newTrack);
 }
 
 function effectiveVelocity(rawVel) { return rawVel; }
@@ -1003,7 +973,7 @@ function flushChordBatch() {}
 
 /* DSP-side recording: buffer note events; tick() flushes as a single batched set_param so
  * chords (multiple pads hit in the same ~5ms JS tick) are not lost to coalescing. */
-const liveNoteRecordingState = createLiveNoteRecordingState();
+const liveNoteRecordingState = recordingWorkflowState.liveNoteRecordingState;
 const _recordingNoteTrack = liveNoteRecordingState.recordingNoteTrack; /* pitch → track index, for matching note-offs */
 const extHeldNotes = liveNoteRecordingState.extHeldNotes; /* pitch → {track, recording} — external MIDI held notes */
 
@@ -2336,11 +2306,7 @@ function createTickWorkflowDeps() {
         restoreUiSidecar,
         syncClipsTargeted,
         clearRecordingNoteBuffers: function () {
-            _recordingNoteTrack.clear();
-            S._recNoteOns.length   = 0;
-            S._recNoteOffs.length  = 0;
-            _drumRecNoteOns.length  = 0;
-            _drumRecNoteOffs.length = 0;
+            clearRecordingNoteBuffers(S, recordingWorkflowState);
         },
         showActionPopup,
         syncDrumClipContent,
