@@ -296,6 +296,26 @@ import {
     createTrackIdleRenderDepsImpl
 } from './ui_render_adapters.mjs';
 import {
+    createHostParamAdapters,
+    createUiFlagAdapters,
+    hasShadowSetParam,
+    optionalHostFileExists,
+    optionalHostModuleGetParam,
+    optionalHostModuleGetParamUndefined,
+    optionalHostReadFile,
+    optionalHostModuleSetParam,
+    optionalHostWriteFile
+} from './ui_sync_adapters.mjs';
+import {
+    createExtMidiRemapHostAdapters,
+    optionalMoveMidiExternalSend,
+    optionalMoveMidiInjectToMove,
+    optionalShadowSendMidiToDsp
+} from './ui_input_adapters.mjs';
+import {
+    createTickHostAdapters
+} from './ui_tick_adapters.mjs';
+import {
     buildGlobalMenuItemsImpl,
     doShiftStepCommonImpl,
     ensureGlobalMenuFreshImpl,
@@ -469,8 +489,7 @@ function createGlobalMenuDeps() {
         openTapTempo,
         xposePreviewSet,
         openLoadSnapshot,
-        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null
+        ...createHostParamAdapters()
     };
 }
 
@@ -486,7 +505,7 @@ function createGlobalMenuWorkflowDeps() {
         exitMoveNativeCoRun,
         exitSchwungCoRun,
         openTapTempo,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         showActionPopup
     };
 }
@@ -494,7 +513,7 @@ function createGlobalMenuWorkflowDeps() {
 function createTapTempoDeps() {
     return {
         getParam: host_module_get_param,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         computePadNoteMap,
         invalidateLEDCache
     };
@@ -502,7 +521,7 @@ function createTapTempoDeps() {
 
 function createInheritPickerDeps() {
     return {
-        fileExists: typeof host_file_exists === 'function' ? host_file_exists : null,
+        fileExists: optionalHostFileExists(),
         uuidToStatePath,
         loadNameIndex,
         findInheritCandidates,
@@ -525,9 +544,7 @@ function createLedInitDeps() {
         setPaletteEntryRGB,
         reapplyPalette,
         invalidateLEDCache,
-        clearFlags: typeof shadow_clear_ui_flags === 'function' ? shadow_clear_ui_flags : null,
-        getFlagsFn: function () { return globalThis.shadow_get_ui_flags; },
-        setFlagsFn: function (fn) { globalThis.shadow_get_ui_flags = fn; }
+        ...createUiFlagAdapters()
     };
 }
 
@@ -536,7 +553,7 @@ function createTransposeDeps() {
         numTracks: NUM_TRACKS,
         numClips: NUM_CLIPS,
         padModeDrum: PAD_MODE_DRUM,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         computePadNoteMap,
         forceRedraw
     };
@@ -564,7 +581,7 @@ function createCoRunDeps() {
         shadowCorunBegin: typeof shadow_corun_begin === 'function' ? shadow_corun_begin : null,
         shadowCorunEnd: typeof shadow_corun_end === 'function' ? shadow_corun_end : null,
         shadowSetSkipLedClear: typeof shadow_set_skip_led_clear === 'function' ? shadow_set_skip_led_clear : null,
-        moveMidiInjectToMove: typeof move_midi_inject_to_move === 'function' ? move_midi_inject_to_move : null,
+        moveMidiInjectToMove: optionalMoveMidiInjectToMove(),
         computePadNoteMap,
         showActionPopup,
         reapplyPalette,
@@ -764,7 +781,7 @@ function midiNoteName(n) {
 function createMuteSoloWorkflowDeps() {
     return {
         numTracks: NUM_TRACKS,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null
+        setParam: optionalHostModuleSetParam()
     };
 }
 
@@ -816,7 +833,7 @@ function playMetronomeClick() {
  * close over module-global S. */
 function createClipEditOpsDeps() {
     return {
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         resetPerClipBankParamsToDefault,
         refreshPerClipBankParams,
         forceRedraw,
@@ -894,7 +911,7 @@ function createRecordingWorkflowDeps() {
         padModeDrum: PAD_MODE_DRUM,
         moveRec: MoveRec,
         ledOff: LED_OFF,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         setButtonLED
     };
 }
@@ -1131,7 +1148,7 @@ function computePadNoteMap() {
         PAD_MODE_DRUM,
         DRUM_LANES,
         DRUM_BASE_NOTE,
-        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null
+        host_module_set_param: optionalHostModuleSetParam()
     });
 }
 
@@ -1153,22 +1170,17 @@ function drumPadToLane(padIdx) {
     return padSurfaceDrumPadToLane(padIdx, S.drumLanePage[S.activeTrack]);
 }
 
-function optionalHostModuleSetParam() {
-    return (typeof host_module_set_param === 'function') ? host_module_set_param : null;
-}
-
 function createDrumClipSyncDeps() {
     return {
-        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null
+        getParam: optionalHostModuleGetParam()
     };
 }
 
 function createClipStateSyncDeps() {
     return {
-        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
-        readFile: typeof host_read_file === 'function' ? host_read_file : null,
-        fileExists: typeof host_file_exists === 'function' ? host_file_exists : null,
+        ...createHostParamAdapters(),
+        readFile: optionalHostReadFile(),
+        fileExists: optionalHostFileExists(),
         setActiveDrumLane,
         syncDrumClipContent,
         syncDrumLanesMeta,
@@ -1314,7 +1326,7 @@ function drainLedInit() {
  * Reads from clip[active_clip].pfx_params directly — immune to pfx_sync timing. */
 function refreshDrumLaneBankParams(t, lane) {
     refreshDrumLaneBankParamsFromDsp(S, {
-        host_module_get_param: typeof host_module_get_param === 'function' ? host_module_get_param : undefined,
+        host_module_get_param: optionalHostModuleGetParamUndefined(),
         TPS_VALUES
     }, t, lane);
 }
@@ -1331,7 +1343,7 @@ function resyncDrumTrack(t) {
 
 function refreshPerClipBankParams(t) {
     refreshPerClipBankParamsFromDsp(S, {
-        host_module_get_param: typeof host_module_get_param === 'function' ? host_module_get_param : undefined,
+        host_module_get_param: optionalHostModuleGetParamUndefined(),
         PAD_MODE_DRUM,
         TPS_VALUES
     }, t);
@@ -1340,7 +1352,7 @@ function refreshPerClipBankParams(t) {
 /* Read TRACK ARP step_vel[8] from DSP for track t. Called on init and track switch. */
 function readTarpStepVel(t) {
     readTrackArpStepConfigFromDsp(S, {
-        host_module_get_param: typeof host_module_get_param === 'function' ? host_module_get_param : undefined
+        host_module_get_param: optionalHostModuleGetParamUndefined()
     }, t);
 }
 
@@ -1349,7 +1361,7 @@ function readTarpStepVel(t) {
  * (Rpt1's per-track last-rate lives only in DSP — JS has no mirror for it.) */
 function readDrumRepeatRates(t) {
     readDrumRepeatRatesFromDsp(S, {
-        host_module_get_param: typeof host_module_get_param === 'function' ? host_module_get_param : undefined
+        host_module_get_param: optionalHostModuleGetParamUndefined()
     }, t);
 }
 
@@ -1357,9 +1369,8 @@ function readDrumRepeatRates(t) {
  * Host get/set params null-guarded; helpers close over module-global S. */
 function createBankParamsDeps() {
     return {
-        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
-        hasShadowSetParam: typeof shadow_set_param === 'function',
+        ...createHostParamAdapters(),
+        hasShadowSetParam: hasShadowSetParam(),
         refreshDrumLaneBankParams,
         routeCheckWarnForTrack,
         syncDrumLanesMeta,
@@ -1388,9 +1399,8 @@ function createPollDspWorkflowDeps() {
         corunChainEdit: CORUN_TARGET_CHAIN_EDIT,
         corunMoveNative: CORUN_TARGET_MOVE_NATIVE,
         /* host */
-        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
-        writeFile: typeof host_write_file === 'function' ? host_write_file : null,
+        ...createHostParamAdapters(),
+        writeFile: optionalHostWriteFile(),
         corunState: typeof shadow_corun_state === 'function' ? shadow_corun_state : null,
         /* helpers (close over module-global S) */
         exitSchwungCoRun,
@@ -1474,7 +1484,7 @@ function readBankParams(t, bankIdx) {
 
 function readTrackConfig(t) {
     readTrackConfigFromDsp(S, {
-        host_module_get_param: typeof host_module_get_param === 'function' ? host_module_get_param : undefined
+        host_module_get_param: optionalHostModuleGetParamUndefined()
     }, t);
 }
 
@@ -1505,9 +1515,7 @@ function createExtMidiRemapWorkflowDeps() {
     return {
         routeMove: 1,
         blockValue: 254,
-        clear: (typeof host_ext_midi_remap_clear === 'function') ? host_ext_midi_remap_clear : null,
-        set: (typeof host_ext_midi_remap_set === 'function') ? host_ext_midi_remap_set : null,
-        enable: (typeof host_ext_midi_remap_enable === 'function') ? host_ext_midi_remap_enable : null
+        ...createExtMidiRemapHostAdapters()
     };
 }
 
@@ -1536,8 +1544,8 @@ function applyBankParam(t, bankIdx, knobIdx, val) {
 function createLiveNoteWorkflowDeps() {
     return {
         pendingLiveNotes,
-        move_midi_external_send: (typeof move_midi_external_send === 'function') ? move_midi_external_send : null,
-        shadow_send_midi_to_dsp: (typeof shadow_send_midi_to_dsp === 'function') ? shadow_send_midi_to_dsp : null
+        move_midi_external_send: optionalMoveMidiExternalSend(),
+        shadow_send_midi_to_dsp: optionalShadowSendMidiToDsp()
     };
 }
 
@@ -1561,7 +1569,7 @@ function createTrackSelectionWorkflowDeps() {
         padModeDrum: PAD_MODE_DRUM,
         refreshPerClipBankParams,
         resyncDrumTrack,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null
+        setParam: optionalHostModuleSetParam()
     };
 }
 
@@ -1616,7 +1624,7 @@ function sceneAnyPlaying(sceneIdx) {
 /* Send current combined modifier bitmask to DSP. */
 function sendPerfMods() {
     sendPerfModsImpl(S, {
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null
+        setParam: optionalHostModuleSetParam()
     });
 }
 
@@ -1723,7 +1731,7 @@ function createMotionIdleRenderDeps() {
         print,
         fill_rect,
         drawBankHeadingInverted,
-        host_module_get_param
+        host_module_get_param: optionalHostModuleGetParam()
     });
 }
 
@@ -1772,7 +1780,7 @@ function createCcStepEditRenderDeps() {
         print,
         pixelPrint,
         fill_rect,
-        host_module_get_param
+        host_module_get_param: optionalHostModuleGetParam()
     });
 }
 
@@ -1953,12 +1961,12 @@ function createTrackConvertWorkflowDeps() {
     return {
         computePadNoteMap,
         forceRedraw,
-        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
+        getParam: optionalHostModuleGetParam(),
         invalidateLEDCache,
         numClips: NUM_CLIPS,
         padModeDrum: PAD_MODE_DRUM,
         padModeMelodicScale: PAD_MODE_MELODIC_SCALE,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         syncClipsFromDsp
     };
 }
@@ -1971,11 +1979,11 @@ function createInitWorkflowDeps() {
         },
         shadowCorunEnd: (typeof shadow_corun_end === 'function') ? shadow_corun_end : null,
         banks: BANKS,
-        getParam: (typeof host_module_get_param === 'function') ? host_module_get_param : null,
+        getParam: optionalHostModuleGetParam(),
         log: function (msg) { console.log(msg); },
         readActiveSet,
         maybeShowInheritPicker,
-        fileExists: (typeof host_file_exists === 'function') ? host_file_exists : null,
+        fileExists: optionalHostFileExists(),
         syncClipsFromDsp,
         syncMuteSoloFromDsp,
         extHeldNotes,
@@ -2024,8 +2032,8 @@ function captureError(where, e) {
                    + ' lock=' + (S.perfViewLocked ? 1 : 0)
                    + ' susp=' + (S.pendingSuspendSave ? 1 : 0)
                    + '] ' + where + ': ' + msg + stack + '\n\n';
-        if (typeof host_write_file === 'function')
-            host_write_file('/data/UserData/schwung/seq8-jserr.log', _jsErrBuf);
+        const writeFile = optionalHostWriteFile();
+        if (writeFile) writeFile('/data/UserData/schwung/seq8-jserr.log', _jsErrBuf);
     } catch (_e) { /* the logger must never throw */ }
 }
 
@@ -2070,15 +2078,7 @@ function createTickWorkflowDeps() {
         VividYellow,
         LED_OFF,
         TRACK_COLORS,
-        host_module_get_param: (typeof host_module_get_param === 'function') ? host_module_get_param : null,
-        host_module_set_param: (typeof host_module_set_param === 'function') ? host_module_set_param : null,
-        host_ext_midi_remap_enable: (typeof host_ext_midi_remap_enable === 'function') ? host_ext_midi_remap_enable : null,
-        host_exit_module: (typeof host_exit_module === 'function') ? host_exit_module : null,
-        host_hide_module: (typeof host_hide_module === 'function') ? host_hide_module : null,
-        host_file_exists: (typeof host_file_exists === 'function') ? host_file_exists : null,
-        move_midi_inject_to_move: (typeof move_midi_inject_to_move === 'function') ? move_midi_inject_to_move : null,
-        move_midi_external_send: (typeof move_midi_external_send === 'function') ? move_midi_external_send : null,
-        shadow_get_param: (typeof shadow_get_param === 'function') ? shadow_get_param : null,
+        ...createTickHostAdapters(),
         clearScreen: clear_screen,
         pendingLiveNotes,
         pendingDrumNoteOffs,
@@ -2214,8 +2214,8 @@ function createPadWorkflowDeps() {
         perfModPopupTicks: PERF_MOD_POPUP_TICKS,
         drumTapTicks: DRUM_TAP_TICKS,
         /* host */
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
-        injectToMove: typeof move_midi_inject_to_move === 'function' ? move_midi_inject_to_move : null,
+        setParam: optionalHostModuleSetParam(),
+        injectToMove: optionalMoveMidiInjectToMove(),
         /* module-global arrays (passed by reference; handlers mutate elements) */
         padPitch,
         padPressTick,
@@ -2288,7 +2288,7 @@ function createSessionViewWorkflowDeps() {
         numTracks: NUM_TRACKS,
         padModeDrum: PAD_MODE_DRUM,
         refreshPerClipBankParams,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         setTrackMute,
         setTrackSolo,
         sendPerfMods,
@@ -2318,7 +2318,7 @@ function createTransportCcWorkflowDeps() {
         exitSchwungCoRun,
         focusedClipIsEmpty: _focusedClipIsEmpty,
         forceRedraw,
-        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
+        getParam: optionalHostModuleGetParam(),
         moveBack: MoveBack,
         movePlay: MovePlay,
         moveMute: MoveMute,
@@ -2331,7 +2331,7 @@ function createTransportCcWorkflowDeps() {
         resolveInheritPicker,
         saveState,
         setButtonLED,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         setTrackMute,
         setTrackSolo,
         showActionPopup,
@@ -2361,7 +2361,7 @@ function createButtonCcWorkflowDeps() {
         },
         invalidateLEDCache,
         latchHeldDrumRepeatsOnLoopPress: function (track) {
-            return latchHeldDrumRepeatsOnLoopPress(S, { host_module_set_param }, track);
+            return latchHeldDrumRepeatsOnLoopPress(S, { host_module_set_param: optionalHostModuleSetParam() }, track);
         },
         loopTapTicks: LOOP_TAP_TICKS,
         moveCapture: MoveCapture,
@@ -2383,7 +2383,7 @@ function createButtonCcWorkflowDeps() {
             return resolveLoopGesture(S, createLoopGestureWorkflowDeps(), fireFallback);
         },
         sendPerfMods,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         showActionPopup,
         switchViewCleanup: _switchViewCleanup,
         padModeDrum: PAD_MODE_DRUM
@@ -2405,7 +2405,7 @@ function createNavigationCcWorkflowDeps() {
             return queueLiveNoteOff(pendingLiveNotes, track, pitch);
         },
         setDrumLanePage,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         syncDrumLanesMeta,
         syncDrumLaneSteps
     };
@@ -2416,7 +2416,7 @@ function createLoopGestureWorkflowDeps() {
         effectiveClip,
         forceRedraw,
         padModeDrum: PAD_MODE_DRUM,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null
+        setParam: optionalHostModuleSetParam()
     };
 }
 
@@ -2437,13 +2437,13 @@ function createTrackViewStepWorkflowDeps() {
         effectiveVelocity,
         clipHasContent,
         forceRedraw,
-        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
+        getParam: optionalHostModuleGetParam(),
         invalidateLEDCache,
         noNoteFlashTicks: NO_NOTE_FLASH_TICKS,
         padModeDrum: PAD_MODE_DRUM,
         refreshSeqNotesIfCurrent,
         scaleNudgeNote,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         ccKnobDelta,
         stepHoldTicks: STEP_HOLD_TICKS,
         stepEntryVelocity,
@@ -2460,16 +2460,16 @@ function createKnobCcWorkflowDeps() {
         ccKnobDelta,
         computePadNoteMap,
         editDrumRepeatGrooveStep: function (track, lane, step, dir, editNudge) {
-            return editDrumRepeatGrooveStep(S, { host_module_set_param }, track, lane, step, dir, editNudge);
+            return editDrumRepeatGrooveStep(S, { host_module_set_param: optionalHostModuleSetParam() }, track, lane, step, dir, editNudge);
         },
         effectiveClip,
         forceRedraw,
-        getParam: typeof host_module_get_param === 'function' ? host_module_get_param : null,
-        hasShadowSetParam: typeof shadow_set_param === 'function',
+        getParam: optionalHostModuleGetParam(),
+        hasShadowSetParam: hasShadowSetParam(),
         invalidateLEDCache,
         padModeDrum: PAD_MODE_DRUM,
         refreshPerClipBankParams,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         showActionPopup,
         stepEntryVelocity,
         stretchBlockedTicks: STRETCH_BLOCKED_TICKS,
@@ -2485,7 +2485,7 @@ function createJogCcWorkflowDeps() {
         numClips: NUM_CLIPS,
         banks: BANKS,
         decodeDelta,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         exitModule: typeof host_exit_module === 'function' ? host_exit_module : null,
         forceRedraw,
         computePadNoteMap,
@@ -2554,7 +2554,7 @@ function createInputDispatchWorkflowDeps() {
         selectClipOnTrack,
         sendPerfMods,
         setLED,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         trackPadBase: TRACK_PAD_BASE
     };
 }
@@ -2606,7 +2606,7 @@ function createKnobTouchWorkflowDeps() {
         moveMainTouch: MoveMainTouch,
         padModeDrum: PAD_MODE_DRUM,
         setButtonLED,
-        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        setParam: optionalHostModuleSetParam(),
         showActionPopup,
         trackColors: TRACK_COLORS
     };
