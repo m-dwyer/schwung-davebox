@@ -37,46 +37,53 @@ all-deps module.
 - Remaining `ui.js` Pad Surface wrappers are intentional public/local entrypoint
   shims: `computePadNoteMap`, `setActiveDrumLane`, `setDrumPerformMode`, and
   `setDrumLanePage`.
+- Phase 4 Input Dispatch Dependency Locality is complete. Hardware CC/note
+  constants for pads, buttons, transport, navigation, jog, input dispatch, and
+  internal MIDI routing are grouped behind `ui_input_adapters.mjs`; the repeated
+  `host_exit_module` late-binding check is also localized there.
+- Remaining `ui.js` input dependency factory entries are intentional composition
+  thunks or phase-owned runtime dependencies. They stay in `ui.js` because
+  moving them would cross the Tick Pipeline, Parameter Bank, Drum Lane Workflow,
+  Drum Repeat Workflow, Loop Gesture, Track View Step, or public wrapper
+  boundaries.
 
-## Next Work: Phase 4 Execution Plan
+## Completed: Phase 4 Input Dispatch Dependency Locality
 
-Start with Input Dispatch Dependency Locality. Phase 4 should reduce dependency
-factory noise in `ui.js` only where a hardware-concept adapter can preserve
-dispatch priority and short-circuit behavior exactly.
+Phase 4 reduced dependency factory noise in `ui.js` only where a
+hardware-concept adapter could preserve dispatch priority and short-circuit
+behavior exactly.
 
-Tests first:
+Test audit:
 
-- Audit `input-dispatch-workflow.test.ts`, `pad-workflow.test.ts`,
+- Audited `input-dispatch-workflow.test.ts`, `pad-workflow.test.ts`,
   `button-cc-workflow.test.ts`, `transport-cc-workflow.test.ts`,
   `navigation-cc-workflow.test.ts`, `jog-cc-workflow.test.ts`, and
   `knob-cc-workflow.test.ts`.
-- Add narrow tests before moving any dependency construction that is not already
-  pinned: dispatch priority, modal short-circuiting, pad press/release ordering,
-  and global MIDI entrypoint delegation.
-- For priority-sensitive paths, assert call order through fake adapters
-  rather than relying on visual inspection.
+- Added narrow adapter coverage before moving dependency construction that was
+  not already pinned. Existing tests already pinned dispatch priority, modal
+  short-circuiting, pad press/release ordering, and raw internal MIDI routing.
 
-Mechanical decomposition steps:
+Mechanical decomposition:
 
-- Audit `createInputDispatchWorkflowDeps()` and the pad/CC-specific dependency
-  factories before edits. Do not move a factory just because it is large.
-- Prefer concept-scoped adapters for pads, transport, navigation, buttons, jog,
-  and knobs only where the adapter hides repeated hardware knowledge from
-  `ui.js`.
-- Keep `globalThis.onMidiMessageInternal`,
-  `globalThis.onMidiMessageExternal`, and public wrapper names assigned in
-  `ui.js`.
-- Do not move Tick Pipeline dependency construction, Parameter Bank runtime
+- Audited `createInputDispatchWorkflowDeps()` and the pad/CC-specific dependency
+  factories before edits. Large behavior-heavy factories were intentionally left
+  in place.
+- Added concept-scoped adapters for pads, transport, navigation, buttons, jog,
+  raw input dispatch, and internal MIDI routing where the adapter hides repeated
+  hardware knowledge from `ui.js`.
+- Localized the repeated `host_exit_module` optional host lookup in
+  `ui_input_adapters.mjs`.
+- Preserved `globalThis.onMidiMessageInternal`,
+  `globalThis.onMidiMessageExternal`, and public wrapper names in `ui.js`.
+- Did not move Tick Pipeline dependency construction, Parameter Bank runtime
   behavior, destructive Drum Lane Workflow behavior, or Drum Repeat Workflow
   behavior in this phase.
-- After each small move, run the focused tests touched by the change before
-  proceeding to the next move.
 
 Verification for the phase:
 
-- Run the focused input-dispatch and hardware-concept tests first.
-- Run `cd overture/web && npm run test:node`.
-- Note any skipped or non-blocking checks in the commit/PR summary.
+- Focused input-dispatch and hardware-concept tests were run after each slice.
+- `cd overture/web && npm run test:node` was green after each slice.
+- No non-blocking checks were skipped for Phase 4.
 
 ## 1. Tick Pipeline Locality
 
@@ -135,6 +142,8 @@ Implementation direction:
   `input-dispatch-workflow.test.ts`, and relevant behavior harness coverage.
 
 ## 4. Input Dispatch Dependency Locality
+
+Status: complete.
 
 After Pad Surface consolidation, reduce the remaining CC/pad dependency
 factories in `ui.js` by grouping input adapters by hardware concept.
