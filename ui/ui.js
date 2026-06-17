@@ -282,6 +282,24 @@ import {
     drawUIImpl
 } from './ui_screen_router_workflow.mjs';
 import {
+    createBankChromeRenderDepsImpl,
+    createBankRenderDepsImpl,
+    createCcStepEditRenderDepsImpl,
+    createLoopRenderDepsImpl,
+    createMetroIndicatorRenderDepsImpl,
+    createModalRenderDepsImpl,
+    createMotionIdleRenderDepsImpl,
+    createPerfModeRenderDepsImpl,
+    createPopupRenderDepsImpl,
+    createPromptRenderDepsImpl,
+    createSessionIdleRenderDepsImpl,
+    createSessionOverviewRenderDepsImpl,
+    createSplashRenderDepsImpl,
+    createStepEditRenderDepsImpl,
+    createStepIntervalRenderDepsImpl,
+    createTrackIdleRenderDepsImpl
+} from './ui_render_adapters.mjs';
+import {
     buildGlobalMenuItemsImpl
 } from './ui_global_menu.mjs';
 import {
@@ -1856,7 +1874,7 @@ function forceRedraw() {
 /* ------------------------------------------------------------------ */
 
 function createBankRenderDeps() {
-    return {
+    return createBankRenderDepsImpl({
         print,
         fill_rect,
         drawBankHeading,
@@ -1865,131 +1883,131 @@ function createBankRenderDeps() {
         altIndicatorActive,
         bankHasAltParams,
         midiNoteName
-    };
+    });
 }
 
 function createBankChromeRenderDeps() {
-    return {
+    return createBankChromeRenderDepsImpl({
         print,
         fill_rect,
         altIndicatorActive,
         bankHasAltParams
-    };
+    });
 }
 
 function createMetroIndicatorRenderDeps() {
-    return {
+    return createMetroIndicatorRenderDepsImpl({
         pixelPrint,
         fill_rect
-    };
+    });
 }
 
 function createSplashRenderDeps() {
-    return {
+    return createSplashRenderDepsImpl({
         clear_screen,
         fill_rect
-    };
+    });
 }
 
 function createTrackIdleRenderDeps() {
-    return {
+    return createTrackIdleRenderDepsImpl({
         pixelPrint,
         fill_rect,
         drawBankHeading,
         drawBankHeadingInverted,
         drawMetroIndicator,
         drawPositionBar,
-    };
+    });
 }
 
 function createSessionIdleRenderDeps() {
-    return {
+    return createSessionIdleRenderDepsImpl({
         print,
         pixelPrint,
         fill_rect,
         drawMetroIndicator
-    };
+    });
 }
 
 function createSessionOverviewRenderDeps() {
-    return {
+    return createSessionOverviewRenderDepsImpl({
         fill_rect
-    };
+    });
 }
 
 function createPerfModeRenderDeps() {
-    return {
+    return createPerfModeRenderDepsImpl({
         clear_screen,
         print,
         pixelPrint,
         fill_rect
-    };
+    });
 }
 
 function createMotionIdleRenderDeps() {
-    return {
+    return createMotionIdleRenderDepsImpl({
         print,
         fill_rect,
         drawBankHeadingInverted,
         host_module_get_param
-    };
+    });
 }
 
 function createPopupRenderDeps() {
-    return {
+    return createPopupRenderDepsImpl({
         print,
         fill_rect
-    };
+    });
 }
 
 function createPromptRenderDeps() {
-    return {
+    return createPromptRenderDepsImpl({
         clear_screen,
         fill_rect,
         print
-    };
+    });
 }
 
 function createModalRenderDeps() {
-    return {
+    return createModalRenderDepsImpl({
         clear_screen,
         fill_rect,
         print,
         drawMenuHeader
-    };
+    });
 }
 
 function createLoopRenderDeps() {
-    return {
+    return createLoopRenderDepsImpl({
         print,
         pixelPrint,
         fill_rect
-    };
+    });
 }
 
 function createStepEditRenderDeps() {
-    return {
+    return createStepEditRenderDepsImpl({
         print,
         pixelPrint,
         fill_rect
-    };
+    });
 }
 
 function createCcStepEditRenderDeps() {
-    return {
+    return createCcStepEditRenderDepsImpl({
         print,
         pixelPrint,
         fill_rect,
         host_module_get_param
-    };
+    });
 }
 
 function createStepIntervalRenderDeps() {
-    return {
+    return createStepIntervalRenderDepsImpl({
         print,
         fill_rect,
         drawBankHeading
-    };
+    });
 }
 
 function drawUI() {
