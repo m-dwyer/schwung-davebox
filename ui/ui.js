@@ -228,9 +228,9 @@ import {
     handleTrackViewMelodicStepNoteAssignment
 } from './ui_track_view_step_workflow.mjs';
 import {
-    computePadNoteMap as computePadNoteMapImpl,
     createLiveNoteQueues,
     createPadRuntimeState,
+    createPadSurfaceRuntime,
     drumPadToLane as padSurfaceDrumPadToLane,
     handleCaptureDrumLanePress,
     handleDrumLanePadPress,
@@ -626,9 +626,15 @@ function scaleNudgeNote(note, dir, key, scale) {
 
 /* Per-pad press runtime owned by Pad Surface. padPitch ensures matching note-off
  * even if the map changes mid-hold; padPressTick powers drum tap-vs-hold. */
-const padSurfaceRuntime = createPadRuntimeState();
-const padPitch = padSurfaceRuntime.padPitch;
-const padPressTick = padSurfaceRuntime.padPressTick;
+const padPressRuntime = createPadRuntimeState();
+const padPitch = padPressRuntime.padPitch;
+const padPressTick = padPressRuntime.padPressTick;
+const padSurfaceRuntime = createPadSurfaceRuntime(S, {
+    PAD_MODE_DRUM,
+    DRUM_LANES,
+    DRUM_BASE_NOTE,
+    optionalHostModuleSetParam
+});
 const DRUM_TAP_TICKS = 10;  /* ~30ms — taps shorter than this suppress the release note-off */
 
 /* S.clipSteps[track][clip][step] — JS-authoritative mirror of DSP step data */
@@ -1131,12 +1137,7 @@ function xposeCommit(candK, candS) {
 }
 
 function computePadNoteMap() {
-    computePadNoteMapImpl(S, {
-        PAD_MODE_DRUM,
-        DRUM_LANES,
-        DRUM_BASE_NOTE,
-        host_module_set_param: optionalHostModuleSetParam()
-    });
+    return padSurfaceRuntime.computePadNoteMap();
 }
 
 /* Drum helpers --------------------------------------------------------------- */

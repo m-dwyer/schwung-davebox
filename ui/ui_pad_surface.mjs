@@ -26,6 +26,21 @@ export function createPadRuntimeState() {
     };
 }
 
+export function createPadSurfaceRuntime(S, deps) {
+    function computePadNoteMapRuntime() {
+        return computePadNoteMap(S, {
+            PAD_MODE_DRUM: deps.PAD_MODE_DRUM,
+            DRUM_LANES: deps.DRUM_LANES,
+            DRUM_BASE_NOTE: deps.DRUM_BASE_NOTE,
+            host_module_set_param: deps.optionalHostModuleSetParam()
+        });
+    }
+
+    return {
+        computePadNoteMap: computePadNoteMapRuntime
+    };
+}
+
 export function queueLiveNoteOn(queues, track, pitch, vel) {
     queues[track].push({ isOff: false, pitch, vel });
 }
