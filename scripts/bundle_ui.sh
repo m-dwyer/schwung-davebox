@@ -32,7 +32,7 @@ OUT="$TOOL_DIR/dist/overture/ui.js"
 SHARED_EXTERNAL='/data/UserData/schwung/shared/*'
 
 # --- locate esbuild ---
-# esbuild is the tool's own host build dependency (tool/package.json). Prefer
+# esbuild is the tool's own host build dependency (overture-ui/package.json). Prefer
 # the tool's node_modules; fall back to the web emulator workspace (legacy
 # location) or a PATH/$ESBUILD binary so older checkouts keep building.
 ESBUILD="${ESBUILD:-}"
@@ -46,7 +46,7 @@ if [ -z "$ESBUILD" ]; then
     fi
 fi
 if [ -z "$ESBUILD" ]; then
-    echo "ERROR: esbuild not found. Run 'pnpm -C tool install', or set \$ESBUILD." >&2
+    echo "ERROR: esbuild not found. Run 'pnpm -C overture-ui install', or set \$ESBUILD." >&2
     exit 1
 fi
 
