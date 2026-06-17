@@ -194,6 +194,9 @@ import {
     setTrackSoloImpl
 } from './ui_mute_solo_workflow.mjs';
 import {
+    applyExtMidiRemapImpl
+} from './ui_ext_midi_remap_workflow.mjs';
+import {
     extNoteOffAllImpl,
     liveSendNoteImpl,
     recordNoteOffImpl,
@@ -1583,37 +1586,23 @@ function closeConvertConfirm() {
     return closeConvertConfirmImpl(S);
 }
 
+function createExtMidiRemapWorkflowDeps() {
+    return {
+        routeMove: 1,
+        blockValue: 254,
+        clear: (typeof host_ext_midi_remap_clear === 'function') ? host_ext_midi_remap_clear : null,
+        set: (typeof host_ext_midi_remap_set === 'function') ? host_ext_midi_remap_set : null,
+        enable: (typeof host_ext_midi_remap_enable === 'function') ? host_ext_midi_remap_enable : null
+    };
+}
+
 /* Rewrite the cable-2 channel remap table for the active track.
  * When the active track is ROUTE_MOVE, incoming external MIDI is remapped to the
  * track's channel so Move's firmware routes it to the correct track instrument.
  * Called from tick() on any change to activeTrack/route/channel/midiInChannel,
  * and directly from init() on first load / resume after full exit. */
 function applyExtMidiRemap() {
-    const t = S.activeTrack;
-    const isMove = S.trackRoute[t] === 1;
-    const hasRemap = typeof host_ext_midi_remap_enable === 'function';
-    if (!hasRemap) return;
-    if (!isMove) {
-        host_ext_midi_remap_clear();
-        for (var _i = 0; _i < 16; _i++) {
-            host_ext_midi_remap_set(_i, 254);  /* EXT_MIDI_REMAP_BLOCK */
-        }
-        host_ext_midi_remap_enable(1);
-        S.extMidiRemapActive = false;
-        return;
-    }
-    const outCh = S.trackChannel[t] - 1;  /* 0-indexed */
-    host_ext_midi_remap_clear();
-    if (S.midiInChannel === 0) {
-        for (var _i = 0; _i < 16; _i++) {
-            if (_i !== outCh) host_ext_midi_remap_set(_i, outCh);
-        }
-    } else {
-        const inCh = S.midiInChannel - 1;  /* 0-indexed */
-        if (inCh !== outCh) host_ext_midi_remap_set(inCh, outCh);
-    }
-    host_ext_midi_remap_enable(1);
-    S.extMidiRemapActive = true;
+    return applyExtMidiRemapImpl(S, createExtMidiRemapWorkflowDeps());
 }
 
 /* True when (track-type, bank) exposes alt params reachable via S.altMode.
