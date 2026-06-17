@@ -77,65 +77,65 @@ import {
     POLL_INTERVAL, TAP_TEMPO_FLASH_TICKS,
     PARAM_LED_BANKS, STATE_VERSION,
     CC_GRADIENT_BASE, CC_GRADIENT_LEVELS, CC_GRADIENT_SCALARS
-} from './ui_constants.mjs';
+} from './core/ui_constants.mjs';
 
-import { S } from './ui_state.mjs';
+import { S } from './core/ui_state.mjs';
 import { saveState, writeSidecar, doClearSession, showActionPopup, uuidToStatePath, uuidToUiStatePath, readActiveSet, loadNameIndex, saveNameIndex, copyStateFiles, findInheritCandidates,
-    SNAPSHOT_CAP, snapshotLabel, loadSnapshotManifest, commitSnapshot, applySnapshotToLive, dropSnapshots } from './ui_persistence.mjs';
-import { drawGlobalMenu } from './ui_dialogs.mjs';
-import { trackClipHasContent, sceneAllQueued, updateSceneMapLEDs } from './ui_scene.mjs';
-import { effectiveClip, updateStepLEDs, updateSessionLEDs, updateTrackLEDs, flashAtRate, drawPositionBar, invalidateLEDCache, paintCoRunSideButtons } from './ui_leds.mjs';
-import { renderSplashScreen } from './ui_splash.mjs';
-import { requestExport, confirmExportStart, pollPendingExport } from './ui_export.mjs';
+    SNAPSHOT_CAP, snapshotLabel, loadSnapshotManifest, commitSnapshot, applySnapshotToLive, dropSnapshots } from './persist/ui_persistence.mjs';
+import { drawGlobalMenu } from './menu/ui_dialogs.mjs';
+import { trackClipHasContent, sceneAllQueued, updateSceneMapLEDs } from './core/ui_scene.mjs';
+import { effectiveClip, updateStepLEDs, updateSessionLEDs, updateTrackLEDs, flashAtRate, drawPositionBar, invalidateLEDCache, paintCoRunSideButtons } from './render/ui_leds.mjs';
+import { renderSplashScreen } from './render/ui_splash.mjs';
+import { requestExport, confirmExportStart, pollPendingExport } from './persist/ui_export.mjs';
 import {
     canEditSoundRoute,
     schSlotForTrack
-} from './ui_routes.mjs';
+} from './core/ui_routes.mjs';
 import {
     advancePendingEditSoundEntry,
     refreshSchwungCoRunSlotMask,
     requestEditSoundForTrack
-} from './ui_sound_edit.mjs';
+} from './core/ui_sound_edit.mjs';
 import {
     PARAM_PEEK_DETAIL_TICKS
-} from './ui_motion.mjs';
+} from './core/ui_motion.mjs';
 import {
     renderTrackBankOverview
-} from './ui_bank_render.mjs';
+} from './render/ui_bank_render.mjs';
 import {
     drawAltArrow as renderDrawAltArrow,
     drawBankHeaderRight as renderDrawBankHeaderRight,
     drawBankHeading as renderDrawBankHeading,
     drawBankHeadingInverted as renderDrawBankHeadingInverted,
     drawBankStrip as renderDrawBankStrip
-} from './ui_bank_chrome_render.mjs';
+} from './render/ui_bank_chrome_render.mjs';
 import {
     renderSessionIdleView,
     renderDrumTrackIdleView,
     renderMelodicTrackIdleView,
     renderMotionIdleView
-} from './ui_idle_render.mjs';
+} from './render/ui_idle_render.mjs';
 import {
     renderSessionOverview
-} from './ui_session_overview_render.mjs';
+} from './render/ui_session_overview_render.mjs';
 import {
     handleSessionViewSideRowPress,
     handleSessionViewStepRelease
-} from './ui_session_view_workflow.mjs';
+} from './view/ui_session_view_workflow.mjs';
 import {
     renderPerfModeOled
-} from './ui_perf_render.mjs';
+} from './render/ui_perf_render.mjs';
 import {
     renderSessionActionPopup,
     renderTrackActionPopup
-} from './ui_popup_render.mjs';
+} from './render/ui_popup_render.mjs';
 import {
     renderCompressLimitNotice,
     renderMergePlacementPrompt,
     renderNoNoteFlashNotice,
     renderSceneBakePickerPrompt,
     renderShiftStepHelp
-} from './ui_prompt_render.mjs';
+} from './render/ui_prompt_render.mjs';
 import {
     renderBakeConfirm,
     renderBakeSceneConfirm,
@@ -146,22 +146,22 @@ import {
     renderSnapshotPicker,
     renderStateWipeConfirm,
     renderXposeConfirm
-} from './ui_modal_render.mjs';
+} from './render/ui_modal_render.mjs';
 import {
     renderParamPeek
-} from './ui_param_peek_render.mjs';
+} from './render/ui_param_peek_render.mjs';
 import {
     renderLoopView
-} from './ui_loop_render.mjs';
+} from './render/ui_loop_render.mjs';
 import {
     handleLoopJog,
     handleLoopStepPress,
     handleLoopStepRelease,
     resolveLoopGesture
-} from './ui_loop_gesture_workflow.mjs';
+} from './perform/ui_loop_gesture_workflow.mjs';
 import {
     renderCcStepEditView
-} from './ui_cc_step_edit_render.mjs';
+} from './render/ui_cc_step_edit_render.mjs';
 import {
     onCcButtonsImpl,
     onCcJogImpl,
@@ -175,56 +175,56 @@ import {
     onPadReleaseImpl,
     onStepButtonsImpl,
     switchViewCleanupImpl
-} from './ui_input_dispatch_workflow.mjs';
+} from './input/ui_input_dispatch_workflow.mjs';
 import {
     handleUiMidiInternalMessage
-} from './ui_midi_internal_workflow.mjs';
+} from './midi/ui_midi_internal_workflow.mjs';
 import {
     onMidiExternalImpl
-} from './ui_midi_external_workflow.mjs';
+} from './midi/ui_midi_external_workflow.mjs';
 import {
     onPadAftertouchImpl
-} from './ui_pad_aftertouch_workflow.mjs';
+} from './pad/ui_pad_aftertouch_workflow.mjs';
 import {
     clearAllMuteSoloImpl,
     effectiveMuteImpl,
     setTrackMuteImpl,
     setTrackSoloImpl
-} from './ui_mute_solo_workflow.mjs';
+} from './perform/ui_mute_solo_workflow.mjs';
 import {
     applyExtMidiRemapImpl
-} from './ui_ext_midi_remap_workflow.mjs';
+} from './midi/ui_ext_midi_remap_workflow.mjs';
 import {
     extNoteOffAllImpl,
     liveSendNoteImpl,
     recordNoteOffImpl,
     recordNoteOnImpl
-} from './ui_live_note_workflow.mjs';
+} from './perform/ui_live_note_workflow.mjs';
 import {
     clearRecordingNoteBuffers,
     createRecordingWorkflowState,
     disarmRecordImpl,
     handoffRecordingToTrackImpl
-} from './ui_recording_workflow.mjs';
+} from './perform/ui_recording_workflow.mjs';
 import {
     handleUiKnobTouch
-} from './ui_knob_touch_workflow.mjs';
+} from './input/ui_knob_touch_workflow.mjs';
 import {
     pollDspWorkflow
-} from './ui_polldsp_workflow.mjs';
+} from './sync/ui_polldsp_workflow.mjs';
 import {
     renderTrackStepEditView
-} from './ui_step_edit_render.mjs';
+} from './render/ui_step_edit_render.mjs';
 import {
     renderStepIntervalOverlay
-} from './ui_step_interval_render.mjs';
+} from './render/ui_step_interval_render.mjs';
 import {
     renderMetroIndicator
-} from './ui_track_chrome_render.mjs';
+} from './render/ui_track_chrome_render.mjs';
 import {
     handleTrackViewStepRelease,
     handleTrackViewMelodicStepNoteAssignment
-} from './ui_track_view_step_workflow.mjs';
+} from './view/ui_track_view_step_workflow.mjs';
 import {
     createLiveNoteQueues,
     createPadRuntimeState,
@@ -235,7 +235,7 @@ import {
     handleDrumVelocityPadPress,
     queueLiveNoteOff,
     resolveDrumPadTarget
-} from './ui_pad_surface.mjs';
+} from './pad/ui_pad_surface.mjs';
 import {
     handleDeleteDrumLaneClear,
     handleDrumLaneFactoryReset,
@@ -245,7 +245,7 @@ import {
     copyDrumLaneImpl,
     cutDrumClipImpl,
     cutDrumLaneImpl
-} from './ui_drum_lane_workflows.mjs';
+} from './drum/ui_drum_lane_workflows.mjs';
 import {
     handleDrumRepeat2LaneAftertouch,
     handleDrumRepeatPadAftertouch,
@@ -258,23 +258,23 @@ import {
     latchHeldDrumRepeatsOnLoopPress,
     handleDrumRepeatLoopTapRelease,
     handleDeleteLoopDrumRepeatStop
-} from './ui_drum_repeat_workflows.mjs';
+} from './drum/ui_drum_repeat_workflows.mjs';
 import {
     unlatchAllTracks
-} from './ui_latch_workflows.mjs';
+} from './perform/ui_latch_workflows.mjs';
 import {
     createTrackClipSyncFacade
-} from './ui_track_clip_sync_facade.mjs';
+} from './sync/ui_track_clip_sync_facade.mjs';
 import {
     runTickWorkflow
-} from './ui_tick_workflow.mjs';
+} from './tick/ui_tick_workflow.mjs';
 import {
     createEntrypointErrorWrapper
-} from './ui_entrypoint_diagnostics.mjs';
+} from './lifecycle/ui_entrypoint_diagnostics.mjs';
 import {
     drawUIImpl
-} from './ui_screen_router_workflow.mjs';
-import { createRenderSurface } from './ui_render_surface.mjs';
+} from './render/ui_screen_router_workflow.mjs';
+import { createRenderSurface } from './render/ui_render_surface.mjs';
 import {
     createHostParamAdapters,
     createUiFlagAdapters,
@@ -285,7 +285,7 @@ import {
     optionalHostReadFile,
     optionalHostModuleSetParam,
     optionalHostWriteFile
-} from './ui_sync_adapters.mjs';
+} from './sync/ui_sync_adapters.mjs';
 import {
     createButtonCcHardwareAdapters,
     createExtMidiRemapHostAdapters,
@@ -299,52 +299,52 @@ import {
     optionalMoveMidiExternalSend,
     optionalMoveMidiInjectToMove,
     optionalShadowSendMidiToDsp
-} from './ui_input_adapters.mjs';
+} from './input/ui_input_adapters.mjs';
 import {
     createTickHostAdapters
-} from './ui_tick_adapters.mjs';
+} from './tick/ui_tick_adapters.mjs';
 import {
     buildGlobalMenuItemsImpl,
     doShiftStepCommonImpl,
     ensureGlobalMenuFreshImpl,
     jumpToMenuLabelImpl,
     openGlobalMenuImpl
-} from './ui_global_menu.mjs';
+} from './menu/ui_global_menu.mjs';
 import {
     closeTapTempoImpl,
     openTapTempoImpl,
     registerTapTempoImpl
-} from './ui_tap_tempo_workflow.mjs';
+} from './perform/ui_tap_tempo_workflow.mjs';
 import {
     maybeShowInheritPickerImpl,
     resolveInheritPickerImpl
-} from './ui_inherit_picker_workflow.mjs';
+} from './persist/ui_inherit_picker_workflow.mjs';
 import {
     clearAutoMenuClickImpl,
     clearAutoMenuRotateImpl,
     closeClearAutoMenuImpl,
     openClearAutoMenuImpl
-} from './ui_clear_auto_workflow.mjs';
+} from './menu/ui_clear_auto_workflow.mjs';
 import {
     buildLedInitQueueImpl,
     clearAllLEDsImpl,
     drainLedInitImpl,
     installFlagsWrapImpl,
     removeFlagsWrapImpl
-} from './ui_led_init_workflow.mjs';
+} from './render/ui_led_init_workflow.mjs';
 import {
     PERF_MOD_FULL_NAMES,
     PERF_MOD_PAD_MAP,
     PERF_MOD_POPUP_TICKS,
     sendPerfModsImpl,
     updatePerfModeLEDsImpl
-} from './ui_perf_leds.mjs';
+} from './render/ui_perf_leds.mjs';
 import {
     anyMelodicClipHasContentImpl,
     xposeCancelPreviewImpl,
     xposeCommitImpl,
     xposePreviewSetImpl
-} from './ui_transpose_workflow.mjs';
+} from './perform/ui_transpose_workflow.mjs';
 import {
     beginSnapshotSaveImpl,
     closeSnapshotPickerImpl,
@@ -352,25 +352,25 @@ import {
     openSaveSnapshotImpl,
     snapshotPickerClickImpl,
     snapshotPickerRotateImpl
-} from './ui_snapshot_workflow.mjs';
+} from './persist/ui_snapshot_workflow.mjs';
 import {
     enterMoveNativeCoRunImpl,
     enterSchwungCoRunImpl,
     exitMoveNativeCoRunImpl,
     exitSchwungCoRunImpl
-} from './ui_corun_workflow.mjs';
+} from './corun/ui_corun_workflow.mjs';
 import {
     createParameterBankRuntime
-} from './ui_bank_params.mjs';
+} from './bank/ui_bank_params.mjs';
 import {
     ccKnobDeltaImpl
-} from './ui_bank_state.mjs';
+} from './bank/ui_bank_state.mjs';
 import {
     defaultStepNoteImpl,
     drumNoteLabelImpl,
     scaleNudgeNoteImpl,
     stepEntryVelocityImpl
-} from './ui_note_edit_helpers.mjs';
+} from './core/ui_note_edit_helpers.mjs';
 import {
     clearClipImpl,
     clearRowImpl,
@@ -382,21 +382,21 @@ import {
     doDoubleFillImpl,
     hardResetClipImpl,
     selectClipOnTrackImpl
-} from './ui_clip_edit_ops.mjs';
+} from './sync/ui_clip_edit_ops.mjs';
 import {
     clipIsEmptyImpl,
     focusedClipIsEmptyImpl,
     selectTrackGestureImpl,
     switchActiveTrackImpl
-} from './ui_track_selection_workflow.mjs';
+} from './view/ui_track_selection_workflow.mjs';
 import {
     closeConvertConfirmImpl,
     convertTrackTypeImpl,
     trackHasAnyDataImpl
-} from './ui_track_convert_workflow.mjs';
+} from './view/ui_track_convert_workflow.mjs';
 import {
     runInitWorkflowImpl
-} from './ui_init_workflow.mjs';
+} from './lifecycle/ui_init_workflow.mjs';
 
 /* ------------------------------------------------------------------ */
 /* Parameter bank definitions                                           */
