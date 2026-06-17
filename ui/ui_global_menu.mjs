@@ -244,3 +244,78 @@ export function buildGlobalMenuItemsImpl(S, deps) {
         }),
     ];
 }
+
+export function openGlobalMenuImpl(S, deps) {
+    /* Co-run owns the OLED — exit it before opening the menu so Overture
+     * can draw again. */
+    if (S.schwungCoRunSlot >= 0) deps.exitSchwungCoRun();
+    if (S.moveCoRunTrack >= 0) deps.exitMoveNativeCoRun();
+    S.globalMenuItems         = deps.buildGlobalMenuItems();
+    S.globalMenuState         = deps.createMenuState();
+    S.globalMenuStack         = deps.createMenuStack();
+    S.globalMenuOpen          = true;
+    S.globalMenuBuiltForTrack = S.activeTrack;
+    S.lastSentMenuEditValue   = null;
+    S.screenDirty             = true;
+    S.jogTouched              = false;
+}
+
+/* Rebuild the global menu items list if the active track has changed since the
+ * last build. The Edit Sound action is route-dependent, so a Shift+jog track
+ * switch with the menu open must rebuild the list. Cursor preserved by
+ * label-match when possible, otherwise clamped. */
+export function ensureGlobalMenuFreshImpl(S, deps) {
+    if (!S.globalMenuOpen) return;
+    if (S.globalMenuBuiltForTrack === S.activeTrack) return;
+    let prevLabel = null;
+    if (S.globalMenuItems && S.globalMenuState) {
+        const _cur = S.globalMenuItems[S.globalMenuState.selectedIndex];
+        if (_cur) prevLabel = _cur.label || null;
+    }
+    S.globalMenuItems = deps.buildGlobalMenuItems();
+    if (prevLabel && S.globalMenuState) {
+        let idx = -1;
+        for (let i = 0; i < S.globalMenuItems.length; i++) {
+            const _it = S.globalMenuItems[i];
+            if (_it && _it.label === prevLabel) { idx = i; break; }
+        }
+        if (idx >= 0) S.globalMenuState.selectedIndex = idx;
+        else S.globalMenuState.selectedIndex = Math.min(
+            S.globalMenuState.selectedIndex,
+            Math.max(0, S.globalMenuItems.length - 1));
+    }
+    S.globalMenuBuiltForTrack = S.activeTrack;
+}
+
+export function jumpToMenuLabelImpl(S, deps, label) {
+    openGlobalMenuImpl(S, deps);
+    if (!S.globalMenuItems || !S.globalMenuState) return;
+    for (let i = 0; i < S.globalMenuItems.length; i++) {
+        const it = S.globalMenuItems[i];
+        if (it && it.label === label) {
+            S.globalMenuState.selectedIndex = i;
+            return;
+        }
+    }
+}
+
+export function doShiftStepCommonImpl(S, deps, idx) {
+    if      (idx === 1) jumpToMenuLabelImpl(S, deps, 'Global');
+    else if (idx === 2 && !S.sessionView) {
+        /* Track View only — Session View Shift+Step3 is reserved for the
+         * existing menu-shortcut set. Defer co-run entry until Shift releases
+         * — otherwise the held Shift CC leaks into Move firmware / Schwung
+         * chain editor (the shim starts forwarding Shift on co-run entry).
+         * Dispatch happens in _onCC_buttons Shift-release branch. */
+        S.pendingEditEntryTrack = S.activeTrack;
+    }
+    else if (idx === 4) deps.openTapTempo();
+    else if (idx === 5) {
+        S.metronomeOn = (S.metronomeOn === 1) ? 3 : 1;
+        if (deps.setParam)
+            deps.setParam('metro_on', String(S.metronomeOn));
+        deps.showActionPopup(['Off', 'Cnt-In', 'Play', 'Always'][S.metronomeOn]);
+    }
+    else if (idx === 6) jumpToMenuLabelImpl(S, deps, 'Swing Amt');
+    else if (idx === 8) jumpToMenuLabelImpl(S, deps, 'Scale');
+}

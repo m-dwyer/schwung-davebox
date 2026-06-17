@@ -308,7 +308,11 @@ import {
     createTrackIdleRenderDepsImpl
 } from './ui_render_adapters.mjs';
 import {
-    buildGlobalMenuItemsImpl
+    buildGlobalMenuItemsImpl,
+    doShiftStepCommonImpl,
+    ensureGlobalMenuFreshImpl,
+    jumpToMenuLabelImpl,
+    openGlobalMenuImpl
 } from './ui_global_menu.mjs';
 import {
     closeTapTempoImpl,
@@ -473,6 +477,19 @@ function createGlobalMenuDeps() {
 
 function buildGlobalMenuItems() {
     return buildGlobalMenuItemsImpl(S, createGlobalMenuDeps());
+}
+
+function createGlobalMenuWorkflowDeps() {
+    return {
+        buildGlobalMenuItems,
+        createMenuState,
+        createMenuStack,
+        exitMoveNativeCoRun,
+        exitSchwungCoRun,
+        openTapTempo,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        showActionPopup
+    };
 }
 
 function createTapTempoDeps() {
@@ -1020,45 +1037,11 @@ function doLaneDoubleFill() {
 }
 
 function openGlobalMenu() {
-    /* Co-run owns the OLED — exit it before opening the menu so Overture
-     * can draw again. */
-    if (S.schwungCoRunSlot >= 0) exitSchwungCoRun();
-    if (S.moveCoRunTrack >= 0) exitMoveNativeCoRun();
-    S.globalMenuItems         = buildGlobalMenuItems();
-    S.globalMenuState         = createMenuState();
-    S.globalMenuStack         = createMenuStack();
-    S.globalMenuOpen          = true;
-    S.globalMenuBuiltForTrack = S.activeTrack;
-    S.lastSentMenuEditValue   = null;
-    S.screenDirty             = true;
-    S.jogTouched              = false;
+    return openGlobalMenuImpl(S, createGlobalMenuWorkflowDeps());
 }
 
-/* Rebuild the global menu items list if the active track has changed since the
- * last build. The Edit Sound action is route-dependent, so a Shift+jog track
- * switch with the menu open must rebuild the list. Cursor preserved by
- * label-match when possible, otherwise clamped. */
 function ensureGlobalMenuFresh() {
-    if (!S.globalMenuOpen) return;
-    if (S.globalMenuBuiltForTrack === S.activeTrack) return;
-    let prevLabel = null;
-    if (S.globalMenuItems && S.globalMenuState) {
-        const _cur = S.globalMenuItems[S.globalMenuState.selectedIndex];
-        if (_cur) prevLabel = _cur.label || null;
-    }
-    S.globalMenuItems = buildGlobalMenuItems();
-    if (prevLabel && S.globalMenuState) {
-        let idx = -1;
-        for (let i = 0; i < S.globalMenuItems.length; i++) {
-            const _it = S.globalMenuItems[i];
-            if (_it && _it.label === prevLabel) { idx = i; break; }
-        }
-        if (idx >= 0) S.globalMenuState.selectedIndex = idx;
-        else S.globalMenuState.selectedIndex = Math.min(
-            S.globalMenuState.selectedIndex,
-            Math.max(0, S.globalMenuItems.length - 1));
-    }
-    S.globalMenuBuiltForTrack = S.activeTrack;
+    return ensureGlobalMenuFreshImpl(S, createGlobalMenuWorkflowDeps());
 }
 
 function routeCheckWarnForTrack(t) {
@@ -2414,36 +2397,11 @@ function _onPadPress(status, d1, d2) {
 }
 
 function _jumpToMenuLabel(label) {
-    openGlobalMenu();
-    if (!S.globalMenuItems || !S.globalMenuState) return;
-    for (let i = 0; i < S.globalMenuItems.length; i++) {
-        const it = S.globalMenuItems[i];
-        if (it && it.label === label) {
-            S.globalMenuState.selectedIndex = i;
-            return;
-        }
-    }
+    return jumpToMenuLabelImpl(S, createGlobalMenuWorkflowDeps(), label);
 }
 
 function _doShiftStepCommon(idx) {
-    if      (idx === 1) _jumpToMenuLabel('Global');
-    else if (idx === 2 && !S.sessionView) {
-        /* Track View only — Session View Shift+Step3 is reserved for the
-         * existing menu-shortcut set. Defer co-run entry until Shift releases
-         * — otherwise the held Shift CC leaks into Move firmware / Schwung
-         * chain editor (the shim starts forwarding Shift on co-run entry).
-         * Dispatch happens in _onCC_buttons Shift-release branch. */
-        S.pendingEditEntryTrack = S.activeTrack;
-    }
-    else if (idx === 4) openTapTempo();
-    else if (idx === 5) {
-        S.metronomeOn = (S.metronomeOn === 1) ? 3 : 1;
-        if (typeof host_module_set_param === 'function')
-            host_module_set_param('metro_on', String(S.metronomeOn));
-        showActionPopup(['Off', 'Cnt-In', 'Play', 'Always'][S.metronomeOn]);
-    }
-    else if (idx === 6) _jumpToMenuLabel('Swing Amt');
-    else if (idx === 8) _jumpToMenuLabel('Scale');
+    return doShiftStepCommonImpl(S, createGlobalMenuWorkflowDeps(), idx);
 }
 
 function createSessionViewWorkflowDeps() {
