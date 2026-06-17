@@ -121,9 +121,7 @@ import {
     renderSessionOverview
 } from './ui_session_overview_render.mjs';
 import {
-    handleSessionViewClipPadPress,
     handleSessionViewSideRowPress,
-    handleSessionViewStepPress,
     handleSessionViewStepRelease
 } from './ui_session_view_workflow.mjs';
 import {
@@ -167,8 +165,19 @@ import {
     renderCcStepEditView
 } from './ui_cc_step_edit_render.mjs';
 import {
-    handleUiCcMessage
-} from './ui_cc_message_workflow.mjs';
+    onCcButtonsImpl,
+    onCcJogImpl,
+    onCcKnobsImpl,
+    onCcMsgImpl,
+    onCcSideImpl,
+    onCcStepEditImpl,
+    onCcTransportImpl,
+    onPadPressImpl,
+    onPadPressTrackViewImpl,
+    onPadReleaseImpl,
+    onStepButtonsImpl,
+    switchViewCleanupImpl
+} from './ui_input_dispatch_workflow.mjs';
 import {
     handleUiMidiInternalMessage
 } from './ui_midi_internal_workflow.mjs';
@@ -195,83 +204,6 @@ import {
     handleUiKnobTouch
 } from './ui_knob_touch_workflow.mjs';
 import {
-    handleUiSideButton
-} from './ui_side_button_workflow.mjs';
-import {
-    handleUiBackButton,
-    handleUiUndoButton,
-    handleUiMuteButton,
-    handleUiPlayButton,
-    handleUiRecordButton,
-    handleUiSampleButton
-} from './ui_transport_cc_workflow.mjs';
-import {
-    handleUiPageNavButton,
-    handleUiSceneNavButton
-} from './ui_navigation_cc_workflow.mjs';
-import {
-    handleUiCaptureButton,
-    handleUiCopyButton,
-    handleUiDeleteButton,
-    handleUiLoopPerfModeButton,
-    handleUiLoopTrackViewButton,
-    handleUiMenuCoRunExitButton,
-    handleUiMuteModifierButton,
-    handleUiNoteSessionButton,
-    handleUiShiftButton
-} from './ui_button_cc_workflow.mjs';
-import {
-    handleUiKnobAltDelayClockFb,
-    handleUiKnobAltRandomMode,
-    handleUiKnobCcParam,
-    handleUiKnobDrumAllLanes,
-    handleUiKnobDrumClip,
-    handleUiKnobDrumNoteFX,
-    handleUiKnobDrumRepeatGroove,
-    handleUiKnobGeneric,
-    handleUiKnobMelodicInQ,
-    handleUiKnobOverlaySwallow,
-    handleUiKnobStepInterval
-} from './ui_knob_cc_workflow.mjs';
-import {
-    handleUiJogAltToggle,
-    handleUiJogBakeConfirm,
-    handleUiJogBakeScene,
-    handleUiJogClearAutoMenu,
-    handleUiJogConfirmLgto,
-    handleUiJogDeleteReset,
-    handleUiJogGlobalMenu,
-    handleUiJogInheritPicker,
-    handleUiJogMovement,
-    handleUiJogRecordBlocked,
-    handleUiJogShiftDeleteReset,
-    handleUiJogSnapshotPicker,
-    handleUiJogStateWipe,
-    handleUiJogStepIntervalExit,
-    handleUiJogStepIntervalToggle,
-    handleUiJogTapTempo
-} from './ui_jog_cc_workflow.mjs';
-import {
-    handleUiPadArpStepIntervalSeq,
-    handleUiPadArpStepIntervalTarp,
-    handleUiPadCoRunDrumInject,
-    handleUiPadPerfMode,
-    handleUiPadReleaseCoRunDrum,
-    handleUiPadReleaseLoopStep,
-    handleUiPadReleasePadNote,
-    handleUiPadReleasePerfMode,
-    handleUiPadReleaseSeqArpEditor,
-    handleUiPadReleaseStepButton,
-    handleUiPadReleaseTapTempo,
-    handleUiPadReleaseTarpArpEditor,
-    handleUiPadTapTempo,
-    handleUiPadTrackViewCaptureDrumLane,
-    handleUiPadTrackViewDrumLaneClear,
-    handleUiPadTrackViewDrumLaneReset,
-    handleUiPadTrackViewDrumOrMelodic,
-    handleUiPadTrackViewDrumRepeat
-} from './ui_pad_workflow.mjs';
-import {
     pollAutomationAtIndicator,
     pollCoRunReconcile,
     pollCountInEnd,
@@ -297,17 +229,10 @@ import {
     renderMetroIndicator
 } from './ui_track_chrome_render.mjs';
 import {
-    handleTrackViewCopyStepPress,
-    handleTrackViewDeleteStepPress,
-    handleTrackViewMuteStepPress,
-    handleTrackViewShiftStepPress,
-    handleTrackViewDrumStepPress,
-    handleTrackViewMelodicStepPress,
     handleTrackViewStepRelease,
     handleTrackViewStepHoldThreshold,
     handleTrackViewChordFirstStepTick,
-    handleTrackViewMelodicStepNoteAssignment,
-    handleTrackViewStepEditKnob
+    handleTrackViewMelodicStepNoteAssignment
 } from './ui_track_view_step_workflow.mjs';
 import {
     SCALE_INTERVALS,
@@ -2841,103 +2766,19 @@ function _tickImpl() {
 /* ------------------------------------------------------------------ */
 
 function _onCC_jog(d1, d2) {
-    if (S.shiftTrackLEDActive) { S.shiftTrackLEDActive = false; S.screenDirty = true; }
-    /* Jog wheel: physical CLICK (CC 3 = 127) + relative ROTATE (CC 14). The
-     * click/rotate dispatch ladder is extracted into ui_jog_cc_workflow.mjs;
-     * each handler returns true when it consumes the event (mirrors the
-     * original `return;`). Order matches the original click ladder (LGTO before
-     * STATE-WIPE / REC-BLOCKED — those dialogs are mutually exclusive). The
-     * Arp-Steps interval overlay EXITS on rotate first / TOGGLES on click last,
-     * so it is split across two dispatch slots. */
-    const deps = createJogCcWorkflowDeps();
-    if (handleUiJogStepIntervalExit(S, deps, d1, d2)) return;
-    if (handleUiJogInheritPicker(S, deps, d1, d2)) return;
-    if (handleUiJogSnapshotPicker(S, deps, d1, d2)) return;
-    if (handleUiJogClearAutoMenu(S, deps, d1, d2)) return;
-    if (handleUiJogBakeScene(S, deps, d1, d2)) return;
-    if (handleUiJogConfirmLgto(S, deps, d1, d2)) return;
-    if (handleUiJogStateWipe(S, deps, d1, d2)) return;
-    if (handleUiJogRecordBlocked(S, deps, d1, d2)) return;
-    if (handleUiJogBakeConfirm(S, deps, d1, d2)) return;
-    if (handleUiJogTapTempo(S, deps, d1, d2)) return;
-    if (handleUiJogGlobalMenu(S, deps, d1, d2)) return;
-    if (handleUiJogShiftDeleteReset(S, deps, d1, d2)) return;
-    if (handleUiJogDeleteReset(S, deps, d1, d2)) return;
-    if (handleUiJogStepIntervalToggle(S, deps, d1, d2)) return;
-    if (handleUiJogAltToggle(S, deps, d1, d2)) return;
-    if (handleUiJogMovement(S, deps, d1, d2)) return;
+    onCcJogImpl(S, createInputDispatchWorkflowDeps(), d1, d2);
 }
 
 function _onCC_buttons(d1, d2) {
-    handleUiShiftButton(S, createButtonCcWorkflowDeps(), d1, d2);
-
-    /* Any non-Shift CC button press while Shift overlay is active clears the overlay */
-    if (d1 !== MoveShift && d2 === 127 && S.shiftTrackLEDActive) {
-        S.shiftTrackLEDActive = false;
-    }
-
-    if (handleUiDeleteButton(S, createButtonCcWorkflowDeps(), d1, d2)) return;
-
-    /* Copy: modifier-state tracking (held + copy source). */
-    handleUiCopyButton(S, createButtonCcWorkflowDeps(), d1, d2);
-
-    /* Mute: modifier-state tracking. The action half lives in handleUiMuteButton
-     * on the transport handler; both fire for the same CC. */
-    handleUiMuteModifierButton(S, createButtonCcWorkflowDeps(), d1, d2);
-
-    /* Capture: press tracks held + cancels dialogs/pickers/merge; bare-tap
-     * release opens the scene-bake picker (Session) or clip-bake confirm (Track). */
-    handleUiCaptureButton(S, createButtonCcWorkflowDeps(), d1, d2);
-    if (d1 === MoveCapture) return;
-
-    /* Move's Menu button (CC 50) is in CORUN_KEEP_DEFAULT so the shim routes
-     * it to us during co-run. Charles's framework reserves Back as the
-     * canonical exit, but Menu-as-second-exit is a Overture convenience for
-     * existing muscle memory — outside co-run Overture ignores Menu (no other
-     * handler exists), so this branch is dormant unless a session is active. */
-    if (handleUiMenuCoRunExitButton(S, createButtonCcWorkflowDeps(), d1, d2)) return;
-
-    /* Note/Session view toggle: Shift+press = open global menu (Track View only);
-     * tap = switch view; hold = session overview. Also the universal dialog "out". */
-    if (handleUiNoteSessionButton(S, createButtonCcWorkflowDeps(), d1, d2)) return;
-
-    /* Loop button (CC 58, Session View): enter/exit Performance Mode. */
-    if (handleUiLoopPerfModeButton(S, createButtonCcWorkflowDeps(), d1, d2)) return;
-
-    /* Loop button (CC 58, Track View): hold + step buttons sets clip length */
-    if (handleUiLoopTrackViewButton(S, createButtonCcWorkflowDeps(), d1, d2)) return;
-
+    onCcButtonsImpl(S, createInputDispatchWorkflowDeps(), d1, d2);
 }
 
 function _onCC_transport(d1, d2) {
-    /* Back: close the topmost dialog/menu, else Shift+Back suspends+hides. */
-    handleUiBackButton(S, createTransportCcWorkflowDeps(), d1, d2);
-
-    /* Undo button: press = undo; Shift+Undo = redo */
-    handleUiUndoButton(S, createTransportCcWorkflowDeps(), d1, d2);
-
-    /* Play: toggle transport; Shift+Play = restart transport; Delete+Play = deactivate_all; Mute+Play = toggle metro */
-    handleUiPlayButton(S, createTransportCcWorkflowDeps(), d1, d2);
-
-    /* Record button (CC 86): toggle arm/disarm */
-    handleUiRecordButton(S, createTransportCcWorkflowDeps(), d1, d2);
-
-    /* Sample press (no modifier): track held state; cancel dialogs/merge immediately on press */
-    handleUiSampleButton(S, createTransportCcWorkflowDeps(), d1, d2);
-
-    /* Mute button: Delete+Mute = clear all (both views); toggle mute/solo on active track (Track View only).
-     * Press: handle Delete+Mute immediately. Release: toggle mute/solo, but only if Mute was not used as
-     * a modifier key (e.g. Mute+Play = metro toggle). */
-    handleUiMuteButton(S, createTransportCcWorkflowDeps(), d1, d2);
-
-    /* Left/Right page nav (Track View) + Up/Down scene/zoom/octave nav. */
-    handleUiPageNavButton(S, createNavigationCcWorkflowDeps(), d1, d2);
-    handleUiSceneNavButton(S, createNavigationCcWorkflowDeps(), d1, d2);
-
+    onCcTransportImpl(S, createInputDispatchWorkflowDeps(), d1, d2);
 }
 
 function _onCC_side(d1, d2) {
-    handleUiSideButton(S, createSideButtonWorkflowDeps(), d1, d2);
+    onCcSideImpl(S, createInputDispatchWorkflowDeps(), d1, d2);
 }
 
 /* CC-knob acceleration. The Move knobs fire ~2-4 ±1 detent messages per
@@ -2968,74 +2809,19 @@ function ccKnobDelta(d2, k) {
 }
 
 function _onCC_stepedit(d1, d2) {
-    handleTrackViewStepEditKnob(S, createTrackViewStepWorkflowDeps(), d1, d2);
+    onCcStepEditImpl(S, createInputDispatchWorkflowDeps(), d1, d2);
 }
 
 function _onCC_knobs(d1, d2) {
-    /* Knob CCs 71-78: apply delta to active bank parameter.
-     * Relative encoder: d2 1-63 = CW (+1), d2 64-127 = CCW (-1).
-     * pm.sens > 1 = accumulate that many ticks before firing one unit change.
-     * pm.lock = true: fire once then block until touch release (S.knobLocked).
-     *
-     * Dispatch table extracted into ui_knob_cc_workflow.mjs. The shared preamble
-     * (overlay-swallow + knobTouched bookkeeping) stays here; each handler
-     * returns true when it consumes the CC (mirrors the original `return;`). The
-     * drum-CLIP handler falls through for knob 5 (no drum-clip binding) → the
-     * generic handler, exactly as before. */
-    if (d1 >= 71 && d1 <= 78) {
-        if (handleUiKnobOverlaySwallow(S, createKnobCcWorkflowDeps(), d1, d2)) return;
-        const knobIdx = d1 - 71;
-        S.knobTouched          = knobIdx;
-        S.knobTurnedTick[knobIdx] = S.tickCount;
-        S.screenDirty = true;
-        if (handleUiKnobStepInterval(S, createKnobCcWorkflowDeps(), d1, d2)) return;
-        if (handleUiKnobDrumClip(S, createKnobCcWorkflowDeps(), d1, d2)) return;
-        if (handleUiKnobDrumAllLanes(S, createKnobCcWorkflowDeps(), d1, d2)) return;
-        if (handleUiKnobDrumNoteFX(S, createKnobCcWorkflowDeps(), d1, d2)) return;
-        if (handleUiKnobDrumRepeatGroove(S, createKnobCcWorkflowDeps(), d1, d2)) return;
-        if (handleUiKnobCcParam(S, createKnobCcWorkflowDeps(), d1, d2)) return;
-        if (handleUiKnobAltRandomMode(S, createKnobCcWorkflowDeps(), d1, d2)) return;
-        if (handleUiKnobAltDelayClockFb(S, createKnobCcWorkflowDeps(), d1, d2)) return;
-        if (handleUiKnobMelodicInQ(S, createKnobCcWorkflowDeps(), d1, d2)) return;
-        handleUiKnobGeneric(S, createKnobCcWorkflowDeps(), d1, d2);
-        return;
-    }
+    onCcKnobsImpl(S, createInputDispatchWorkflowDeps(), d1, d2);
 }
 
 function _switchViewCleanup() {
-    S.heldStepBtn        = -1;
-    S.heldStep           = -1;
-    S.heldStepNotes      = [];
-    S.stepWasEmpty       = false;
-    S.stepWasHeld        = false;
-    S.stepBtnPressedTick.fill(-1);
-    S.sessionStepHeld    = -1;
-    S.sessionStepHeldCtx = 0;
-    /* Leaving Session View stops any active loop; mods/latch persist. */
-    if (!S.sessionView && (S.perfViewLocked || S.perfStack.length > 0)) {
-        const _hadLoop = S.perfStack.length > 0;
-        S.perfStack         = [];
-        S.perfStickyLengths = new Set();
-        S.perfHoldPadHeld   = false;
-        S.perfViewLocked    = false;
-        S.loopHeld          = false;
-        S.loopJogActive     = false;
-        S.perfModsHeld      = 0;
-        sendPerfMods();
-        if (_hadLoop && typeof host_module_set_param === 'function')
-            host_module_set_param('looper_stop', '1');
-    }
-    if (S.sessionView) {
-        for (let i = 0; i < 16; i++) setLED(16 + i, LED_OFF);
-        for (let t = 0; t < 8; t++) setLED(TRACK_PAD_BASE + t, LED_OFF);
-    } else {
-        for (let row = 0; row < 4; row++)
-            for (let t = 0; t < 8; t++) setLED(92 - row * 8 + t, LED_OFF);
-    }
+    switchViewCleanupImpl(S, createInputDispatchWorkflowDeps());
 }
 
 function _onCCMsg(d1, d2) {
-    handleUiCcMessage({
+    onCcMsgImpl({
         onJog: _onCC_jog,
         onButtons: _onCC_buttons,
         onTransport: _onCC_transport,
@@ -3100,26 +2886,11 @@ function createPadWorkflowDeps() {
 }
 
 function _onPadPressTrackView(status, d1, d2) {
-    const deps = createPadWorkflowDeps();
-    if (handleUiPadTrackViewDrumLaneReset(S, deps, d1)) return;
-    if (handleUiPadTrackViewDrumLaneClear(S, deps, d1)) return;
-    if (handleUiPadTrackViewDrumRepeat(S, deps, d1, d2)) return;
-    if (handleUiPadTrackViewCaptureDrumLane(S, deps, d1)) return;
-    handleUiPadTrackViewDrumOrMelodic(S, deps, d1, d2);
+    onPadPressTrackViewImpl(S, createInputDispatchWorkflowDeps(), status, d1, d2);
 }
 
 function _onPadPress(status, d1, d2) {
-        const deps = createPadWorkflowDeps();
-        handleUiPadCoRunDrumInject(S, deps, status, d1, d2);
-        if (handleUiPadTapTempo(S, deps, d1)) return;
-        if (handleUiPadArpStepIntervalSeq(S, deps, d1)) return;
-        if (handleUiPadArpStepIntervalTarp(S, deps, d1)) return;
-        if (handleUiPadPerfMode(S, deps, d1)) return;
-        if (handleSessionViewClipPadPress(S, createSessionViewWorkflowDeps(), d1)) {
-            return;
-        } else {
-            _onPadPressTrackView(status, d1, d2);
-        }
+    onPadPressImpl(S, createInputDispatchWorkflowDeps(), status, d1, d2);
 }
 
 function _jumpToMenuLabel(label) {
@@ -3415,59 +3186,42 @@ function createJogCcWorkflowDeps() {
     };
 }
 
+function createInputDispatchWorkflowDeps() {
+    return {
+        createButtonCcWorkflowDeps,
+        createJogCcWorkflowDeps,
+        createKnobCcWorkflowDeps,
+        createLoopGestureWorkflowDeps,
+        createNavigationCcWorkflowDeps,
+        createPadWorkflowDeps,
+        createSessionViewWorkflowDeps,
+        createSideButtonWorkflowDeps,
+        createTrackViewStepWorkflowDeps,
+        createTransportCcWorkflowDeps,
+        exitMoveNativeCoRun,
+        exitSchwungCoRun,
+        forceRedraw,
+        handleLoopStepPress: function (idx) {
+            return handleLoopStepPress(S, createLoopGestureWorkflowDeps(), idx);
+        },
+        ledOff: LED_OFF,
+        moveCapture: MoveCapture,
+        moveShift: MoveShift,
+        onPadPressTrackView: _onPadPressTrackView,
+        selectClipOnTrack,
+        sendPerfMods,
+        setLED,
+        setParam: typeof host_module_set_param === 'function' ? host_module_set_param : null,
+        trackPadBase: TRACK_PAD_BASE
+    };
+}
+
 function _onStepButtons(d1, d2) {
-    /* Co-run (Schwung chain-edit or Move-native): the step grid is blanked down
-     * to a single exit affordance (the blinking Step 3 button + lit icon).
-     * Step 3 (idx 2) exits co-run; every other step press is swallowed so it
-     * can't edit the clip hidden underneath. Mirrors the Menu (CC 50) exit. */
-    if (S.schwungCoRunSlot >= 0 || S.moveCoRunTrack >= 0) {
-        if (d1 - 16 === 2) {
-            if (S.moveCoRunTrack >= 0) exitMoveNativeCoRun();
-            else { exitSchwungCoRun(); forceRedraw(); }
-        }
-        return;
-    }
-    if (S.tapTempoOpen) return;
-    if (d2 > 0 && S.shiftTrackLEDActive) { S.shiftTrackLEDActive = false; S.screenDirty = true; }
-    S.stepOpTick = S.tickCount;
-    const idx = d1 - 16;
-    /* Change #1 hold-reveal overlay: while a side button is held, the steps show
-     * the held track's 16 clips — a step press selects/launches that clip instead
-     * of editing the pattern. Intercept before any other step semantics. */
-    if (S.revealClipsTrack >= 0) {
-        selectClipOnTrack(S.revealClipsTrack, idx);
-        forceRedraw();
-        return;
-    }
-    if (handleSessionViewStepPress(S, createSessionViewWorkflowDeps(), idx)) {
-        return;
-    } else if (handleLoopStepPress(S, createLoopGestureWorkflowDeps(), idx)) {
-        return;
-    } else if (handleTrackViewCopyStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
-        return;
-    } else if (handleTrackViewDeleteStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
-        return;
-    } else if (handleTrackViewMuteStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
-        return;
-    } else if (handleTrackViewShiftStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
-        return;
-    } else if (handleTrackViewDrumStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
-        return;
-    } else if (handleTrackViewMelodicStepPress(S, createTrackViewStepWorkflowDeps(), idx)) {
-        return;
-    }
+    onStepButtonsImpl(S, createInputDispatchWorkflowDeps(), d1, d2);
 }
 
 function _onPadRelease(status, d1, d2) {
-    const deps = createPadWorkflowDeps();
-    if (handleUiPadReleaseTapTempo(S, deps, d1)) return;
-    handleUiPadReleaseCoRunDrum(S, deps, d1);
-    if (handleUiPadReleaseLoopStep(S, deps, d1)) return;
-    if (handleUiPadReleaseSeqArpEditor(S, deps, d1)) return;
-    if (handleUiPadReleaseTarpArpEditor(S, deps, d1)) return;
-    if (handleUiPadReleasePerfMode(S, deps, d1)) return;
-    if (handleUiPadReleaseStepButton(S, deps, d1)) return;
-    handleUiPadReleasePadNote(S, deps, d1);
+    onPadReleaseImpl(S, createInputDispatchWorkflowDeps(), status, d1, d2);
 }
 
 globalThis.onMidiMessageInternal = function (data) { try { _onMidiInternalImpl(data); } catch (e) { captureError('onMidiInternal', e); } };
