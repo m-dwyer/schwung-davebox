@@ -82,7 +82,7 @@ EMSCRIPTEN_KEEPALIVE void *seq8_create(const char *module_dir, const char *json_
     if (!g_plugin) return NULL;
     const char *dir = (module_dir && module_dir[0])
                           ? module_dir
-                          : "/data/UserData/schwung/modules/tools/davebox";
+                          : "/data/UserData/schwung/modules/tools/overture";
     const char *defs = (json_defaults && json_defaults[0]) ? json_defaults : NULL;
     return g_plugin->create_instance(dir, defs);
 }

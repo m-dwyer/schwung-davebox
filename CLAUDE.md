@@ -9,13 +9,13 @@
 - **Branching** — create a new branch for each refactor / major feature addition / major revision (`git checkout -b <descriptive-name>` off `main` before any code changes). Small, isolated fixes can land directly on main. When in doubt, branch. One commit per logical change. Merge to main with fast-forward when the work is verified and approved.
 - **Deploy and verify on device before reporting done** — always build+install and confirm on Move.
 - **Reboot after every deploy** — Back suspends (JS stays in memory); Shift+Back fully exits but does NOT reload JS from disk. Full reboot required for JS changes.
-- **JS-only deploy**: `python3 scripts/bundle_ui.py && ./scripts/install.sh` then restart. `build.sh` required for DSP changes (also copies all JS).
+- **JS-only deploy**: `./scripts/bundle_ui.sh && ./scripts/install.sh` then restart. `build.sh` required for DSP changes (also copies all JS).
 - **Restart Move** (Armbian/systemd): `./scripts/install.sh` now does this automatically after deploy. Manual reload: `ssh root@move.local "systemctl stop move-launcher.service; for name in MoveOriginal Move MoveMessageDisplay shadow_ui schwung link-subscriber display-server schwung-manager; do pkill -9 -x \"\$name\" 2>/dev/null; done; sleep 1; systemctl start move-launcher.service"`. A bare `systemctl restart move-launcher.service` is NOT enough — the unit is `KillMode=process`, so it only bounces MoveLauncher/MoveOriginal while the Schwung stack (shadow_ui, schwung-manager, display-server) double-forks to PID 1 and survives stale → Move-native/Schwung desync (blank OLED). This is a service restart, not an OS `reboot` (reboot has caused a "move terminated" freeze).
 - **CLAUDE.md**: update at session end or after a major phase — not after routine task work.
 - **README.md is maintained on GitHub directly** — do not edit or commit it locally. If asked to update README, refuse and point the user to edit on GitHub. A pre-commit hook blocks accidental commits.
 - **`CHANGELOG.md` `[Unreleased]`** — for every `feat:` or `fix:` commit, add a short entry under the appropriate subsection (`### Features` / `### Fixes` / `### Performance / UX` / `### Documentation`). `scripts/cut_release.sh` finalizes the section into a versioned heading at release time; if the section is empty the script refuses to cut a release.
 - **MANUAL.md stays current** — when a `feat:` or `fix:` commit changes user-visible behavior (controls, displays, pad/button semantics, persistence, workflows), update `MANUAL.md` (repo root) in the same commit. Skip for internal-only changes (refactors, DSP plumbing, build, debug logging). When ambiguous, ask the user.
-- **Cutting a release**: `./scripts/cut_release.sh <version>` (e.g. `0.2.0`). Requires clean tree (including no untracked files — park untracked `notes/` files aside if needed, but NOT the tracked `CHANGELOG.md`, which the release reads and finalizes), non-empty `[Unreleased]`, no existing `v<version>` tag. The script: finalizes CHANGELOG, bumps `release.json` *and* `module.json` (atomic — Module Store update detection compares installed `module.json` against repo `release.json`), runs `build.sh` for a fresh tarball, commits, tags, pushes main + tag. After it succeeds, publish the release with condensed user-facing notes: `python3 scripts/condense_changelog.py <ver> > dist/release-notes-v<ver>.md` → `gh release create v<ver> dist/davebox-module.tar.gz --title "v<ver>" --notes-file dist/release-notes-v<ver>.md`. Then `./scripts/draft_announcement.sh <ver>` copies a Discord-pasteable announcement to the macOS clipboard for manual paste into the Schwung Discord release channel.
+- **Cutting a release**: `./scripts/cut_release.sh <version>` (e.g. `0.2.0`). Requires clean tree (including no untracked files — park untracked `notes/` files aside if needed, but NOT the tracked `CHANGELOG.md`, which the release reads and finalizes), non-empty `[Unreleased]`, no existing `v<version>` tag. The script: finalizes CHANGELOG, bumps `release.json` *and* `module.json` (atomic — Module Store update detection compares installed `module.json` against repo `release.json`), runs `build.sh` for a fresh tarball, commits, tags, pushes main + tag. After it succeeds, publish the release with condensed user-facing notes: `python3 scripts/condense_changelog.py <ver> > dist/release-notes-v<ver>.md` → `gh release create v<ver> dist/overture-module.tar.gz --title "v<ver>" --notes-file dist/release-notes-v<ver>.md`. Then `./scripts/draft_announcement.sh <ver>` copies a Discord-pasteable announcement to the macOS clipboard for manual paste into the Schwung Discord release channel.
 - **State version bump**: **Avoid bumping the state version** — users see a confirm dialog on mismatch and lose their session data. Prefer migrating old fields in `seq8_load_state` (default missing keys, clamp out-of-range values). Only bump when the format is genuinely incompatible (struct layout change that can't be migrated). When a bump is unavoidable during dev, wipe state files on device: `ssh root@move.local "find /data/UserData/schwung/set_state -name 'seq8-state.json' -exec rm {} \; && find /data/UserData/schwung/set_state -name 'seq8-ui-state.json' -exec rm {} \;"`.
 - **DSP calls / pfx code**: read `docs/DAVEBOX_API.md` for parameter keys, structs, and algorithm details.
 - **DSP work**: read `dsp/CLAUDE.md` for logging, build, state format keys, and deferred save details.
@@ -30,12 +30,14 @@ dAVEBOx is a Schwung **tool module** (`component_type: "tool"`) for Ableton Move
 
 ```sh
 ./scripts/build.sh && ./scripts/install.sh      # DSP change (also copies all JS)
-python3 scripts/bundle_ui.py && ./scripts/install.sh  # JS-only
-nm -D dist/davebox/dsp.so | grep GLIBC             # verify ≤ 2.35
+./scripts/bundle_ui.sh && ./scripts/install.sh  # JS-only
+nm -D dist/overture/dsp.so | grep GLIBC             # verify ≤ 2.35
 ssh ableton@move.local "tail -f /data/UserData/schwung/seq8.log"
 ```
 
-**JS modules** live under `ui/` (`ui.js` + 6 `ui_*.mjs`) — bundled into `dist/davebox/ui.js` by `scripts/bundle_ui.py`. Always run the bundler before deploying JS changes. **DSP**: see `dsp/CLAUDE.md`.
+**JS modules** live under `ui/`: `ui.js` (the composition root) stays at the `ui/` root, and the `ui_*.mjs` modules are grouped into concept folders — `render/`, `input/`, `midi/`, `pad/`, `drum/`, `bank/`, `sync/`, `view/`, `perform/`, `menu/`, `persist/`, `tick/`, `corun/`, `lifecycle/`, `core/`. They bundle into `dist/overture/ui.js` by `scripts/bundle_ui.sh` (esbuild, run on the HOST; `build.sh` invokes it outside Docker). esbuild resolves the dep graph itself, so there is **no manual ORDER list** and adding a new `ui_*.mjs` (in any folder) needs no bundler edit; it also renames colliding top-level names and honors aliased local imports, so the wrapper pattern (`pure(deps,…)` in a `.mjs` + same-named thin wrapper in `ui.js`) just works. The script then runs a **QuickJS parse gate** (the device's exact `qjs` from `schwung/libs/quickjs`) — this catches QuickJS-fatal issues the V8 tests and `node --check` miss, because those run against *source*, never the bundle. Needs `pnpm -C overture-ui install` (esbuild is the tool's own build dep, `overture-ui/package.json`; `bundle_ui.sh` falls back to the web workspace / `$ESBUILD` for older checkouts). Always run the bundler before deploying JS changes. **DSP**: see `dsp/CLAUDE.md`.
+
+**Tests.** UI-module unit tests live in `overture-ui/tests/<concept-folder>/*.test.ts` (vitest) — they import `ui/*.mjs` via the `@overture-ui` alias (`vitest.config.ts` → `./ui`) and drive each module with mock `deps`; no WASM/emulator/DOM. Run with `pnpm -C overture-ui test` (or `mise run utest`). These were relocated out of `web/tests/integration/` (2026-06-17) — `web/` now owns only the real seq8-WASM + emulator integration tests (`mise run itest`). A few `ui/*.mjs` import schwung `shared/*` by absolute on-device path; `vitest.config.ts` remaps those to the schwung dev checkout (`SCHWUNG_SRC` overrides). All tests run under vitest (the old `node:test` tick test was folded in); source-order assertions `readFile` the module under `ui/` by relative path.
 
 ## State persistence
 
@@ -74,6 +76,20 @@ shadow_ui runs QuickJS, not V8. Node.js `--check` is NOT a reliable validator.
 
 ## JS internals
 
+- `ui/ui.js` is the UI Runtime composition root. Keep public Schwung entrypoints
+  (`globalThis.init`, `globalThis.tick`, `globalThis.onMidiMessageInternal`,
+  `globalThis.onMidiMessageExternal`) assigned there. Extract by runtime concept
+  and invariant, not by file size; see `docs/adr/0001-refactor-by-runtime-concept.md`.
+- Entrypoint exceptions are intentionally swallowed by
+  `ui_entrypoint_diagnostics.mjs` after deduped logging to
+  `/data/UserData/schwung/seq8-jserr.log`. Preserve the log path, dedupe key
+  `(where|message)`, context fields, and stock-host no-op behavior.
+- Tick Pipeline ordering is load-bearing. In `runTickWorkflow`, pad-map
+  recompute stays before the default set-param drain; `pendingSetLoad` drains
+  before `pendingDefaultSetParams`; DSP mirror resync runs after those drains;
+  `pendingSuspendSave` is an end-of-tick persistence action; final draw is gated
+  by suspend state. Extend the source-order/focused tests before moving any of
+  those calls.
 - **Two-tick deferred pattern** (`_toggle` / `_set_notes`): activate step on tick N, write notes on tick N+1. Phase-2 check must precede phase-1 in tick().
 - `pendingDrumResync` deferred 2 ticks after drum clip switch; `pendingStepsReread` 2 ticks after `_reassign`/`_copy_to`.
 - `bankParams[t][b][k]`: 7 banks, refreshed via `tN_cC_pfx_snapshot`. Track config uses dedicated arrays + `readTrackConfig`/`applyTrackConfig` — NOT in bankParams.

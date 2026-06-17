@@ -23,7 +23,8 @@ obj/
 *.gcda
 *.gcov
 *.dSYM/
-core
+# core dumps — anchor to repo root so it doesn't match the ui/core or tests/core concept dirs
+/core
 core.*
 vgcore.*
 *.log

@@ -1,0 +1,226 @@
+import { S } from '../core/ui_state.mjs';
+import { MCUFONT } from '../core/ui_constants.mjs';
+import {
+    drawMenuHeader, drawMenuList, menuLayoutDefaults
+} from '/data/UserData/schwung/shared/menu_layout.mjs';
+import { formatItemValue } from '/data/UserData/schwung/shared/menu_items.mjs';
+import { SNAPSHOT_CAP } from '../persist/ui_persistence.mjs';
+import { routeCheckSlots, routeCheckViewModel } from '../core/ui_route_check.mjs';
+
+function pixelPrintMcu(x, y, text, scale, color) {
+    const charW = 5 * scale + scale;
+    for (let ci = 0; ci < text.length; ci++) {
+        const g = MCUFONT[text[ci]];
+        if (!g) continue;
+        for (let row = 0; row < 5; row++) {
+            const bits = g[row];
+            for (let col = 0; col < 5; col++) {
+                if (bits & (1 << (4 - col)))
+                    fill_rect(x + ci * charW + col * scale, y + row * scale, scale, scale, color);
+            }
+        }
+    }
+}
+
+function pixelPrintLargeC(cx, y, text, scale, color) {
+    const charW  = 5 * scale + scale;
+    const totalW = text.length * charW - scale;
+    const startX = cx - Math.floor(totalW / 2);
+    for (let ci = 0; ci < text.length; ci++) {
+        const g = MCUFONT[text[ci]];
+        if (!g) continue;
+        for (let row = 0; row < 5; row++) {
+            const bits = g[row];
+            for (let col = 0; col < 5; col++) {
+                if (bits & (1 << (4 - col)))
+                    fill_rect(startX + ci * charW + col * scale, y + row * scale, scale, scale, color);
+            }
+        }
+    }
+}
+
+function drawTapTempoScreen() {
+    clear_screen();
+    drawMenuHeader('TAP TEMPO');
+    pixelPrintLargeC(64, 22, String(S.tapTempoBpm), 3, 1);
+    print(4, 50, 'Tap any pad. Jog=BPM', 1);
+}
+
+function drawClearSessionConfirm() {
+    clear_screen();
+    drawMenuHeader('CLEAR SESSION');
+    print(4, 16, 'This will clear the', 1);
+    print(4, 25, 'entire project and', 1);
+    print(4, 34, 'cannot be undone.', 1);
+    const noX = 6, yesX = 74, btnY = 46, btnW = 46, btnH = 13;
+    if (S.confirmClearSel === 1) {
+        fill_rect(noX, btnY, btnW, btnH, 1);
+        print(noX + 17, btnY + 3, 'No', 0);
+    } else {
+        fill_rect(noX, btnY, btnW, 1, 1);
+        fill_rect(noX, btnY + btnH - 1, btnW, 1, 1);
+        fill_rect(noX, btnY, 1, btnH, 1);
+        fill_rect(noX + btnW - 1, btnY, 1, btnH, 1);
+        print(noX + 17, btnY + 3, 'No', 1);
+    }
+    if (S.confirmClearSel === 0) {
+        fill_rect(yesX, btnY, btnW, btnH, 1);
+        print(yesX + 14, btnY + 3, 'Yes', 0);
+    } else {
+        fill_rect(yesX, btnY, btnW, 1, 1);
+        fill_rect(yesX, btnY + btnH - 1, btnW, 1, 1);
+        fill_rect(yesX, btnY, 1, btnH, 1);
+        fill_rect(yesX + btnW - 1, btnY, 1, btnH, 1);
+        print(yesX + 14, btnY + 3, 'Yes', 1);
+    }
+}
+
+function drawSaveStateConfirm() {
+    clear_screen();
+    drawMenuHeader('SAVE STATE');
+    print(4, 20, 'Save current session?', 1);
+    print(4, 32, S.confirmSaveCount + ' of ' + SNAPSHOT_CAP + ' saved', 1);
+    const noX = 6, yesX = 74, btnY = 46, btnW = 46, btnH = 13;
+    if (S.confirmSaveSel === 1) {
+        fill_rect(noX, btnY, btnW, btnH, 1);
+        print(noX + 17, btnY + 3, 'No', 0);
+    } else {
+        fill_rect(noX, btnY, btnW, 1, 1);
+        fill_rect(noX, btnY + btnH - 1, btnW, 1, 1);
+        fill_rect(noX, btnY, 1, btnH, 1);
+        fill_rect(noX + btnW - 1, btnY, 1, btnH, 1);
+        print(noX + 17, btnY + 3, 'No', 1);
+    }
+    if (S.confirmSaveSel === 0) {
+        fill_rect(yesX, btnY, btnW, btnH, 1);
+        print(yesX + 14, btnY + 3, 'Yes', 0);
+    } else {
+        fill_rect(yesX, btnY, btnW, 1, 1);
+        fill_rect(yesX, btnY + btnH - 1, btnW, 1, 1);
+        fill_rect(yesX, btnY, 1, btnH, 1);
+        fill_rect(yesX + btnW - 1, btnY, 1, btnH, 1);
+        print(yesX + 14, btnY + 3, 'Yes', 1);
+    }
+}
+
+function drawConvertToDrumConfirm() {
+    clear_screen();
+    drawMenuHeader('CONVERT');
+    print(4, 16, 'Warning:', 1);
+    print(4, 25, 'Existing notes may', 1);
+    print(4, 34, 'be lost. Proceed?', 1);
+    const noX = 6, yesX = 74, btnY = 46, btnW = 46, btnH = 13;
+    if (S.confirmConvertToDrumSel === 1) {
+        fill_rect(noX, btnY, btnW, btnH, 1);
+        print(noX + 17, btnY + 3, 'No', 0);
+    } else {
+        fill_rect(noX, btnY, btnW, 1, 1);
+        fill_rect(noX, btnY + btnH - 1, btnW, 1, 1);
+        fill_rect(noX, btnY, 1, btnH, 1);
+        fill_rect(noX + btnW - 1, btnY, 1, btnH, 1);
+        print(noX + 17, btnY + 3, 'No', 1);
+    }
+    if (S.confirmConvertToDrumSel === 0) {
+        fill_rect(yesX, btnY, btnW, btnH, 1);
+        print(yesX + 14, btnY + 3, 'Yes', 0);
+    } else {
+        fill_rect(yesX, btnY, btnW, 1, 1);
+        fill_rect(yesX, btnY + btnH - 1, btnW, 1, 1);
+        fill_rect(yesX, btnY, 1, btnH, 1);
+        fill_rect(yesX + btnW - 1, btnY, 1, btnH, 1);
+        print(yesX + 14, btnY + 3, 'Yes', 1);
+    }
+}
+
+function drawExportConfirm() {
+    clear_screen();
+    drawMenuHeader('EXPORT');
+    print(4, 16, 'Export this set as', 1);
+    print(4, 25, 'an Ableton bundle?', 1);
+    print(4, 34, '(transport stopped)', 1);
+    const noX = 6, yesX = 74, btnY = 46, btnW = 46, btnH = 13;
+    if (S.confirmExportSel === 1) {
+        fill_rect(noX, btnY, btnW, btnH, 1);
+        print(noX + 17, btnY + 3, 'No', 0);
+    } else {
+        fill_rect(noX, btnY, btnW, 1, 1);
+        fill_rect(noX, btnY + btnH - 1, btnW, 1, 1);
+        fill_rect(noX, btnY, 1, btnH, 1);
+        fill_rect(noX + btnW - 1, btnY, 1, btnH, 1);
+        print(noX + 17, btnY + 3, 'No', 1);
+    }
+    if (S.confirmExportSel === 0) {
+        fill_rect(yesX, btnY, btnW, btnH, 1);
+        print(yesX + 14, btnY + 3, 'Yes', 0);
+    } else {
+        fill_rect(yesX, btnY, btnW, 1, 1);
+        fill_rect(yesX, btnY + btnH - 1, btnW, 1, 1);
+        fill_rect(yesX, btnY, 1, btnH, 1);
+        fill_rect(yesX + btnW - 1, btnY, 1, btnH, 1);
+        print(yesX + 14, btnY + 3, 'Yes', 1);
+    }
+}
+
+/* Persistent post-export confirmation: shows the full device path, dismissed
+ * with OK (jog-click or Back). Path is wrapped to fit the OLED. */
+function drawExportDoneDialog() {
+    clear_screen();
+    drawMenuHeader(S.exportDoneMissing > 0 ? ('EXPORTED -' + S.exportDoneMissing) : 'EXPORTED TO');
+    const path = S.exportDonePath || '';
+    const W = 21;   /* chars per line at the small print font */
+    let y = 14, lines = 0;
+    for (let i = 0; i < path.length && lines < 4; i += W, lines++) {
+        print(2, y, path.slice(i, i + W), 1);
+        y += 9;
+    }
+    /* OK button (filled, bottom center) */
+    const okX = 49, btnY = 52, btnW = 30, btnH = 11;
+    fill_rect(okX, btnY, btnW, btnH, 1);
+    print(okX + 10, btnY + 2, 'OK', 0);
+}
+
+function drawRouteCheck() {
+    clear_screen();
+    const model = routeCheckViewModel(S.routeCheckSelected, routeCheckSlots());
+    drawMenuHeader(model.title, model.range);
+    for (let row = 0; row < model.rows.length; row++) {
+        const routeRow = model.rows[row];
+        const y = 15 + row * 11;
+        const active = routeRow.active;
+        if (active) fill_rect(0, y - 1, 128, 10, 1);
+        print(2, y, routeRow.text, active ? 0 : 1);
+        print(86, y, routeRow.status, active ? 0 : 1);
+    }
+    print(2, 59, model.footer, 1);
+}
+
+export function drawGlobalMenu() {
+    if (S.tapTempoOpen)        { drawTapTempoScreen();       return; }
+    if (S.exportDoneDialog)    { drawExportDoneDialog();     return; }
+    if (S.routeCheckOpen)      { drawRouteCheck();           return; }
+    if (S.confirmClearSession) { drawClearSessionConfirm();  return; }
+    if (S.confirmSaveState)    { drawSaveStateConfirm();     return; }
+    if (S.confirmConvertToDrum){ drawConvertToDrumConfirm(); return; }
+    if (S.confirmExport)       { drawExportConfirm();        return; }
+    clear_screen();
+    const _inTrackSection = S.globalMenuState.selectedIndex < 5;
+    const _hTitle = _inTrackSection ? 'Track ' + (S.activeTrack + 1) : 'Global';
+    fill_rect(0, 1, 128, 10, 1);
+    pixelPrintMcu(2, 4, _hTitle, 1, 0);
+    fill_rect(0, 12, 128, 1, 1);
+    drawMenuList({
+        items: S.globalMenuItems,
+        selectedIndex: S.globalMenuState.selectedIndex,
+        listArea: { topY: menuLayoutDefaults.listTopY, bottomY: menuLayoutDefaults.listBottomNoFooter },
+        valueX: 76,
+        valueAlignRight: true,
+        prioritizeSelectedValue: true,
+        selectedMinLabelChars: 5,
+        getLabel: function(item) { return item ? (item.label || '') : ''; },
+        getValue: function(item, index) {
+            if (!item) return '';
+            const isEditing = S.globalMenuState.editing && index === S.globalMenuState.selectedIndex;
+            return formatItemValue(item, isEditing, S.globalMenuState.editValue);
+        }
+    });
+}

@@ -8,11 +8,23 @@ cd "$PROJECT_DIR"
 MODULE_ID="overture"
 CROSS_PREFIX="${CROSS_PREFIX:-aarch64-linux-gnu-}"
 
+mkdir -p "dist/${MODULE_ID}"
+
+# Bundle the JS module tree on the HOST (esbuild + QuickJS parse gate). node,
+# esbuild and qjs are not in the aarch64 cross-compile image, so this must run
+# outside Docker; the output lands in the volume-mounted dist/ that the Docker
+# pass below reads when packing the tarball. OVERTURE_IN_DOCKER guards the
+# Docker re-entry from running it again (where the toolchain is absent).
+if [ -z "${OVERTURE_IN_DOCKER:-}" ]; then
+    echo "=== Bundling UI (esbuild + QuickJS gate) ==="
+    ./scripts/bundle_ui.sh
+fi
+
 # Re-enter inside Docker if we don't have a cross compiler.
 if ! command -v "${CROSS_PREFIX}gcc" >/dev/null 2>&1; then
     echo "Cross compiler not found, building via Docker..."
     docker build -t overture-builder -f Dockerfile .
-    docker run --rm -v "$PROJECT_DIR:/build" -w /build overture-builder \
+    docker run --rm -e OVERTURE_IN_DOCKER=1 -v "$PROJECT_DIR:/build" -w /build overture-builder \
         bash -c "CROSS_PREFIX=aarch64-linux-gnu- ./scripts/build.sh"
     exit $?
 fi
@@ -30,11 +42,8 @@ echo "Compiling DSP..."
     -lm
 
 cp module.json           "dist/${MODULE_ID}/"
-# Bundle the JS module tree (ui.js + ui_*.mjs) into a single QuickJS-loadable
-# dist/${MODULE_ID}/ui.js. Earlier versions copied the raw dev ui.js, which
-# clobbers the bundled output and ships ES-module imports that QuickJS can't
-# resolve — manifests on device as "failed to load tool".
-python3 scripts/bundle_ui.py
+# JS bundle (dist/${MODULE_ID}/ui.js) was produced on the host by bundle_ui.sh
+# before this Docker pass — see the OVERTURE_IN_DOCKER guard near the top.
 # Ship the Ableton-export packager + JSON templates alongside the module (read at
 # export time; pack.py is invoked on-device via host_system_cmd). These are plain
 # files in the module dir, so install.sh's `scp dist/overture/*` carries them too.
