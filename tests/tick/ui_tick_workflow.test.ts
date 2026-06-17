@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import test from 'node:test';
-import { runTickWorkflow } from './ui_tick_workflow.mjs';
+import { test } from 'vitest';
+import { runTickWorkflow } from '@overture-ui/tick/ui_tick_workflow.mjs';
 
 const NUM_TRACKS = 4;
 const PAD_MODE_DRUM = 1;
@@ -310,7 +310,7 @@ test('runTickWorkflow draws dirty UI only when not suspended', () => {
 });
 
 test('ui.js keeps the public tick callback and error wrapper while delegating to _tickImpl', async () => {
-    const source = await readFile(new URL('../ui.js', import.meta.url), 'utf8');
+    const source = await readFile(new URL('../../ui/ui.js', import.meta.url), 'utf8');
     assert.match(
         source,
         /globalThis\.tick = function \(\) \{ runEntrypoint\('tick', _tickImpl\); \};/
@@ -321,7 +321,7 @@ test('ui.js keeps the public tick callback and error wrapper while delegating to
 });
 
 test('runTickWorkflow source preserves load-bearing task order', async () => {
-    const source = await readFile(new URL('./ui_tick_workflow.mjs', import.meta.url), 'utf8');
+    const source = await readFile(new URL('../../ui/tick/ui_tick_workflow.mjs', import.meta.url), 'utf8');
     const ordered = [
         'runPendingTrackConvert',
         'runPendingPadNoteMapRecompute',
