@@ -279,6 +279,9 @@ import {
     runTickWorkflow
 } from './ui_tick_workflow.mjs';
 import {
+    drawUIImpl
+} from './ui_screen_router_workflow.mjs';
+import {
     buildGlobalMenuItemsImpl
 } from './ui_global_menu.mjs';
 import {
@@ -1990,156 +1993,56 @@ function createStepIntervalRenderDeps() {
 }
 
 function drawUI() {
-    /* CO-RUN: shadow_ui's chain editor owns the OLED while this is active.
-     * Skip every Overture draw path so it doesn't fight the chain editor's
-     * frame. shadow_ui still calls clear_screen + redraw each tick. */
-    if (S.schwungCoRunSlot >= 0) return;
-    /* Move-native co-run: Move firmware owns the OLED (preset browser /
-     * device-edit pages). The shim's display_mode bypass keeps Move's
-     * framebuffer visible while the MIDI filter stays active; we just
-     * stay out of the way. Pad/step LEDs freeze at entry-time state —
-     * verified harmless in real use (nothing the user does during co-run
-     * depends on live LED feedback). */
-    if (S.moveCoRunTrack >= 0) {
-        /* Side clip buttons: the button paired to the Move track this Overture
-         * track routes to blinks; the rest stay dark grey. Move's track numbering
-         * is reversed (Track 1 = CC 43 = top .. Track 4 = CC 40 = bottom), so a
-         * channel ch (1-4) maps to top-to-bottom bit (ch-1). Forced every
-         * POLL_INTERVAL to re-assert over Move firmware's pass-through writes. */
-        const _coRunCh = (S.trackChannel[S.moveCoRunTrack] | 0);
-        const _litMask = (_coRunCh >= 1 && _coRunCh <= 4) ? (1 << (_coRunCh - 1)) : 0;
-        paintCoRunSideButtons(_litMask, (S.tickCount % POLL_INTERVAL) === 0);
-        return;
-    }
-    /* Alt-param mode is transient: any bank change, track change, or entering
-     * Session View drops back to primary params. Diff-guard catches every
-     * S.activeBank / S.activeTrack reassignment regardless of source. */
-    if (S.altMode && (S.sessionView ||              /* session view can be entered via a button after altMode was set */
-            S.activeBank !== S._altPrevBank ||
-            S.activeTrack !== S._altPrevTrack)) {
-        S.altMode = false;
-    }
-    S._altPrevBank  = S.activeBank;
-    S._altPrevTrack = S.activeTrack;
-    if (S.sessionOverlayHeld) { renderSessionOverview(createSessionOverviewRenderDeps()); return; }
-    if (S.pendingInheritPicker) { drawInheritPicker(); return; }
-    if (S.snapshotPicker) { drawSnapshotPicker(); return; }
-    if (S.clearAutoMenu) { drawClearAutoMenu(); return; }
-    if (S.pendingSceneBakePicker) {
-        renderSceneBakePickerPrompt(createPromptRenderDeps());
-        return;
-    }
-    if (S.pendingMergePlacement) {
-        renderMergePlacementPrompt(createPromptRenderDeps());
-        return;
-    }
-    if (S.confirmStateWipe) { drawStateWipeConfirm(); return; }
-    if (S.recordBlockedDialog) { drawRecordBlockedDialog(); return; }
-    if (S.confirmLgto)         { drawLgtoConfirm();         return; }
-    if (S.confirmXpose) { drawXposeConfirm(); return; }
-    if (S.confirmBakeScene) { drawBakeSceneConfirm(); return; }
-    if (S.confirmBake) { drawBakeConfirm(); return; }
-    if (S.globalMenuOpen || S.tapTempoOpen) { ensureGlobalMenuFresh(); drawGlobalMenu(); return; }
-    /* Perf Mode OLED takeover (Session View + Loop held or locked) */
-    if (S.sessionView && (S.loopHeld || S.perfViewLocked)) { renderPerfModeOled(createPerfModeRenderDeps()); return; }
-    if (S.stateLoading || S.bootSplashTicks > 0) {
-        renderSplashScreen(S, createSplashRenderDeps());
-        return;
-    }
-    /* Not in splash mode — clear the entry-edge flag so the next splash rerolls. */
-    if (S.splashWasVisible) S.splashWasVisible = false;
-
-    clear_screen();
-    if (S.sessionView) {
-        if (S.actionPopupEndTick >= 0) {
-            renderSessionActionPopup(createPopupRenderDeps());
-            return;
-        }
-        renderSessionIdleView(createSessionIdleRenderDeps());
-        return;
-    }
-
-    /* Track View — priority display state machine */
-    const bank      = S.activeBank;
-    const inTimeout = S.bankSelectTick >= 0 || S.jogTouched;
-
-    /* Compress-limit override: highest priority for ~1500ms after a blocked compress */
-    if (S.stretchBlockedEndTick >= 0) {
-        renderCompressLimitNotice(createPopupRenderDeps());
-        return;
-    }
-
-    /* Action confirmation pop-up: ~500ms; defers to step edit and active-knob bank overview */
-    if (S.actionPopupEndTick >= 0 && S.heldStep < 0 && S.knobTouched < 0) {
-        renderTrackActionPopup(createPopupRenderDeps());
-        return;
-    }
-
-    /* No-note flash: ~600ms after pressing an empty step with no prior pad */
-    if (S.noNoteFlashEndTick >= 0 && S.activeBank !== 6) {
-        renderNoNoteFlashNotice(createPopupRenderDeps());
-        return;
-    }
-
-    if (S.shiftHeld && !S.sessionView && S.heldStep < 0 && S.knobTouched < 0 &&
-            !S.deleteHeld && !S.copyHeld && !S.muteHeld && !S.loopHeld) {
-        renderShiftStepHelp(createPromptRenderDeps());
-        return;
-    }
-
-    /* Step edit: show assigned notes and step identity */
-    if (S.heldStep >= 0) {
-        if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM) {
-            renderCcStepEditView(createCcStepEditRenderDeps());
-            return;
-        } else {
-        if (renderTrackStepEditView(createStepEditRenderDeps())) return;
-        /* Non-empty melodic step, notes still loading at hold threshold: fall through to bank/header. */
-    } /* end else (non-bank-6 step edit) */
-    }
-
-    /* Loop view: own priority state so screen is fully cleared first */
-    if (S.loopHeld) {
-        renderLoopView(createLoopRenderDeps());
-        return;
-    }
-
-    /* Arp Steps interval overlay: persistent bank overview while jog-clicked into
-     * step-interval mode on SEQ ARP (4) or TARP (5). K1-K8 = per-step scale-degree
-     * offsets (±24); pad grid is the persistent step-vel level editor handled in
-     * updateTrackLEDs. Renders REGARDLESS of knob-touch / inTimeout (persistent). */
-    if (bank >= 0 && S.stepIntervalMode && !S.sessionView && (bank === 4 || bank === 5)) {
-        renderStepIntervalOverlay(createStepIntervalRenderDeps(), bank);
-        return;
-    }
-
-    /* Auto bank idle display: lane info + automation graph + progress bar */
-    if (bank === 6 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM &&
-            !S.loopHeld && S.knobTouched < 0 && !inTimeout) {
-        renderMotionIdleView(createMotionIdleRenderDeps());
-        return;
-    }
-
-    if (bank >= 0 && (S.knobTouched >= 0 || inTimeout ||
-            (S.altMode && bankHasAltParams(S.activeTrack, bank)) ||
-            (S.shiftHeld && bank === 1 && S.trackPadMode[S.activeTrack] !== PAD_MODE_DRUM))) {
-        if (S.knobTouched >= 0 && !S.stepIntervalMode) {
-            renderParamPeek(createPopupRenderDeps());
-            return;
-        }
-        const bankRenderDeps = createBankRenderDeps();
-        if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM && bank === 5) {
-            const t    = S.activeTrack;
-            const lane = S.activeDrumLane[t];
-            syncDrumRepeatState(t, lane);
-        }
-        renderTrackBankOverview(bankRenderDeps, bank);
-
-    } else if (S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM) {
-        renderDrumTrackIdleView(createTrackIdleRenderDeps());
-    } else {
-        renderMelodicTrackIdleView(createTrackIdleRenderDeps());
-    }
+    return drawUIImpl(S, {
+        paintCoRunSideButtons,
+        renderSessionOverview,
+        createSessionOverviewRenderDeps,
+        drawInheritPicker,
+        drawSnapshotPicker,
+        drawClearAutoMenu,
+        renderSceneBakePickerPrompt,
+        renderMergePlacementPrompt,
+        createPromptRenderDeps,
+        drawStateWipeConfirm,
+        drawRecordBlockedDialog,
+        drawLgtoConfirm,
+        drawXposeConfirm,
+        drawBakeSceneConfirm,
+        drawBakeConfirm,
+        ensureGlobalMenuFresh,
+        drawGlobalMenu,
+        renderPerfModeOled,
+        createPerfModeRenderDeps,
+        renderSplashScreen,
+        createSplashRenderDeps,
+        clear_screen,
+        renderSessionActionPopup,
+        renderSessionIdleView,
+        createPopupRenderDeps,
+        createSessionIdleRenderDeps,
+        renderCompressLimitNotice,
+        renderTrackActionPopup,
+        renderNoNoteFlashNotice,
+        renderShiftStepHelp,
+        renderCcStepEditView,
+        createCcStepEditRenderDeps,
+        renderTrackStepEditView,
+        createStepEditRenderDeps,
+        renderLoopView,
+        createLoopRenderDeps,
+        renderStepIntervalOverlay,
+        createStepIntervalRenderDeps,
+        renderMotionIdleView,
+        createMotionIdleRenderDeps,
+        bankHasAltParams,
+        renderParamPeek,
+        createBankRenderDeps,
+        syncDrumRepeatState: function(t, lane) { return syncDrumRepeatState(t, lane); },
+        renderTrackBankOverview,
+        renderDrumTrackIdleView,
+        renderMelodicTrackIdleView,
+        createTrackIdleRenderDeps
+    });
 }
 
 
