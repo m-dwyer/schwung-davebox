@@ -241,11 +241,9 @@ import {
     handleTrackViewMelodicStepNoteAssignment
 } from './ui_track_view_step_workflow.mjs';
 import {
-    SCALE_INTERVALS,
     computePadNoteMap as computePadNoteMapImpl,
     createLiveNoteQueues,
     drumPadToLane as padSurfaceDrumPadToLane,
-    drumVelZoneToVelocity,
     handleCaptureDrumLanePress,
     handleDrumLanePadPress,
     handleDrumVelocityPadPress,
@@ -374,6 +372,17 @@ import {
     resetPerClipBankParamsToDefaultImpl,
     resetSingleFxBankImpl
 } from './ui_bank_params.mjs';
+import {
+    altIndicatorActiveImpl,
+    bankHasAltParamsImpl,
+    ccKnobDeltaImpl
+} from './ui_bank_state.mjs';
+import {
+    defaultStepNoteImpl,
+    drumNoteLabelImpl,
+    scaleNudgeNoteImpl,
+    stepEntryVelocityImpl
+} from './ui_note_edit_helpers.mjs';
 import {
     clearClipImpl,
     clearRowImpl,
@@ -621,18 +630,8 @@ const LOOP_TAP_TICKS  = 40;
 const LOOP_DBLTAP_GAP = 80;
 
 /* Live pad note input — isomorphic 4ths diatonic layout. */
-/* Step-edit pitch nudge: move note up/down to next in-scale pitch.
- * When scale-aware is off, shifts by exactly 1 semitone per dir. */
 function scaleNudgeNote(note, dir, key, scale) {
-    if (!S.scaleAware) return Math.max(0, Math.min(127, note + dir));
-    const ivls = SCALE_INTERVALS[scale];
-    let candidate = note + dir;
-    while (candidate >= 0 && candidate <= 127) {
-        const pc = ((candidate - key) % 12 + 12) % 12;
-        if (ivls.indexOf(pc) >= 0) return candidate;
-        candidate += dir;
-    }
-    return Math.max(0, Math.min(127, note + dir));
+    return scaleNudgeNoteImpl(S, note, dir, key, scale);
 }
 
 
@@ -923,33 +922,8 @@ function handoffRecordingToTrack(newTrack) {
 
 function effectiveVelocity(rawVel) { return rawVel; }
 
-/* Step-entry velocity. Single source of truth used by every step-write site.
- *
- * Drum context (allowZone=true, used at drum step-tap sites and the drum
- * vel-pad-while-step-held site): drum vel zones ALWAYS win over VelIn.
- *   active vel-pad press now (liveVel >= 0)  →  zone velocity
- *   sticky vel-zone armed                    →  sticky zone velocity
- *   VelIn engaged                            →  VelIn value
- *   otherwise                                →  100
- *
- * Melodic context (allowZone=false): VelIn wins over pad press.
- *   VelIn engaged                            →  VelIn value
- *   live pad press now (liveVel >= 0)        →  pad press velocity
- *   otherwise                                →  100
- */
 function stepEntryVelocity(t, liveVel, allowZone) {
-    if (allowZone) {
-        if (liveVel >= 0) return liveVel;
-        if (S.drumVelZoneArmed && S.drumVelZoneArmed[t])
-            return drumVelZoneToVelocity(S.drumLastVelZone[t]);
-        const tvo = S.trackVelOverride[t];
-        if (tvo > 0) return tvo;
-        return 100;
-    }
-    const tvo = S.trackVelOverride[t];
-    if (tvo > 0) return tvo;
-    if (liveVel >= 0) return liveVel;
-    return 100;
+    return stepEntryVelocityImpl(S, t, liveVel, allowZone);
 }
 
 function flushChordBatch() {}
@@ -1317,35 +1291,14 @@ function syncDrumClipContent(t) {
     return syncDrumClipContentImpl(S, createDrumClipSyncDeps(), t);
 }
 
-/** MIDI note number → display string e.g. "C3 / 60" */
 function drumNoteLabel(midiNote) {
-    const oct  = Math.floor(midiNote / 12) - 2;
-    const name = NOTE_KEYS[midiNote % 12];
-    return name + oct + '/' + midiNote;
+    return drumNoteLabelImpl(midiNote);
 }
 
 /* --------------------------------------------------------------------------- */
 
-/* Root note in pad layout closest to octave 4 — guaranteed in-scale and on a pad. */
 function defaultStepNote() {
-    const target = S.padKey + 60;  /* root pitch class in MIDI octave 4 */
-    let best = -1, bestDist = 999;
-    for (let i = 0; i < 32; i++) {
-        if (S.padNoteMap[i] === 0xFF) continue;  /* OOB pad — no melodic note */
-        const p = S.padNoteMap[i] + S.trackOctave[S.activeTrack] * 12;
-        if (p < 0 || p > 127) continue;
-        if (S.padNoteMap[i] % 12 !== S.padKey) continue;  /* root notes only */
-        const d = Math.abs(p - target);
-        if (d < bestDist) { bestDist = d; best = p; }
-    }
-    if (best >= 0) return best;
-    /* Fallback: first valid (non-0xFF) entry; if every pad is OOB (shouldn't
-     * happen at any sane octave), return middle C. */
-    for (let i = 0; i < 32; i++) {
-        if (S.padNoteMap[i] === 0xFF) continue;
-        return Math.max(0, Math.min(127, S.padNoteMap[i] + S.trackOctave[S.activeTrack] * 12));
-    }
-    return 60;
+    return defaultStepNoteImpl(S);
 }
 
 
@@ -1605,28 +1558,12 @@ function applyExtMidiRemap() {
     return applyExtMidiRemapImpl(S, createExtMidiRemapWorkflowDeps());
 }
 
-/* True when (track-type, bank) exposes alt params reachable via S.altMode.
- * Melodic: CLIP(0), DELAY(3), AUTO/CC(6 — CC-assign). Drum: DRUM LANE(0),
- * REPEAT GROOVE(5), ALL LANES(7). The CC bank is melodic-only (its knob handler
- * returns early for drum), so bank 6 is NOT an alt bank on drum tracks. Keep in
- * sync with the shiftHeld→altMode migration sites. */
 function bankHasAltParams(t, bank) {
-    if (S.trackPadMode[t] === PAD_MODE_DRUM) return bank === 0 || bank === 5 || bank === 7;
-    /* Melodic CLIP(0), NOTE FX(1), DELAY(3), SEQ ARP(4), ARP IN(5), AUTO/CC(6).
-     * Banks 4/5 use stepIntervalMode (Arp Steps overlay) rather than altMode —
-     * the arrow still shows their toggle-availability, and altIndicatorActive()
-     * reflects which underlying flag is on. */
-    return bank === 0 || bank === 1 || bank === 3 || bank === 4 || bank === 5 || bank === 6;
+    return bankHasAltParamsImpl(S, t, bank);
 }
 
-/* Returns true when the current bank's alt indicator should flash. For melodic
- * SEQ ARP / ARP IN this is the Arp Steps overlay flag; for every other alt-param
- * bank it is altMode. */
 function altIndicatorActive(t, bank) {
-    if (S.trackPadMode[t] !== PAD_MODE_DRUM && (bank === 4 || bank === 5)) {
-        return S.stepIntervalMode;
-    }
-    return S.altMode;
+    return altIndicatorActiveImpl(S, t, bank);
 }
 
 /* Send a single param change to DSP and apply any JS-side side-effects. */
@@ -2273,31 +2210,8 @@ function _onCC_side(d1, d2) {
     onCcSideImpl(S, createInputDispatchWorkflowDeps(), d1, d2);
 }
 
-/* CC-knob acceleration. The Move knobs fire ~2-4 ±1 detent messages per
- * physical click at ~8-35ms apart, so timing can't tell slow from fast. We use
- * a fractional accumulator: each message adds `gain` (1 at the start) to an
- * accumulator and emits whole units of BASE. BASE=3 makes the slow/fine rate
- * ~1 value per 3 messages; `gain` grows only
- * after sustained continuous turning, so big sweeps accelerate. A direction
- * change or a pause (>180ms) resets. Returns a signed integer step (0 if the
- * accumulator hasn't reached a whole unit yet). */
 function ccKnobDelta(d2, k) {
-    const sign = (d2 >= 1 && d2 <= 63) ? 1 : (d2 >= 65 && d2 <= 127) ? -1 : 0;
-    if (!sign) return 0;
-    const now = Date.now();
-    const gap = now - (S.knobAccelLast[k] || 0);
-    S.knobAccelLast[k] = now;
-    if (sign !== S.knobAccelDir[k] || gap > 180) { S.knobAccelRun[k] = 0; S.knobAccelAcc[k] = 0; }
-    S.knobAccelDir[k] = sign;
-    S.knobAccelRun[k]++;
-    const run  = S.knobAccelRun[k];
-    const gain = run <= 12 ? 1 : run <= 24 ? 2 : run <= 36 ? 4 : 6;
-    const BASE = 3;
-    S.knobAccelAcc[k] += gain;
-    const units = Math.floor(S.knobAccelAcc[k] / BASE);
-    if (units === 0) return 0;
-    S.knobAccelAcc[k] -= units * BASE;
-    return sign * units;
+    return ccKnobDeltaImpl(S, d2, k);
 }
 
 function _onCC_stepedit(d1, d2) {
