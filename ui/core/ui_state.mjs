@@ -21,7 +21,12 @@ export const PERF_FACTORY_PRESETS = [
 
 export const CC_ASSIGN_DEFAULTS = [7, 74, 71, 73, 72, 91, 93, 10];
 
-export const S = {
+/* Build a pristine UI-runtime state object. Every field is constructed fresh
+ * (new Array/Set/Array.from), so each call is fully independent — used both for
+ * the live singleton `S` below and for resetUiState() (headless test teardown).
+ * On device this is called exactly once at module load. */
+export function createInitialState() {
+    return {
     swingAmt: 0,
     swingRes: 0,
     inpQuant: false,
@@ -516,4 +521,20 @@ export const S = {
     stepSaveFlashStartTick: -1, /* tick when hold-save flash began */
     stepSaveFlashEndTick: -1,  /* step button LEDs double-blink through this tick after save */
 
-};
+    };
+}
+
+/* The live UI-runtime state singleton, imported by reference across ui/*.mjs. */
+export const S = createInitialState();
+
+/* Reset the singleton to a pristine state IN PLACE — same object reference, so
+ * every `import { S }` holder (and closures captured at module load) stay valid.
+ * On device, init() deliberately preserves most UI state across Shift+Back
+ * resume, so this is a TEST-ONLY teardown: the headless harness reuses one
+ * ui.js runtime across createHarness() calls, and without a reset the prior
+ * test's S (open menus, copySrc, dialogs) leaks into the next. */
+export function resetUiState() {
+    const fresh = createInitialState();
+    for (const k of Object.keys(S)) delete S[k];
+    Object.assign(S, fresh);
+}

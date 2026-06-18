@@ -79,7 +79,7 @@ import {
     CC_GRADIENT_BASE, CC_GRADIENT_LEVELS, CC_GRADIENT_SCALARS
 } from './core/ui_constants.mjs';
 
-import { S } from './core/ui_state.mjs';
+import { S, resetUiState } from './core/ui_state.mjs';
 import { saveState, writeSidecar, doClearSession, showActionPopup, uuidToStatePath, uuidToUiStatePath, readActiveSet, loadNameIndex, saveNameIndex, copyStateFiles, findInheritCandidates,
     SNAPSHOT_CAP, snapshotLabel, loadSnapshotManifest, commitSnapshot, applySnapshotToLive, dropSnapshots } from './persist/ui_persistence.mjs';
 import { drawGlobalMenu } from './menu/ui_dialogs.mjs';
@@ -1810,6 +1810,11 @@ function runEntrypoint(where, fn) {
 }
 
 globalThis.init = function () { runEntrypoint('init', function () { runInitWorkflowImpl(S, createInitWorkflowDeps()); }); };
+
+/* Headless-test teardown hook: the vitest behaviour harness reuses one ui.js
+ * runtime across createHarness() calls, so it resets the S singleton before each
+ * init() to isolate tests. Unused on device (an extra global, like exposeState). */
+if (typeof globalThis !== 'undefined') globalThis.__overtureResetState = resetUiState;
 
 function createTickWorkflowDeps() {
     return {
