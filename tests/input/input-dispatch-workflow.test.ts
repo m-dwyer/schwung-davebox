@@ -144,6 +144,100 @@ describe("input dispatch workflow", () => {
     ]);
   });
 
+  test("shift-step common shortcuts still dispatch while a shortcut surface is open", () => {
+    const c = calls();
+    const S: any = {
+      schwungCoRunSlot: -1,
+      moveCoRunTrack: -1,
+      tapTempoOpen: true,
+      globalMenuOpen: false,
+      shiftHeld: true,
+      sessionView: true,
+      activeTrack: 0,
+      trackPadMode: [0],
+      shiftTrackLEDActive: false,
+      tickCount: 12,
+      stepOpTick: -1,
+      revealClipsTrack: -1,
+    };
+
+    onStepButtonsImpl(S, {
+      createTrackViewStepWorkflowDeps: () => ({
+        padModeDrum: 1,
+        doShiftStepCommon: c.fn("shortcut"),
+        forceRedraw: c.fn("redraw"),
+      }),
+    }, 17, 127);
+
+    expect(S.stepOpTick).toBe(12);
+    expect(c.log).toEqual([
+      ["shortcut", 1],
+      ["redraw"],
+    ]);
+  });
+
+  test("shift-step track-view shortcuts still dispatch while a shortcut surface is open", () => {
+    const c = calls();
+    const S: any = {
+      schwungCoRunSlot: -1,
+      moveCoRunTrack: -1,
+      tapTempoOpen: false,
+      globalMenuOpen: true,
+      shiftHeld: true,
+      sessionView: true,
+      activeTrack: 2,
+      trackPadMode: [0, 0, 0],
+      activeBank: 0,
+      bankParams: [
+        [[], [0, 0, 0, 0]],
+        [[], [0, 0, 0, 0]],
+        [[], [0, 0, 0, 0]],
+      ],
+      shiftTrackLEDActive: false,
+      tickCount: 12,
+      stepOpTick: -1,
+      revealClipsTrack: -1,
+    };
+
+    onStepButtonsImpl(S, {
+      createTrackViewStepWorkflowDeps: () => ({
+        padModeDrum: 1,
+        doShiftStepCommon: c.fn("shortcut"),
+        setParam: c.fn("setParam"),
+        showActionPopup: c.fn("popup"),
+        forceRedraw: c.fn("redraw"),
+      }),
+    }, 31, 127);
+
+    expect(S.stepOpTick).toBe(12);
+    expect(S.bankParams[2][1][3]).toBe(100);
+    expect(c.log).toEqual([
+      ["shortcut", 15],
+      ["setParam", "t2_quantize", "100"],
+      ["popup", "QUANT 100%"],
+      ["redraw"],
+    ]);
+  });
+
+  test("non-shift step buttons remain swallowed while a shortcut surface is open", () => {
+    const c = calls();
+    const S: any = {
+      schwungCoRunSlot: -1,
+      moveCoRunTrack: -1,
+      tapTempoOpen: false,
+      globalMenuOpen: true,
+      shiftHeld: false,
+      stepOpTick: -1,
+    };
+
+    onStepButtonsImpl(S, {
+      createSessionViewWorkflowDeps: c.fn("sessionDeps"),
+    }, 22, 127);
+
+    expect(S.stepOpTick).toBe(-1);
+    expect(c.log).toEqual([]);
+  });
+
   test("switch-view cleanup clears held input state, stops active performance loop, and blanks the old view LEDs", () => {
     const c = calls();
     const S: any = {

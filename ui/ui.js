@@ -473,6 +473,7 @@ function createGlobalMenuWorkflowDeps() {
         createMenuStack,
         exitMoveNativeCoRun,
         exitSchwungCoRun,
+        closeTapTempo,
         openTapTempo,
         setParam: optionalHostModuleSetParam(),
         showActionPopup

@@ -287,7 +287,19 @@ export function ensureGlobalMenuFreshImpl(S, deps) {
     S.globalMenuBuiltForTrack = S.activeTrack;
 }
 
+function closeShortcutSurfaceImpl(S, deps) {
+    if (S.tapTempoOpen) {
+        if (deps.closeTapTempo) deps.closeTapTempo();
+        else S.tapTempoOpen = false;
+    }
+    if (S.globalMenuOpen) {
+        S.globalMenuOpen = false;
+        S.lastSentMenuEditValue = null;
+    }
+}
+
 export function jumpToMenuLabelImpl(S, deps, label) {
+    closeShortcutSurfaceImpl(S, deps);
     openGlobalMenuImpl(S, deps);
     if (!S.globalMenuItems || !S.globalMenuState) return;
     for (let i = 0; i < S.globalMenuItems.length; i++) {
@@ -307,10 +319,15 @@ export function doShiftStepCommonImpl(S, deps, idx) {
          * — otherwise the held Shift CC leaks into Move firmware / Schwung
          * chain editor (the shim starts forwarding Shift on co-run entry).
          * Dispatch happens in _onCC_buttons Shift-release branch. */
+        closeShortcutSurfaceImpl(S, deps);
         S.pendingEditEntryTrack = S.activeTrack;
     }
-    else if (idx === 4) deps.openTapTempo();
+    else if (idx === 4) {
+        closeShortcutSurfaceImpl(S, deps);
+        deps.openTapTempo();
+    }
     else if (idx === 5) {
+        closeShortcutSurfaceImpl(S, deps);
         S.metronomeOn = (S.metronomeOn === 1) ? 3 : 1;
         if (deps.setParam)
             deps.setParam('metro_on', String(S.metronomeOn));

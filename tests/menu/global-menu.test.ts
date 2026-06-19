@@ -325,6 +325,7 @@ function workflowDeps(c: ReturnType<typeof calls>, opts: {
     },
     exitMoveNativeCoRun: c.fn("exitMoveNativeCoRun"),
     exitSchwungCoRun: c.fn("exitSchwungCoRun"),
+    closeTapTempo: c.fn("closeTapTempo"),
     openTapTempo: c.fn("openTapTempo"),
     setParam: opts.setParam === undefined ? c.fn("setParam") : opts.setParam,
     showActionPopup: c.fn("showActionPopup"),
@@ -457,6 +458,16 @@ describe("global menu shift-step shortcuts", () => {
     expect(S2.pendingEditEntryTrack).toBeUndefined();
   });
 
+  test("shortcut step 3 closes tap tempo before queuing deferred edit entry", () => {
+    const c = calls();
+    const S = makeState({ activeTrack: 2, sessionView: false, tapTempoOpen: true });
+
+    doShiftStepCommonImpl(S, workflowDeps(c), 2);
+
+    expect(S.pendingEditEntryTrack).toBe(2);
+    expect(c.log).toEqual([["closeTapTempo"]]);
+  });
+
   test("shortcut step 5 toggles metronome and writes the host param", () => {
     const c = calls();
     const S = makeState({ metronomeOn: 1 });
@@ -488,5 +499,34 @@ describe("global menu shift-step shortcuts", () => {
     const c = calls();
     doShiftStepCommonImpl(makeState(), workflowDeps(c), 4);
     expect(c.log).toEqual([["openTapTempo"]]);
+  });
+
+  test("shortcut step 4 replaces an open global menu with tap tempo", () => {
+    const c = calls();
+    const S = makeState({ globalMenuOpen: true, lastSentMenuEditValue: 42 });
+
+    doShiftStepCommonImpl(S, workflowDeps(c), 4);
+
+    expect(S.globalMenuOpen).toBe(false);
+    expect(S.lastSentMenuEditValue).toBeNull();
+    expect(c.log).toEqual([["openTapTempo"]]);
+  });
+
+  test("menu-jump shortcuts close tap tempo before opening the target menu", () => {
+    const c = calls();
+    const S = makeState({ tapTempoOpen: true, globalMenuOpen: false });
+
+    doShiftStepCommonImpl(S, workflowDeps(c, {
+      items: [{ label: "Global" }, { label: "Swing Amt" }],
+    }), 6);
+
+    expect(c.log).toEqual([
+      ["closeTapTempo"],
+      ["buildGlobalMenuItems"],
+      ["createMenuState"],
+      ["createMenuStack"],
+    ]);
+    expect(S.globalMenuOpen).toBe(true);
+    expect((S.globalMenuState as { selectedIndex: number }).selectedIndex).toBe(1);
   });
 });

@@ -240,10 +240,19 @@ export function onStepButtonsImpl(S, deps, d1, d2) {
         }
         return;
     }
-    if (S.tapTempoOpen) return;
+    const overtureShortcutSurfaceOpen = S.globalMenuOpen || S.tapTempoOpen;
+    if (overtureShortcutSurfaceOpen && (!S.shiftHeld || d2 <= 0)) return;
     if (d2 > 0 && S.shiftTrackLEDActive) { S.shiftTrackLEDActive = false; S.screenDirty = true; }
     S.stepOpTick = S.tickCount;
     const idx = d1 - 16;
+    /* Overture-owned shortcut surfaces should not trap the user in their
+     * original opener. Route every Shift+step to the full Track View shortcut
+     * handler so common jumps and track actions share one behavior. Co-run is
+     * handled above because Step 3 is its return affordance. */
+    if (overtureShortcutSurfaceOpen && S.shiftHeld) {
+        if (handleTrackViewShiftStepPress(S, deps.createTrackViewStepWorkflowDeps(), idx)) return;
+        return;
+    }
     if (S.revealClipsTrack >= 0) {
         deps.selectClipOnTrack(S.revealClipsTrack, idx);
         deps.forceRedraw();
