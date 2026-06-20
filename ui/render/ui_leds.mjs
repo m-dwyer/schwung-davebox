@@ -7,6 +7,7 @@ import {
     CC_GRADIENT_BASE, CC_GRADIENT_LEVELS
 } from '../core/ui_constants.mjs';
 import { trackClipHasContent } from '../core/ui_scene.mjs';
+import { visibleParamList } from '../core/ui_sound_edit_model.mjs';
 import {
     White, Red, Green, Blue, DarkBlue, LightGrey, DarkGrey, Cyan, PurpleBlue, VividYellow
 } from '/data/UserData/schwung/shared/constants.mjs';
@@ -46,6 +47,26 @@ function cachedSetButtonLED(cc, color) {
     setButtonLED(cc, color);
 }
 
+function moduleIsPresent(module, name) {
+    const n = String((module && (module.name || module.id)) || name || '').trim();
+    return n !== '' && n !== '--';
+}
+
+function soundParamDiffersFromDefault(param) {
+    if (!param) return false;
+    const def = param.default != null ? param.default : param.def;
+    if (def == null || param.value == null || param.value === '') return false;
+    const vNum = parseFloat(param.value);
+    const dNum = parseFloat(def);
+    if (Number.isFinite(vNum) && Number.isFinite(dNum)) return Math.abs(vNum - dNum) > 0.000001;
+    return String(param.value) !== String(def);
+}
+
+function soundParamIsEditable(param) {
+    const type = String((param && param.type) || '').toLowerCase();
+    return param && type !== 'string' && type !== 'file' && type !== 'canvas';
+}
+
 export function invalidateLEDCache() {
     lastSentNoteLED.fill(-1);
     lastSentButtonLED.fill(-1);
@@ -66,6 +87,22 @@ export function paintCoRunSideButtons(litMask, force) {
 
 export function updateStepLEDs() {
     if (!S.ledInitComplete) return;
+
+    if (S.schwungSoundPage) {
+        const page = S.schwungSoundPage;
+        const selected = Math.max(0, Math.min(3, page.selectedIndex | 0));
+        for (let i = 0; i < 16; i++) {
+            let color = LED_OFF;
+            if (i < 4) {
+                const present = moduleIsPresent(page.modules && page.modules[i], page.names && page.names[i]);
+                color = i === selected ? TRACK_COLORS[Math.max(0, Math.min(NUM_TRACKS - 1, page.track | 0))]
+                      : present        ? LightGrey
+                                       : DarkGrey;
+            }
+            cachedSetLED(16 + i, color);
+        }
+        return;
+    }
 
     /* Co-run (Schwung chain-edit or Move-native): the co-run target owns the
      * surface, so blank the step button main LEDs — except Step 3 (index 2),
@@ -534,6 +571,26 @@ export function updateTrackLEDs() {
             const on = i === 1 || (i >= 4 && i <= 6) || i === 8; /* shared shortcuts only — Step3 (Edit Sound) is Track View only */
             setLED(16 + i, on ? LightGrey : LED_OFF);
         }
+    }
+
+    if (S.schwungSoundPage) {
+        const page = S.schwungSoundPage;
+        const params = page.paramDetail && !page.browser ? visibleParamList(page) : [];
+        const pageIdx = Math.max(0, Math.floor((page.paramDetailIndex | 0) / 8));
+        const base = pageIdx * 8;
+        const touched = page.touchedParam && Number.isFinite(page.touchedParam.index)
+            ? page.touchedParam.index | 0
+            : -1;
+        for (let k = 0; k < NUM_TRACKS; k++) {
+            const param = params[base + k];
+            let ledVal = LED_OFF;
+            if (soundParamIsEditable(param)) {
+                ledVal = soundParamDiffersFromDefault(param) ? White : LightGrey;
+                if (base + k === touched) ledVal = TRACK_COLORS[Math.max(0, Math.min(NUM_TRACKS - 1, page.track | 0))];
+            }
+            cachedSetButtonLED(71 + k, ledVal);
+        }
+        return;
     }
 
     if (S.tapTempoOpen) {
