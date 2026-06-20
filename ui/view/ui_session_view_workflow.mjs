@@ -1,3 +1,9 @@
+/**
+ * @param {import('../types').State} S
+ * @param {import('../types').SessionViewDeps} deps
+ * @param {number} idx
+ * @returns {boolean}
+ */
 export function handleSessionViewStepPress(S, deps, idx) {
     if (!S.sessionView) return false;
 
@@ -61,6 +67,12 @@ export function handleSessionViewStepPress(S, deps, idx) {
     return true;
 }
 
+/**
+ * @param {import('../types').State} S
+ * @param {import('../types').SessionViewDeps} deps
+ * @param {number} btn
+ * @returns {boolean}
+ */
 export function handleSessionViewStepRelease(S, deps, btn) {
     if (S.sessionStepHeld !== btn) return false;
 
@@ -97,6 +109,12 @@ export function handleSessionViewStepRelease(S, deps, btn) {
     return true;
 }
 
+/**
+ * @param {import('../types').State} S
+ * @param {import('../types').SessionViewDeps} deps
+ * @param {number} padNote
+ * @returns {boolean}
+ */
 export function handleSessionViewClipPadPress(S, deps, padNote) {
     if (!S.sessionView) return false;
 
@@ -226,6 +244,12 @@ export function handleSessionViewClipPadPress(S, deps, padNote) {
     return true;
 }
 
+/**
+ * @param {import('../types').State} S
+ * @param {import('../types').SessionViewDeps} deps
+ * @param {number} rowIdx
+ * @returns {boolean}
+ */
 export function handleSessionViewSideRowPress(S, deps, rowIdx) {
     const clipIdx = S.sceneRow + rowIdx;
 

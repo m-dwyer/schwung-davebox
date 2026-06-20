@@ -24,9 +24,10 @@ export const CC_ASSIGN_DEFAULTS = [7, 74, 71, 73, 72, 91, 93, 10];
 /* Build a pristine UI-runtime state object. Every field is constructed fresh
  * (new Array/Set/Array.from), so each call is fully independent — used both for
  * the live singleton `S` below and for resetUiState() (headless test teardown).
- * On device this is called exactly once at module load. */
+ * On device this is called exactly once at module load.
+ * @returns {import('../types').State} */
 export function createInitialState() {
-    return {
+    return /** @type {import('../types').State} */ ({
     swingAmt: 0,
     swingRes: 0,
     inpQuant: false,
@@ -521,7 +522,7 @@ export function createInitialState() {
     stepSaveFlashStartTick: -1, /* tick when hold-save flash began */
     stepSaveFlashEndTick: -1,  /* step button LEDs double-blink through this tick after save */
 
-    };
+    });
 }
 
 /* The live UI-runtime state singleton, imported by reference across ui/*.mjs. */

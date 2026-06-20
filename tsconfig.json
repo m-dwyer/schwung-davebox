@@ -1,0 +1,30 @@
+{
+  // Type-check-only config for the QuickJS UI Runtime. `tsc --noEmit` is a CI
+  // gate beside the real pipeline (esbuild bundles ui/*.mjs -> dist/overture/ui.js);
+  // it NEVER emits files and nothing here ships to the device.
+  //
+  // Rollout is by `include`, not by `@ts-nocheck`: only files listed below are
+  // checked, so untyped modules never produce noise. Add a module to `include`
+  // when you type it (the boy-scout step). Goal state: `ui/**/*.mjs`.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "module": "esnext",
+    "target": "esnext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    // Start loose: implicit any is tolerated so partially-typed neighbours don't
+    // explode. Tighten (strict, noImplicitAny, strictNullChecks) once the bulk of
+    // ui/*.mjs is in `include`.
+    "strict": false,
+    "noImplicitAny": false,
+    "lib": ["esnext"]
+  },
+  "include": [
+    "ui/types.d.ts",
+    "ui/core/ui_state.mjs",
+    "ui/view/ui_session_view_workflow.mjs"
+  ]
+}
