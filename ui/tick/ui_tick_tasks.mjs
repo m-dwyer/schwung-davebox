@@ -1,4 +1,5 @@
 import { readMelodicClipFromDsp } from '../sync/ui_clip_track_sync.mjs';
+import { isActivelyRecording } from '../perform/ui_recording_workflow.mjs';
 
 function resyncMelodicClipReadback(S, deps, track, clip) {
     readMelodicClipFromDsp(S, deps, track, clip, {
@@ -188,7 +189,7 @@ export function runPendingUndoSyncTask(S, deps) {
     deps.syncClipsTargeted(info);
     /* apply_clip_restore clears tr->recording on the DSP side; re-establish it.
      * Also flush stale JS note buffers since DSP called finalize_pending_notes. */
-    if (S.recordArmed && !S.recordCountingIn && S.recordArmedTrack >= 0) {
+    if (isActivelyRecording(S) && S.recordArmedTrack >= 0) {
         deps.clearRecordingNoteBuffers();
         deps.host_module_set_param('t' + S.recordArmedTrack + '_recording', '1');
     }
@@ -888,7 +889,7 @@ export function runRecordingEventFlush(S, deps) {
      * Note-ons take priority; note-offs wait until the next tick if both are pending.
      * The if/else-if chain guarantees AT MOST ONE set_param family fires per tick;
      * branch order is load-bearing — do not reorder or merge branches. */
-    if (!(S.recordArmed && !S.recordCountingIn) || typeof deps.host_module_set_param !== 'function') return;
+    if (!isActivelyRecording(S) || typeof deps.host_module_set_param !== 'function') return;
     const _drumRecNoteOns  = deps.drumRecNoteOns;
     const _drumRecNoteOffs = deps.drumRecNoteOffs;
     const PAD_MODE_DRUM    = deps.PAD_MODE_DRUM;

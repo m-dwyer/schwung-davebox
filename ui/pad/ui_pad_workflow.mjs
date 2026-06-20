@@ -29,6 +29,8 @@
  *
  * Handlers take everything via deps so they can be unit-tested without the host. */
 
+import { isArmedForTrack } from '../perform/ui_recording_workflow.mjs';
+
 /* ----------------------------------------------------------------------------
  * _onPadPress preamble + contexts
  * ------------------------------------------------------------------------- */
@@ -366,7 +368,7 @@ export function handleUiPadTrackViewDrumOrMelodic(S, deps, d1, d2) {
          * DSP authoritatively filters: on patched Schwung, presses without
          * an active on_midi slot are dropped (early count-in window etc.),
          * so JS doesn't need its own (rate-mismatched) timing filter. */
-        if (S.recordArmed && S.activeTrack === S.recordArmedTrack)
+        if (isArmedForTrack(S, S.activeTrack))
             deps.recordNoteOn(pitch, deps.effectiveVelocity(d2), S.recordArmedTrack);
     }
     return true;

@@ -26,6 +26,43 @@ import {
  * @property {(cc: number, color: number) => void} setButtonLED
  */
 
+/* Recording-gate predicates. These name the recording concept's truth table so
+ * handler modules stop open-coding `S.recordArmed && !S.recordCountingIn && …`.
+ * Three deliberate variants exist; keep them distinct (see recording-predicates
+ * test for the pinned truth table):
+ *   - isActivelyRecordingTrack: armed, PAST count-in, t is the armed track. The
+ *     canonical "this event records onto t" gate.
+ *   - isArmedForTrack: armed for t INCLUDING count-in — pad capture accumulates
+ *     pre-roll while the count-in is still running.
+ *   - isActivelyRecording: armed and past count-in, ANY track — the tick flush
+ *     gate and count-in-flash gate, which don't care which track is armed. */
+
+/**
+ * @param {import('../types').State} S
+ * @param {number} t
+ * @returns {boolean}
+ */
+export function isActivelyRecordingTrack(S, t) {
+    return S.recordArmed && !S.recordCountingIn && S.recordArmedTrack === t;
+}
+
+/**
+ * @param {import('../types').State} S
+ * @param {number} t
+ * @returns {boolean}
+ */
+export function isArmedForTrack(S, t) {
+    return S.recordArmed && S.recordArmedTrack === t;
+}
+
+/**
+ * @param {import('../types').State} S
+ * @returns {boolean}
+ */
+export function isActivelyRecording(S) {
+    return S.recordArmed && !S.recordCountingIn;
+}
+
 /** @returns {RecordingWorkflowState} */
 export function createRecordingWorkflowState() {
     return {

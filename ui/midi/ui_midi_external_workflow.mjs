@@ -1,3 +1,8 @@
+import {
+    isActivelyRecording,
+    isActivelyRecordingTrack
+} from '../perform/ui_recording_workflow.mjs';
+
 export function onMidiExternalImpl(S, deps, data) {
     const status  = data[0] | 0;
     const d1      = (data[1] ?? 0) | 0;
@@ -30,7 +35,7 @@ export function onMidiExternalImpl(S, deps, data) {
             S.lastPadVelocity = vel;
             if (!routeIsMove) deps.liveSendNote(t, 0x90, d1, vel);
             const isSeqEcho = routeIsMove && S.seqActiveNotes.has(d1);
-            const isRec = !isSeqEcho && S.recordArmed && !S.recordCountingIn && t === S.recordArmedTrack;
+            const isRec = !isSeqEcho && isActivelyRecordingTrack(S, t);
             if (isRec) {
                 deps.drumRecNoteOns.push({ track: t, laneNote: d1, vel: vel });
                 const recLane = S.drumLaneNote[t].indexOf(d1);
@@ -45,7 +50,7 @@ export function onMidiExternalImpl(S, deps, data) {
             const info = deps.extHeldNotes.get(d1);
             const noteTrack = info ? info.track : t;
             if (S.trackRoute[noteTrack] !== 1) deps.liveSendNote(noteTrack, 0x80, d1, 0);
-            if (info && info.recording && S.recordArmed && !S.recordCountingIn)
+            if (info && info.recording && isActivelyRecording(S))
                 deps.drumRecNoteOffs.push({ track: noteTrack, laneNote: d1 });
             deps.extHeldNotes.delete(d1);
         } else if (msgType === 0xB0 || msgType === 0xD0 || msgType === 0xA0 || msgType === 0xE0) {
@@ -63,7 +68,7 @@ export function onMidiExternalImpl(S, deps, data) {
          * for pitches the sequencer is already S.playing — those are echoes, not keyboard input.
          * Preserve any existing recording-active entry so the keyboard gate isn't overwritten. */
         const isSeqEcho = routeIsMove && S.seqActiveNotes.has(d1);
-        const isRec = !isSeqEcho && S.recordArmed && !S.recordCountingIn && t === S.recordArmedTrack;
+        const isRec = !isSeqEcho && isActivelyRecordingTrack(S, t);
         if (isRec) deps.recordNoteOn(d1, vel, t);
         const prevInfo = deps.extHeldNotes.get(d1);
         if (!prevInfo || !prevInfo.recording || !isSeqEcho) {
