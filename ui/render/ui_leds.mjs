@@ -4,7 +4,7 @@ import {
     TRACK_COLORS, TRACK_DIM_COLORS, TRACK_PAD_BASE, SCENE_BTN_FLASH_TICKS,
     PAD_MODE_DRUM, BANKS,
     POLL_INTERVAL, TAP_TEMPO_FLASH_TICKS, PARAM_LED_BANKS,
-    CC_GRADIENT_BASE, CC_GRADIENT_LEVELS
+    CC_GRADIENT_BASE, CC_GRADIENT_LEVELS, CC_SCRATCH_PALETTE_BASE
 } from '../core/ui_constants.mjs';
 import { trackClipHasContent } from '../core/ui_scene.mjs';
 import { visibleParamList } from '../core/ui_sound_edit_model.mjs';
@@ -15,6 +15,9 @@ import { setLED, setButtonLED } from '/data/UserData/schwung/shared/input_filter
 
 const lastSentNoteLED   = new Array(128).fill(-1);
 const lastSentButtonLED = new Array(128).fill(-1);
+const soundKnobBrightnessCache = new Array(8).fill(-1);
+const SOUND_LED_MIN_BRIGHTNESS = 32;
+const SOUND_LED_MAX_BRIGHTNESS = 255;
 
 function clipHasActiveNotes(t, c) {
     const s = S.clipSteps[t][c];
@@ -52,19 +55,72 @@ function moduleIsPresent(module, name) {
     return n !== '' && n !== '--';
 }
 
-function soundParamDiffersFromDefault(param) {
-    if (!param) return false;
-    const def = param.default != null ? param.default : param.def;
-    if (def == null || param.value == null || param.value === '') return false;
-    const vNum = parseFloat(param.value);
-    const dNum = parseFloat(def);
-    if (Number.isFinite(vNum) && Number.isFinite(dNum)) return Math.abs(vNum - dNum) > 0.000001;
-    return String(param.value) !== String(def);
-}
-
 function soundParamIsEditable(param) {
     const type = String((param && param.type) || '').toLowerCase();
     return param && type !== 'string' && type !== 'file' && type !== 'canvas';
+}
+
+function clamp01(value) {
+    return Math.max(0, Math.min(1, value));
+}
+
+function soundParamNormalizedValue(param) {
+    if (!param) return 0;
+    const type = String(param.type || '').toLowerCase();
+    if (type === 'bool' || type === 'boolean') {
+        return String(param.value) === '1' || String(param.value).toLowerCase() === 'true' ? 1 : 0;
+    }
+    if (type === 'enum' && Array.isArray(param.options) && param.options.length > 1) {
+        const idx = parseInt(param.value, 10);
+        return Number.isFinite(idx) ? clamp01(idx / (param.options.length - 1)) : 0;
+    }
+    const value = parseFloat(param.value);
+    if (!Number.isFinite(value)) return 0;
+    const min = parseFloat(param.min);
+    const max = parseFloat(param.max);
+    if (Number.isFinite(min) && Number.isFinite(max) && max !== min) return clamp01((value - min) / (max - min));
+    return clamp01(value);
+}
+
+function soundParamBrightness(param) {
+    const n = soundParamNormalizedValue(param);
+    return Math.round(SOUND_LED_MIN_BRIGHTNESS + n * (SOUND_LED_MAX_BRIGHTNESS - SOUND_LED_MIN_BRIGHTNESS));
+}
+
+function sysexPkts(bytes) {
+    const out = [];
+    for (let i = 0; i < bytes.length; i += 3) {
+        const rem = bytes.length - i;
+        const cin = rem >= 3 ? (rem === 3 ? 0x07 : 0x04) : (rem === 2 ? 0x06 : 0x05);
+        out.push(cin, bytes[i], rem > 1 ? bytes[i + 1] : 0, rem > 2 ? bytes[i + 2] : 0);
+    }
+    return out;
+}
+
+const REAPPLY_PALETTE_PKT = sysexPkts([0xF0, 0x00, 0x21, 0x1D, 0x01, 0x01, 0x05, 0xF7]);
+
+function setPaletteEntryRGB(idx, r, g, b) {
+    move_midi_internal_send(sysexPkts([
+        0xF0, 0x00, 0x21, 0x1D, 0x01, 0x01, 0x03,
+        idx & 0x7F,
+        r & 0x7F, r >> 7,
+        g & 0x7F, g >> 7,
+        b & 0x7F, b >> 7,
+        0, 0,
+        0xF7
+    ]));
+}
+
+function reapplyPalette() {
+    move_midi_internal_send(REAPPLY_PALETTE_PKT);
+}
+
+function updateSoundKnobPalette(k, brightness) {
+    if (soundKnobBrightnessCache[k] === brightness) return;
+    soundKnobBrightnessCache[k] = brightness;
+    setPaletteEntryRGB(CC_SCRATCH_PALETTE_BASE + k, brightness, brightness, brightness);
+    reapplyPalette();
+    lastSentButtonLED[71 + k] = -1;
 }
 
 export function invalidateLEDCache() {
@@ -578,15 +634,12 @@ export function updateTrackLEDs() {
         const params = page.paramDetail && !page.browser ? visibleParamList(page) : [];
         const pageIdx = Math.max(0, Math.floor((page.paramDetailIndex | 0) / 8));
         const base = pageIdx * 8;
-        const touched = page.touchedParam && Number.isFinite(page.touchedParam.index)
-            ? page.touchedParam.index | 0
-            : -1;
         for (let k = 0; k < NUM_TRACKS; k++) {
             const param = params[base + k];
             let ledVal = LED_OFF;
             if (soundParamIsEditable(param)) {
-                ledVal = soundParamDiffersFromDefault(param) ? White : LightGrey;
-                if (base + k === touched) ledVal = TRACK_COLORS[Math.max(0, Math.min(NUM_TRACKS - 1, page.track | 0))];
+                updateSoundKnobPalette(k, soundParamBrightness(param));
+                ledVal = CC_SCRATCH_PALETTE_BASE + k;
             }
             cachedSetButtonLED(71 + k, ledVal);
         }
