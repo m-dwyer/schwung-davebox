@@ -18,6 +18,15 @@
 // schwung checkout, no tsconfig `paths`/`baseUrl`, runs on any clone.
 declare module '/data/UserData/schwung/shared/*';
 
+// --- Build-time feature flag (NOT a host global) ---
+// Replaced by a literal at bundle time via esbuild `--define:OVERTURE_DEBUG_LOG=...`
+// (false for production, true for `OVERTURE_DEBUG_LOG=1 ./scripts/bundle_ui.sh`;
+// vitest defines it true). Declared here only so `tsc`/the source resolve it.
+// Every call site is `OVERTURE_DEBUG_LOG && dlog(...)`, so a false define folds
+// to `false && ...` and esbuild DCE removes the call AND tree-shakes the logger
+// module out of production entirely. See core/ui_debug_log.mjs.
+declare const OVERTURE_DEBUG_LOG: boolean;
+
 // --- Module param bridge (UI <-> DSP) ---
 declare function host_module_set_param(key: string, val: string): void;
 declare function host_module_get_param(key: string): string | null;

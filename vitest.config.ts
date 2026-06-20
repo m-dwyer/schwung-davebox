@@ -32,6 +32,11 @@ function moveDeviceImports() {
 
 export default defineConfig({
   plugins: [moveDeviceImports()],
+  // Build-time flag for dev-only debug logging. Defined true here so the
+  // `OVERTURE_DEBUG_LOG && dlog(...)` call sites execute under test (the logger
+  // is then exercised via its in-memory ring; the default level is OFF + there's
+  // no host_write_file off-device, so nothing is written). Production defines it false.
+  define: { OVERTURE_DEBUG_LOG: "true" },
   // @overture-ui -> ./ui so the relocated test files keep their import specifiers verbatim.
   resolve: { alias: { "@overture-ui": TOOL_UI } },
   test: {

@@ -27,6 +27,7 @@
     "ui/host.d.ts",
     "ui/core/ui_state.mjs",
     "ui/core/ui_constants.mjs",
+    "ui/core/ui_debug_log.mjs",
     "ui/view/ui_session_view_workflow.mjs",
     "ui/perform/ui_recording_workflow.mjs",
     "ui/perform/ui_live_note_workflow.mjs",

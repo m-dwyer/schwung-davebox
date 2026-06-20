@@ -51,6 +51,17 @@ if [ -z "$ESBUILD" ]; then
 fi
 
 mkdir -p "$(dirname "$OUT")"
+
+# Dev-only debug logging is gated by the OVERTURE_DEBUG_LOG build-time define.
+# Default false (production): every `OVERTURE_DEBUG_LOG && dlog(...)` folds to
+# `false && ...` and esbuild DCE removes it + tree-shakes core/ui_debug_log.mjs
+# out entirely. Opt in for a dev build: `OVERTURE_DEBUG_LOG=1 ./scripts/bundle_ui.sh`.
+case "${OVERTURE_DEBUG_LOG:-}" in
+    1|true|TRUE|yes|on) DEBUG_LOG_DEFINE=true ;;
+    *)                  DEBUG_LOG_DEFINE=false ;;
+esac
+echo "OVERTURE_DEBUG_LOG define: $DEBUG_LOG_DEFINE"
+
 echo "Bundling ui/ui.js -> dist/overture/ui.js via esbuild ($ESBUILD)"
 "$ESBUILD" "$ENTRY" \
     --bundle \
@@ -58,6 +69,7 @@ echo "Bundling ui/ui.js -> dist/overture/ui.js via esbuild ($ESBUILD)"
     --platform=neutral \
     --target=es2020 \
     "--external:$SHARED_EXTERNAL" \
+    "--define:OVERTURE_DEBUG_LOG=$DEBUG_LOG_DEFINE" \
     --legal-comments=none \
     --outfile="$OUT"
 echo "Bundle: $(wc -c < "$OUT") bytes"
