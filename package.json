@@ -9,11 +9,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "depcruise": "depcruise ui",
+    "verify": "pnpm typecheck && pnpm depcruise && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "2.1.9",
+    "dependency-cruiser": "^17.4.3",
     "esbuild": "^0.21.5",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
