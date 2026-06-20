@@ -24,6 +24,16 @@ export function handleUiKnobOverlaySwallow(S, deps, d1, d2) {
     return false;
 }
 
+export function handleUiKnobSchwungSoundPage(S, deps, d1, d2) {
+    if (d1 < 71 || d1 > 78) return false;
+    if (!S.schwungSoundPage || !S.schwungSoundPage.paramDetail) return false;
+    const delta = deps.decodeDelta ? deps.decodeDelta(d2) : (d2 >= 1 && d2 <= 63 ? 1 : (d2 >= 65 && d2 <= 127 ? -1 : 0));
+    if (delta === 0) return true;
+    deps.adjustSchwungSoundVisibleParam(d1 - 71, delta);
+    deps.forceRedraw();
+    return true;
+}
+
 /* Arp Steps interval-mode overlay: K1-K8 set per-step scale-degree offset (±24)
  * for SEQ ARP (bank 4, per-clip) or TARP (bank 5, per-track). Fires for both
  * track types, ahead of the drum/melodic branches. */

@@ -222,7 +222,8 @@ export function runTickWorkflow(S, deps) {
         runOverlayTimerExpiries(S, {
             BANK_DISPLAY_TICKS: deps.BANK_DISPLAY_TICKS,
             KNOB_TURN_HIGHLIGHT_TICKS: deps.KNOB_TURN_HIGHLIGHT_TICKS,
-            PARAM_PEEK_DETAIL_TICKS: deps.PARAM_PEEK_DETAIL_TICKS
+            PARAM_PEEK_DETAIL_TICKS: deps.PARAM_PEEK_DETAIL_TICKS,
+            expireSchwungSoundParamPeek: deps.expireSchwungSoundParamPeek
         });
 
         runSessionStepHoldToSave(S, {

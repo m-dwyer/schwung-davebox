@@ -21,6 +21,7 @@ import {
     handleUiJogMovement,
     handleUiJogRecordBlocked,
     handleUiJogShiftDeleteReset,
+    handleUiJogSchwungSoundPage,
     handleUiJogSnapshotPicker,
     handleUiJogStateWipe,
     handleUiJogStepIntervalExit,
@@ -38,6 +39,7 @@ import {
     handleUiKnobGeneric,
     handleUiKnobMelodicInQ,
     handleUiKnobOverlaySwallow,
+    handleUiKnobSchwungSoundPage,
     handleUiKnobStepInterval
 } from './ui_knob_cc_workflow.mjs';
 import {
@@ -103,6 +105,7 @@ export function onCcJogImpl(S, deps, d1, d2) {
     if (handleUiJogBakeConfirm(S, jogDeps, d1, d2)) return;
     if (handleUiJogTapTempo(S, jogDeps, d1, d2)) return;
     if (handleUiJogGlobalMenu(S, jogDeps, d1, d2)) return;
+    if (handleUiJogSchwungSoundPage(S, jogDeps, d1, d2)) return;
     if (handleUiJogShiftDeleteReset(S, jogDeps, d1, d2)) return;
     if (handleUiJogDeleteReset(S, jogDeps, d1, d2)) return;
     if (handleUiJogStepIntervalToggle(S, jogDeps, d1, d2)) return;
@@ -155,6 +158,7 @@ export function onCcKnobsImpl(S, deps, d1, d2) {
         S.knobTouched = knobIdx;
         S.knobTurnedTick[knobIdx] = S.tickCount;
         S.screenDirty = true;
+        if (handleUiKnobSchwungSoundPage(S, deps.createKnobCcWorkflowDeps(), d1, d2)) return;
         if (handleUiKnobStepInterval(S, deps.createKnobCcWorkflowDeps(), d1, d2)) return;
         if (handleUiKnobDrumClip(S, deps.createKnobCcWorkflowDeps(), d1, d2)) return;
         if (handleUiKnobDrumAllLanes(S, deps.createKnobCcWorkflowDeps(), d1, d2)) return;
@@ -233,6 +237,16 @@ export function onPadPressImpl(S, deps, status, d1, d2) {
 }
 
 export function onStepButtonsImpl(S, deps, d1, d2) {
+    if (S.schwungSoundPage) {
+        if (d2 > 0) {
+            const idx = d1 - 16;
+            if (idx >= 0 && idx <= 3 && deps.selectSchwungSoundComponent) {
+                deps.selectSchwungSoundComponent(idx);
+                deps.forceRedraw();
+            }
+        }
+        return;
+    }
     if (S.schwungCoRunSlot >= 0 || S.moveCoRunTrack >= 0) {
         if (d1 - 16 === 2) {
             if (S.moveCoRunTrack >= 0) deps.exitMoveNativeCoRun();

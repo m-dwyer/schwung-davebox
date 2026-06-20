@@ -77,7 +77,7 @@ export function describeEditSoundForTrack(t, caps) {
             return {
                 title: 'NO SLOT',
                 body: 'Ch' + (S.trackChannel[t] | 0),
-                queue: { track: t | 0, route: route | 0, slot: 0 },
+                queue: { track: t | 0, route: route | 0, slot: -1 },
                 slotMask: 0
             };
         }

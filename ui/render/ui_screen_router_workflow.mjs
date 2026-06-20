@@ -51,6 +51,7 @@ export function drawUIImpl(S, deps) {
     if (S.confirmBakeScene) { deps.drawBakeSceneConfirm(); return; }
     if (S.confirmBake) { deps.drawBakeConfirm(); return; }
     if (S.globalMenuOpen || S.tapTempoOpen) { deps.ensureGlobalMenuFresh(); deps.drawGlobalMenu(); return; }
+    if (S.schwungSoundPage) { deps.renderSchwungSoundPage(deps.renderSurface()); return; }
     /* Perf Mode OLED takeover (Session View + Loop held or locked) */
     if (S.sessionView && (S.loopHeld || S.perfViewLocked)) { deps.renderPerfModeOled(deps.renderSurface()); return; }
     if (S.stateLoading || S.bootSplashTicks > 0) {

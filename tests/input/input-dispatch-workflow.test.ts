@@ -238,6 +238,28 @@ describe("input dispatch workflow", () => {
     expect(c.log).toEqual([]);
   });
 
+  test("step buttons select Sound page components before Track View step handling", () => {
+    const c = calls();
+    const S: any = {
+      schwungSoundPage: { paramDetail: true },
+      schwungCoRunSlot: -1,
+      moveCoRunTrack: -1,
+      stepOpTick: -1,
+    };
+
+    onStepButtonsImpl(S, {
+      selectSchwungSoundComponent: c.fn("selectSoundComponent"),
+      forceRedraw: c.fn("redraw"),
+      createTrackViewStepWorkflowDeps: c.fn("trackDeps"),
+    }, 19, 127);
+
+    expect(S.stepOpTick).toBe(-1);
+    expect(c.log).toEqual([
+      ["selectSoundComponent", 3],
+      ["redraw"],
+    ]);
+  });
+
   test("switch-view cleanup clears held input state, stops active performance loop, and blanks the old view LEDs", () => {
     const c = calls();
     const S: any = {

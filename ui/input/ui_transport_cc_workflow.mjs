@@ -2,8 +2,8 @@ export function handleUiBackButton(S, deps, d1, d2) {
     if (d1 !== deps.moveBack || d2 !== 127) return;
 
     /* Back: close the topmost open dialog/menu layer; otherwise (with Shift)
-     * suspend + hide the module. Back during co-run never reaches us — Overture
-     * cedes Back to the peer and exits via Menu instead. */
+     * suspend + hide the module. Schwung Sound and co-run surfaces use Menu as
+     * their supported exit because physical Back belongs to the host path. */
     if (S.tapTempoOpen) {
         deps.closeTapTempo();
         deps.forceRedraw();

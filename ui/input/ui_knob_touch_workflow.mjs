@@ -55,6 +55,10 @@ export function handleUiKnobTouch(S, deps, status, d1, d2) {
             if (d1 <= 7 && S.activeBank >= 0) {
                 S.knobTouched = d1; S.knobTouchStartTick = S.tickCount;
                 S.knobTurnedTick[d1] = -1; S.screenDirty = true;
+                if (S.schwungSoundPage && S.schwungSoundPage.paramDetail) {
+                    if (deps.touchSchwungSoundVisibleParam) deps.touchSchwungSoundVisibleParam(d1);
+                    return;
+                }
                 /* CC bank: touching a knob makes it the active lane (persistent
                  * - drives the step-LED gradient and highlighted overview cell). */
                 if (S.activeBank === 6 && S.trackPadMode[S.activeTrack] !== deps.padModeDrum) {
@@ -101,6 +105,10 @@ export function handleUiKnobTouch(S, deps, status, d1, d2) {
             if (d1 === deps.moveMainTouch && !S.globalMenuOpen && !S.shiftHeld) { S.jogTouched = true; deps.forceRedraw(); }
         } else if (d2 < 64) {
             if (d1 <= 7) {
+                if (S.schwungSoundPage && S.schwungSoundPage.paramDetail) {
+                    resetKnobTouchState(S, d1);
+                    return;
+                }
                 if (S.activeBank >= 0 && deps.banks[S.activeBank].knobs[d1]) {
                     const relPm = deps.banks[S.activeBank].knobs[d1];
                     resetTransientNudge(S, deps, d1, relPm, true);
@@ -126,6 +134,10 @@ export function handleUiKnobTouch(S, deps, status, d1, d2) {
 
     if ((status & 0xF0) === 0x80) {
         if (d1 <= 7) {
+            if (S.schwungSoundPage && S.schwungSoundPage.paramDetail) {
+                resetKnobTouchState(S, d1);
+                return;
+            }
             if (S.activeBank >= 0 && deps.banks[S.activeBank].knobs[d1]) {
                 const relPm = deps.banks[S.activeBank].knobs[d1];
                 resetTransientNudge(S, deps, d1, relPm, false);

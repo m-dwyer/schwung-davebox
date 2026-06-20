@@ -31,6 +31,8 @@ function makeState(overrides = {}) {
         trackOctave: Array(NUM_TRACKS).fill(0),
         trackRoute: Array(NUM_TRACKS).fill(0),
         trackChannel: Array(NUM_TRACKS).fill(1),
+        trackMuted: Array(NUM_TRACKS).fill(false),
+        trackSoloed: Array(NUM_TRACKS).fill(false),
         midiInChannel: 0,
         _lastRemapTrack: 0,
         _lastRemapRoute: 0,
@@ -83,6 +85,7 @@ function makeState(overrides = {}) {
         pendingSceneBakeResync: 0,
         activeDrumLane: Array(NUM_TRACKS).fill(0),
         drumRepeatHeldPad: Array(NUM_TRACKS).fill(-1),
+        drumRepeatLatched: Array(NUM_TRACKS).fill(false),
         drumRepeat2HeldLanes: Array.from({ length: NUM_TRACKS }, () => new Set()),
         drumRepeat2LatchedLanes: Array.from({ length: NUM_TRACKS }, () => new Set()),
         globalMenuOpen: false,
@@ -92,6 +95,9 @@ function makeState(overrides = {}) {
         xposePrevKey: null,
         confirmXpose: false,
         ledInitComplete: false,
+        cachedSceneAllPlaying: Array(16).fill(false),
+        cachedSceneAllQueued: Array(16).fill(false),
+        cachedSceneAnyPlaying: Array(16).fill(false),
         screenDirty: false,
         pendingSuspendSave: false,
         pendingExitAfterSave: false,
@@ -111,6 +117,8 @@ function makeState(overrides = {}) {
         pendingPrerollToggleQueue: [],
         pendingPrerollNote: null,
         pendingPrerollNotes: [],
+        pendingChordPhase2: null,
+        pendingChordToStep: null,
         liveActiveNotes: new Set(),
         clipLoopStart: matrix(NUM_TRACKS, 16, 0),
         drumLaneLoopStart: Array(NUM_TRACKS).fill(0),
@@ -307,6 +315,34 @@ test('runTickWorkflow draws dirty UI only when not suspended', () => {
     runTickWorkflow(suspended, makeDeps(suspendedLog, { clearScreen: noop }));
     assert(!suspendedLog.some((entry) => entry[0] === 'task' && entry[1] === 'drawUI'));
     assert.equal(suspended.screenDirty, true);
+});
+
+test('runTickWorkflow expires the Schwung Sound focused param peek before drawing', () => {
+    const log = [];
+    let expired = false;
+    const S = makeState({
+        ledInitComplete: true,
+        screenDirty: false,
+        knobTouched: -1,
+        knobTouchStartTick: -1,
+        bankSelectTick: -1,
+        stretchBlockedEndTick: -1,
+        actionPopupEndTick: -1,
+        noNoteFlashEndTick: -1,
+        stepSaveFlashEndTick: -1,
+    });
+
+    runTickWorkflow(S, makeDeps(log, {
+        expireSchwungSoundParamPeek: () => {
+            expired = true;
+            S.screenDirty = true;
+            return true;
+        },
+    }));
+
+    assert.equal(expired, true);
+    assert(log.some((entry) => entry[0] === 'task' && entry[1] === 'drawUI'));
+    assert.equal(S.screenDirty, false);
 });
 
 test('ui.js keeps the public tick callback and error wrapper while delegating to _tickImpl', async () => {

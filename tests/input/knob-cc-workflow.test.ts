@@ -10,6 +10,7 @@ import {
   handleUiKnobGeneric,
   handleUiKnobMelodicInQ,
   handleUiKnobOverlaySwallow,
+  handleUiKnobSchwungSoundPage,
   handleUiKnobStepInterval,
 } from "@overture-ui/input/ui_knob_cc_workflow.mjs";
 
@@ -152,10 +153,40 @@ function deps(c: ReturnType<typeof calls>, overrides: Record<string, unknown> = 
     refreshPerClipBankParams: c.fn("refreshClipParams"),
     stepEntryVelocity: (_t: number, _v: number, _z: boolean) => 100,
     ccKnobDelta: (_d2: number, _k: number) => 1,
+    decodeDelta: (d2: number) => (d2 >= 1 && d2 <= 63 ? d2 : d2 >= 65 && d2 <= 127 ? -(128 - d2) : 0),
     editDrumRepeatGrooveStep: c.fn("grooveStep"),
+    adjustSchwungSoundVisibleParam: c.fn("adjustSoundParam"),
     ...overrides,
   };
 }
+
+describe("Knob CC workflow - Schwung Sound page", () => {
+  test("K1-K8 adjust the active Sound detail encoder bank", () => {
+    const c = calls();
+    const S = state({ schwungSoundPage: { paramDetail: true } });
+    expect(handleUiKnobSchwungSoundPage(S, deps(c), cc(7), CW)).toBe(true);
+    expect(c.log).toEqual([["adjustSoundParam", 7, 10], ["redraw"]]);
+  });
+
+  test("K3 is routed as the third Sound detail encoder", () => {
+    const c = calls();
+    const S = state({ schwungSoundPage: { paramDetail: true } });
+    expect(handleUiKnobSchwungSoundPage(S, deps(c), cc(2), 127)).toBe(true);
+    expect(c.log).toEqual([["adjustSoundParam", 2, -1], ["redraw"]]);
+  });
+
+  test("uses Schwung relative encoder decoding for batched K3 turns", () => {
+    const c = calls();
+    const S = state({ schwungSoundPage: { paramDetail: true } });
+    expect(handleUiKnobSchwungSoundPage(S, deps(c), cc(2), 100)).toBe(true);
+    expect(c.log).toEqual([["adjustSoundParam", 2, -28], ["redraw"]]);
+  });
+
+  test("falls through outside Sound detail", () => {
+    const c = calls();
+    expect(handleUiKnobSchwungSoundPage(state(), deps(c), cc(3), CW)).toBe(false);
+  });
+});
 
 describe("Knob CC workflow - overlay swallow", () => {
   test("ignores CCs outside 71-78", () => {

@@ -548,6 +548,7 @@ export function runOverlayTimerExpiries(S, deps) {
             (S.tickCount - S.knobTouchStartTick) === deps.PARAM_PEEK_DETAIL_TICKS) {
         S.screenDirty = true;
     }
+    if (deps.expireSchwungSoundParamPeek) deps.expireSchwungSoundParamPeek();
     if (S.noNoteFlashEndTick >= 0 && S.tickCount >= S.noNoteFlashEndTick) {
         S.noNoteFlashEndTick = -1;
         S.screenDirty = true;

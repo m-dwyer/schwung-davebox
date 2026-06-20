@@ -529,6 +529,36 @@ export function handleUiJogGlobalMenu(S, deps, d1, d2) {
     return false;
 }
 
+export function handleUiJogSchwungSoundPage(S, deps, d1, d2) {
+    if (!S.schwungSoundPage) return false;
+    if (d1 === 3 && d2 === 127) {
+        if (S.schwungSoundPage.browser) deps.applySchwungSoundBrowserSelection();
+        else if (S.shiftHeld) {
+            const track = S.schwungSoundPage.track | 0;
+            const slot = S.schwungSoundPage.slot | 0;
+            deps.closeSchwungSoundPage();
+            deps.enterSchwungCoRun(track, slot);
+        }
+        else {
+            const result = deps.openSchwungSoundBrowser();
+            if (result && result.deepEdit) {
+                const track = result.track | 0;
+                const slot = result.slot | 0;
+                deps.closeSchwungSoundPage();
+                deps.enterSchwungCoRun(track, slot);
+            }
+        }
+        deps.forceRedraw();
+        return true;
+    }
+    if (d1 === deps.moveMainKnob) {
+        deps.rotateSchwungSoundPage(deps.decodeDelta(d2));
+        deps.forceRedraw();
+        return true;
+    }
+    return false;
+}
+
 /* Shift+Delete+jog (click) in Track View: full clip/lane param reset.
  * Drum: real-time FX banks + Dir/RvSt/SqFl. Melodic: NOTE FX + HARMZ + MIDI DLY
  * + SEQ ARP + all automation. Click-only. */

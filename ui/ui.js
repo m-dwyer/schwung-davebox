@@ -93,8 +93,18 @@ import {
 } from './core/ui_routes.mjs';
 import {
     advancePendingEditSoundEntry,
+    adjustSchwungSoundVisibleParam,
+    applySchwungSoundBrowserSelection,
+    closeSchwungSoundPage,
+    expireSchwungSoundParamPeek,
+    openSchwungSoundBrowser,
+    renderSchwungSoundPage,
     refreshSchwungCoRunSlotMask,
-    requestEditSoundForTrack
+    requestEditSoundForTrack,
+    rotateSchwungSoundPage,
+    selectSchwungSoundComponent,
+    touchSchwungSoundVisibleParam,
+    toggleSchwungSoundParamDetail
 } from './core/ui_sound_edit.mjs';
 import {
     PARAM_PEEK_DETAIL_TICKS
@@ -1614,6 +1624,7 @@ function drawUI() {
         ensureGlobalMenuFresh,
         drawGlobalMenu,
         renderPerfModeOled,
+        renderSchwungSoundPage,
         renderSplashScreen,
         clear_screen,
         renderSessionActionPopup,
@@ -1840,6 +1851,7 @@ function createTickWorkflowDeps() {
         BANK_DISPLAY_TICKS,
         KNOB_TURN_HIGHLIGHT_TICKS,
         PARAM_PEEK_DETAIL_TICKS,
+        expireSchwungSoundParamPeek,
         STEP_SAVE_HOLD_TICKS,
         STEP_SAVE_FLASH_TICKS,
         STEP_HOLD_TICKS,
@@ -2131,6 +2143,7 @@ function createButtonCcWorkflowDeps() {
         ...createButtonCcHardwareAdapters(),
         clearAllLEDs,
         closeConvertConfirm,
+        closeSchwungSoundPage,
         closeSnapshotPicker,
         closeTapTempo,
         computePadNoteMap,
@@ -2231,8 +2244,10 @@ function createKnobCcWorkflowDeps() {
     return {
         applyBankParam,
         applyTrackConfig,
+        adjustSchwungSoundVisibleParam,
         banks: BANKS,
         ccKnobDelta,
+        decodeDelta,
         computePadNoteMap,
         editDrumRepeatGrooveStep: function (track, lane, step, dir, editNudge) {
             return editDrumRepeatGrooveStep(S, { host_module_set_param: optionalHostModuleSetParam() }, track, lane, step, dir, editNudge);
@@ -2273,6 +2288,7 @@ function createJogCcWorkflowDeps() {
         clearAutoMenuClick,
         clearAutoMenuRotate,
         closeTapTempo,
+        closeSchwungSoundPage,
         removeFlagsWrap,
         clearAllLEDs,
         doClearSession,
@@ -2300,7 +2316,12 @@ function createJogCcWorkflowDeps() {
         writeSidecar,
         handleLoopJog: function (delta) {
             return handleLoopJog(S, createLoopGestureWorkflowDeps(), delta);
-        }
+        },
+        rotateSchwungSoundPage,
+        toggleSchwungSoundParamDetail,
+        openSchwungSoundBrowser,
+        applySchwungSoundBrowserSelection,
+        enterSchwungCoRun
     };
 }
 
@@ -2326,6 +2347,7 @@ function createInputDispatchWorkflowDeps() {
         ledOff: LED_OFF,
         onPadPressTrackView: _onPadPressTrackView,
         selectClipOnTrack,
+        selectSchwungSoundComponent,
         sendPerfMods,
         setLED,
         setParam: optionalHostModuleSetParam(),
@@ -2376,6 +2398,7 @@ function createKnobTouchWorkflowDeps() {
         setButtonLED,
         setParam: optionalHostModuleSetParam(),
         showActionPopup,
+        touchSchwungSoundVisibleParam,
         trackColors: TRACK_COLORS
     };
 }

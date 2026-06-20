@@ -11,6 +11,7 @@ import {
   handleUiJogMovement,
   handleUiJogRecordBlocked,
   handleUiJogShiftDeleteReset,
+  handleUiJogSchwungSoundPage,
   handleUiJogSnapshotPicker,
   handleUiJogStateWipe,
   handleUiJogStepIntervalExit,
@@ -216,6 +217,12 @@ function deps(c: ReturnType<typeof calls>, overrides: Record<string, unknown> = 
     readBankParams: c.fn("readBank"),
     writeSidecar: c.fn("writeSidecar"),
     handleLoopJog: c.fn("loopJog"),
+    openSchwungSoundBrowser: c.fn("openSoundBrowser"),
+    applySchwungSoundBrowserSelection: c.fn("applySoundBrowser"),
+    closeSchwungSoundPage: c.fn("closeSoundPage"),
+    enterSchwungCoRun: c.fn("enterSchwung"),
+    rotateSchwungSoundPage: c.fn("rotateSoundPage"),
+    toggleSchwungSoundParamDetail: c.fn("toggleSoundParams"),
     ...overrides,
   };
 }
@@ -751,6 +758,26 @@ describe("Jog CC workflow - alt toggle (click)", () => {
     expect(handleUiJogAltToggle(S, deps(c, { bankHasAltParams: () => true }), ...CLICK)).toBe(true);
     expect(S.allLanesConfirmed).toBe(true);
     expect(S.altMode).toBe(false);
+  });
+});
+
+describe("Jog CC workflow - Schwung Sound page", () => {
+  test("Shift+jog click enters Schwung deep edit", () => {
+    const c = calls();
+    const S = state({ shiftHeld: true, schwungSoundPage: { track: 4, slot: 0, paramDetail: true, browser: false } });
+    expect(handleUiJogSchwungSoundPage(S, deps(c), ...CLICK)).toBe(true);
+    expect(c.log).toEqual([["closeSoundPage"], ["enterSchwung", 4, 0], ["redraw"]]);
+  });
+
+  test("plain jog click still opens browser and rotate delegates to the Sound page", () => {
+    const c = calls();
+    const S = state({ schwungSoundPage: { paramDetail: true, browser: false } });
+    expect(handleUiJogSchwungSoundPage(S, deps(c), ...CLICK)).toBe(true);
+    expect(c.log).toEqual([["openSoundBrowser"], ["redraw"]]);
+
+    c.log.length = 0;
+    expect(handleUiJogSchwungSoundPage(S, deps(c), ...ROTATE_CW)).toBe(true);
+    expect(c.log).toEqual([["rotateSoundPage", 1], ["redraw"]]);
   });
 });
 

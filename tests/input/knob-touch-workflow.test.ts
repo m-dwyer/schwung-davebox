@@ -84,6 +84,7 @@ function deps(c: ReturnType<typeof calls>, overrides: Record<string, unknown> = 
     setButtonLED: c.fn("setButtonLED"),
     setParam: c.fn("setParam"),
     showActionPopup: c.fn("popup"),
+    touchSchwungSoundVisibleParam: c.fn("touchSoundParam"),
     trackColors: TRACK_COLORS,
     ...overrides,
   };
@@ -100,6 +101,38 @@ describe("Knob touch workflow", () => {
     expect(S.knobTouchStartTick).toBe(123);
     expect(S.knobTurnedTick[3]).toBe(-1);
     expect(S.screenDirty).toBe(true);
+    expect(c.log).toEqual([]);
+  });
+
+  test("Sound detail touch shows param peek and does not run bank touch side effects", () => {
+    const c = calls();
+    const S = state({
+      activeBank: 6,
+      deleteHeld: true,
+      schwungSoundPage: { paramDetail: true },
+    });
+
+    handleUiKnobTouch(S, deps(c), 0x90, 2, 127);
+
+    expect(S.knobTouched).toBe(2);
+    expect(S.knobTouchStartTick).toBe(123);
+    expect(c.log).toEqual([["touchSoundParam", 2]]);
+  });
+
+  test("Sound detail touch release only clears transient touch state", () => {
+    const c = calls();
+    const S = state({
+      activeBank: 7,
+      knobTouched: 2,
+      knobTouchStartTick: 100,
+      knobAccum: [0, 0, 3, 0, 0, 0, 0, 0],
+      schwungSoundPage: { paramDetail: true },
+    });
+
+    handleUiKnobTouch(S, deps(c, { banks: banks({ 7: { 2: { dspKey: "nudge" } } }) }), 0x80, 2, 0);
+
+    expect(S.knobTouched).toBe(-1);
+    expect(S.knobAccum[2]).toBe(0);
     expect(c.log).toEqual([]);
   });
 

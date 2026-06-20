@@ -189,6 +189,8 @@ export function createInitialState() {
     schwungCoRunSlot: -1,                     /* -1 = off; 0-3 = Schwung chain editor is co-running on this slot (Overture skips OLED + suppresses track-button LEDs) */
     _coRunChanSlots: 0,                       /* Schwung co-run: bitmask (bits 0-3) of slots whose receive channel matches the active track; blinked on the side buttons. 0 = none. Refreshed on poll cadence. */
     pendingEditSoundEntry: null,              /* {track, route, slot, delay}: brief visible preflight before co-run handoff */
+    schwungSoundPage: null,                   /* Schwung quick Sound page: {track, slot, selectedIndex, browser, browserItems, browserIndex, noList, paramDetail, paramDetailIndex, touchedParam, paramValueOverrides, modules, componentParams, chainParams, names} */
+    schwungSoundMemory: Array.from({length: 8}, () => ({ selectedIndex: 1, paramDetailIndex: 0, paramDetail: true })),
     moveCoRunTrack: -1,                       /* -1 = off; 0-3 = Move firmware is co-running on this track (Overture skips OLED; shim filters nav CCs + touch 0-9 from tool, lets them reach Move) */
     moveCoRunDrumHeld: -1,                    /* d1 note of drum lane pad held in co-run; -1 = none. Plain note-off sent on physical release */
     trackPadMode: new Array(8).fill(0),
