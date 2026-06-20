@@ -98,7 +98,6 @@ import {
     closeSchwungSoundPage,
     expireSchwungSoundParamPeek,
     openSchwungSoundBrowser,
-    renderSchwungSoundPage,
     refreshSchwungCoRunSlotMask,
     requestEditSoundForTrack,
     rotateSchwungSoundPage,
@@ -106,6 +105,7 @@ import {
     touchSchwungSoundVisibleParam,
     toggleSchwungSoundParamDetail
 } from './core/ui_sound_edit.mjs';
+import { renderSchwungSoundPage } from './render/ui_sound_edit_render.mjs';
 import {
     PARAM_PEEK_DETAIL_TICKS
 } from './core/ui_motion.mjs';

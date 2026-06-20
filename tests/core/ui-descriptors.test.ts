@@ -9,13 +9,13 @@ import {
   closeSchwungSoundPage,
   expireSchwungSoundParamPeek,
   openSchwungSoundBrowser,
-  renderSchwungSoundPage,
   requestEditSoundForTrack,
   rotateSchwungSoundPage,
   selectSchwungSoundComponent,
   touchSchwungSoundVisibleParam,
   toggleSchwungSoundParamDetail,
 } from "@overture-ui/core/ui_sound_edit.mjs";
+import { renderSchwungSoundPage } from "@overture-ui/render/ui_sound_edit_render.mjs";
 import { PARAM_PEEK_DETAIL_TICKS, autoLaneLabel, motionIdleModel, motionOverviewModel, paramPeekInfo } from "@overture-ui/core/ui_motion.mjs";
 
 describe("UI descriptor seams", () => {

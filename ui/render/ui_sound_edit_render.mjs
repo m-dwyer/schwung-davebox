@@ -1,3 +1,4 @@
+import { S } from '../core/ui_state.mjs';
 import {
     SCHWUNG_SOUND_COMPONENTS,
     clampComponentIndex,
@@ -5,14 +6,14 @@ import {
     selectedParamList,
     truncText,
     visibleParamList
-} from './ui_sound_edit_model.mjs';
+} from '../core/ui_sound_edit_model.mjs';
 import {
     compactLayoutLabel,
     compactLayoutValue,
     renderEncoderValueGrid,
     renderHeaderPill,
     splitLayoutWords
-} from '../render/ui_oled_layout.mjs';
+} from './ui_oled_layout.mjs';
 
 function renderSchwungSoundParamDetail(surface, page) {
     const params = selectedParamList(page);
@@ -197,7 +198,7 @@ function compactSoundParamLabel(p, maxLen) {
     return compactLayoutLabel(p.shortName || p.short_name || p.name || p.label || p.key || '', maxLen);
 }
 
-export function renderSchwungSoundPage(S, surface) {
+export function renderSchwungSoundPage(surface) {
     const page = S.schwungSoundPage;
     if (!page) return false;
     surface.clear_screen();

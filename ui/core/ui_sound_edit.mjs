@@ -17,7 +17,6 @@ import {
     readSchwungModuleName,
     visibleParamList
 } from './ui_sound_edit_model.mjs';
-import { renderSchwungSoundPage as renderSchwungSoundPageImpl } from './ui_sound_edit_render.mjs';
 
 const SOUND_PARAM_PEEK_MS = 1000;
 
@@ -373,10 +372,6 @@ export function expireSchwungSoundParamPeek() {
     page.touchedParam = null;
     S.screenDirty = true;
     return true;
-}
-
-export function renderSchwungSoundPage(surface) {
-    return renderSchwungSoundPageImpl(S, surface);
 }
 
 export function requestEditSoundForTrack(t, caps) {
