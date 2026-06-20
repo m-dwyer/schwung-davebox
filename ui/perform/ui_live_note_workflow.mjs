@@ -3,6 +3,16 @@ import {
     queueLiveNoteOn
 } from '../pad/ui_pad_surface.mjs';
 
+/**
+ * Live-note recording sub-state, owned by the Recording Workflow concept
+ * (held on the dedicated workflowState, not on `S`).
+ *
+ * @typedef {Object} LiveNoteRecordingState
+ * @property {Map<number, number>} recordingNoteTrack  pitch -> record realtime tick
+ * @property {Map<number, { track: number, recording: boolean }>} extHeldNotes  external-MIDI held notes
+ */
+
+/** @returns {LiveNoteRecordingState} */
 export function createLiveNoteRecordingState() {
     return {
         recordingNoteTrack: new Map(),

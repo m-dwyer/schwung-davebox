@@ -25,6 +25,8 @@
   "include": [
     "ui/types.d.ts",
     "ui/core/ui_state.mjs",
-    "ui/view/ui_session_view_workflow.mjs"
+    "ui/view/ui_session_view_workflow.mjs",
+    "ui/perform/ui_recording_workflow.mjs",
+    "ui/perform/ui_live_note_workflow.mjs"
   ]
 }
