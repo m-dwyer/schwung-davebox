@@ -141,6 +141,17 @@ export function paintCoRunSideButtons(litMask, force) {
     }
 }
 
+export function melodicPadBaseLEDColor(opts) {
+    if (opts.chromatic && !opts.inScale) return LED_OFF;
+    if (opts.isRoot) return opts.inCoRun ? DarkGrey : TRACK_COLORS[opts.track];
+    return opts.inCoRun ? TRACK_DIM_COLORS[opts.track] : DarkGrey;
+}
+
+export function melodicPadLEDColor(opts) {
+    if (opts.active) return opts.autoBank ? 120 : White;
+    return melodicPadBaseLEDColor(opts);
+}
+
 export function updateStepLEDs() {
     if (!S.ledInitComplete) return;
 
@@ -807,46 +818,50 @@ export function updateTrackLEDs() {
                 cachedSetLED(TRACK_PAD_BASE + i, color);
             }
         } else {
-        const _autoGrey    = S.activeBank === 6;
-        const rootColor    = _autoGrey ? 118 : (_inCoRunPad ? DarkGrey : TRACK_COLORS[S.activeTrack]);
-        const nonRootColor = _autoGrey ? 124 : (_inCoRunPad ? TRACK_DIM_COLORS[S.activeTrack] : DarkGrey);
-        const _tarpActive = (S.bankParams[S.activeTrack][5][7] | 0) !== 0 &&
-                            (S.bankParams[S.activeTrack][5][0] | 0) !== 0;
-        const _tarpHeld = _tarpActive ? S.tarpHeldNotes[S.activeTrack] : null;
-        for (let i = 0; i < 32; i++) {
-            let color;
-            /* OOB pads — either (a) sentinel from computePadNoteMap (base pitch
-             * before track-octave was out of range), or (b) base + trackOctave
-             * shift pushes the pitch out of [0,127]. Both must blank the LED so
-             * pads sharing the same clamped MIDI note don't all light when one
-             * is pressed (clamping multiple pads to note 0 was the bottom-row
-             * ghost-light bug). */
-            if (S.padNoteMap[i] === 0xFF) {
-                cachedSetLED(TRACK_PAD_BASE + i, LED_OFF);
-                continue;
+            const _autoBank = S.activeBank === 6;
+            const _tarpActive = (S.bankParams[S.activeTrack][5][7] | 0) !== 0 &&
+                                (S.bankParams[S.activeTrack][5][0] | 0) !== 0;
+            const _tarpHeld = _tarpActive ? S.tarpHeldNotes[S.activeTrack] : null;
+            for (let i = 0; i < 32; i++) {
+                let color;
+                /* OOB pads — either (a) sentinel from computePadNoteMap (base pitch
+                 * before track-octave was out of range), or (b) base + trackOctave
+                 * shift pushes the pitch out of [0,127]. Both must blank the LED so
+                 * pads sharing the same clamped MIDI note don't all light when one
+                 * is pressed (clamping multiple pads to note 0 was the bottom-row
+                 * ghost-light bug). */
+                if (S.padNoteMap[i] === 0xFF) {
+                    cachedSetLED(TRACK_PAD_BASE + i, LED_OFF);
+                    continue;
+                }
+                const pitchRaw = S.padNoteMap[i] + S.trackOctave[S.activeTrack] * 12;
+                if (pitchRaw < 0 || pitchRaw > 127) {
+                    cachedSetLED(TRACK_PAD_BASE + i, LED_OFF);
+                    continue;
+                }
+                const pitch    = pitchRaw;
+                const sounding = S.liveActiveNotes.has(pitch) || S.seqActiveNotes.has(pitch);
+                const inHeld   = S.heldStep >= 0 && S.heldStepNotes.indexOf(pitch) >= 0;
+                const inLatch  = _tarpHeld && _tarpHeld.has(pitch);
+                /* During a transpose preview the pad map is laid out for the candidate
+                 * key, so colour scale-membership/root against it too (padScaleSet is
+                 * already candidate-based) — otherwise non-overlapping scales read as
+                 * all-out-of-key and the pads go dark. */
+                const _effKey = S.xposePrevKey !== null ? S.xposePrevKey : S.padKey;
+                const semitone = ((S.padNoteMap[i] % 12) - _effKey + 12) % 12;
+                const inScale  = S.padScaleSet.has(semitone);
+                const chromatic = S.padLayoutChromatic[S.activeTrack];
+                color = melodicPadLEDColor({
+                    track: S.activeTrack,
+                    isRoot: S.padNoteMap[i] % 12 === _effKey,
+                    inScale,
+                    chromatic,
+                    inCoRun: _inCoRunPad,
+                    autoBank: _autoBank,
+                    active: sounding || inHeld || inLatch
+                });
+                cachedSetLED(TRACK_PAD_BASE + i, color);
             }
-            const pitchRaw = S.padNoteMap[i] + S.trackOctave[S.activeTrack] * 12;
-            if (pitchRaw < 0 || pitchRaw > 127) {
-                cachedSetLED(TRACK_PAD_BASE + i, LED_OFF);
-                continue;
-            }
-            const pitch    = pitchRaw;
-            const sounding = S.liveActiveNotes.has(pitch) || S.seqActiveNotes.has(pitch);
-            const inHeld   = S.heldStep >= 0 && S.heldStepNotes.indexOf(pitch) >= 0;
-            const inLatch  = _tarpHeld && _tarpHeld.has(pitch);
-            /* During a transpose preview the pad map is laid out for the candidate
-             * key, so colour scale-membership/root against it too (padScaleSet is
-             * already candidate-based) — otherwise non-overlapping scales read as
-             * all-out-of-key and the pads go dark. */
-            const _effKey = S.xposePrevKey !== null ? S.xposePrevKey : S.padKey;
-            const semitone = ((S.padNoteMap[i] % 12) - _effKey + 12) % 12;
-            const inScale  = S.padScaleSet.has(semitone);
-            const chromatic = S.padLayoutChromatic[S.activeTrack];
-            color = (sounding || inHeld || inLatch) ? (_autoGrey ? 120 : White)
-                  : (chromatic && !inScale) ? LED_OFF
-                  : (S.padNoteMap[i] % 12 === _effKey ? rootColor : nonRootColor);
-            cachedSetLED(TRACK_PAD_BASE + i, color);
-        }
         }
     }
 
