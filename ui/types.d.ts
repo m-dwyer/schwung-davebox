@@ -530,35 +530,14 @@ export interface SetParamCmd {
 }
 
 // ===========================================================================
-// Deps — per-module callback bags assembled by the composition root (ui.js).
-// Each workflow module declares the slice it needs. Signatures are a first
-// pass; tighten them when ui.js itself is typed and the wiring is pinned.
+// Deps — NOT declared here.
+//
+// Per-module callback bags (`SessionViewDeps`, `RecordingDeps`, ...) are owned
+// by the module that consumes them and live co-located as JSDoc `@typedef`s in
+// that module's `.mjs` (Interface Segregation: each module declares only the
+// host slice it needs; the composition root in ui.js structurally satisfies the
+// union). This file holds only genuinely shared contracts — `State`, its concept
+// sub-interfaces, and shared value types like `SetParamCmd`. As each concept
+// earns its own sub-object on `S`, its sub-interface migrates OUT of here into
+// its owning module, and `State` references it via `import('...').Foo`.
 // ===========================================================================
-
-/** Deps required by ui/view/ui_session_view_workflow.mjs. */
-export interface SessionViewDeps {
-  numTracks: number;
-  padModeDrum: number;
-  setParam(key: string, val: string): void;
-  forceRedraw(): void;
-  invalidateLEDCache(): void;
-  showActionPopup(line1: string, line2?: string): void;
-  sendPerfMods(): void;
-  switchActiveTrack(track: number): void;
-  setTrackMute(track: number, on: boolean): void;
-  setTrackSolo(track: number, on: boolean): void;
-  trackClipHasContent(track: number, clip: number): boolean;
-  clipIsEmpty(track: number, clip: number): boolean;
-  doShiftStepCommon(idx: number): void;
-  handoffRecordingToTrack(track: number): void;
-  refreshPerClipBankParams(...args: any[]): void;
-  clearClip(...args: any[]): void;
-  clearRow(...args: any[]): void;
-  copyClip(...args: any[]): void;
-  copyRow(...args: any[]): void;
-  cutClip(...args: any[]): void;
-  cutRow(...args: any[]): void;
-  copyDrumClip(...args: any[]): void;
-  cutDrumClip(...args: any[]): void;
-  hardResetClip(...args: any[]): void;
-}

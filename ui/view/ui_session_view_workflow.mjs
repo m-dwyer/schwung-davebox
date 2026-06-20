@@ -1,6 +1,37 @@
 /**
+ * Host slice this module needs (Interface Segregation). The composition root in
+ * ui.js structurally satisfies this; `State` is the shared contract (ui/types).
+ *
+ * @typedef {Object} SessionViewDeps
+ * @property {number} numTracks
+ * @property {number} padModeDrum
+ * @property {(key: string, val: string) => void} setParam
+ * @property {() => void} forceRedraw
+ * @property {() => void} invalidateLEDCache
+ * @property {(line1: string, line2?: string) => void} showActionPopup
+ * @property {() => void} sendPerfMods
+ * @property {(track: number) => void} switchActiveTrack
+ * @property {(track: number, on: boolean) => void} setTrackMute
+ * @property {(track: number, on: boolean) => void} setTrackSolo
+ * @property {(track: number, clip: number) => boolean} trackClipHasContent
+ * @property {(track: number, clip: number) => boolean} clipIsEmpty
+ * @property {(idx: number) => void} doShiftStepCommon
+ * @property {(track: number) => void} handoffRecordingToTrack
+ * @property {(...args: any[]) => void} refreshPerClipBankParams
+ * @property {(...args: any[]) => void} clearClip
+ * @property {(...args: any[]) => void} clearRow
+ * @property {(...args: any[]) => void} copyClip
+ * @property {(...args: any[]) => void} copyRow
+ * @property {(...args: any[]) => void} cutClip
+ * @property {(...args: any[]) => void} cutRow
+ * @property {(...args: any[]) => void} copyDrumClip
+ * @property {(...args: any[]) => void} cutDrumClip
+ * @property {(...args: any[]) => void} hardResetClip
+ */
+
+/**
  * @param {import('../types').State} S
- * @param {import('../types').SessionViewDeps} deps
+ * @param {SessionViewDeps} deps
  * @param {number} idx
  * @returns {boolean}
  */
@@ -69,7 +100,7 @@ export function handleSessionViewStepPress(S, deps, idx) {
 
 /**
  * @param {import('../types').State} S
- * @param {import('../types').SessionViewDeps} deps
+ * @param {SessionViewDeps} deps
  * @param {number} btn
  * @returns {boolean}
  */
@@ -111,7 +142,7 @@ export function handleSessionViewStepRelease(S, deps, btn) {
 
 /**
  * @param {import('../types').State} S
- * @param {import('../types').SessionViewDeps} deps
+ * @param {SessionViewDeps} deps
  * @param {number} padNote
  * @returns {boolean}
  */
@@ -246,7 +277,7 @@ export function handleSessionViewClipPadPress(S, deps, padNote) {
 
 /**
  * @param {import('../types').State} S
- * @param {import('../types').SessionViewDeps} deps
+ * @param {SessionViewDeps} deps
  * @param {number} rowIdx
  * @returns {boolean}
  */
