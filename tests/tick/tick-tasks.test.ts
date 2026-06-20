@@ -2116,6 +2116,34 @@ describe("recording-event flush tick step (batch C1)", () => {
     expect(S.drumLaneLength[0]).toBe(32);
   });
 
+  test("scheduled-stop waits (no-op) until the current step reaches the target boundary", () => {
+    const c = calls();
+    const S = flushState({
+      recordScheduledStop: true,
+      recordScheduledStopTarget: 16,
+      trackCurrentStep: [13], // 13 < target-1 (15) -> not yet at boundary
+      clipAdaptiveMode: [[true]],
+    });
+    runRecordingEventFlush(S, flushDeps(c));
+    expect(c.log).toEqual([]); // nothing locked
+    expect(S.recordScheduledStop).toBe(true); // still armed, waiting
+    expect(S.recordScheduledStopTarget).toBe(16);
+    expect(S.pendingScheduledDisarm).toBe(false);
+    expect(S.clipAdaptiveMode[0][0]).toBe(true);
+  });
+
+  test("adaptive-extend is a no-op until the current step is near the boundary", () => {
+    const c = calls();
+    const S = flushState({
+      clipAdaptiveMode: [[true]],
+      clipLength: [[16]],
+      trackCurrentStep: [10], // 10 < len-4 (12) -> not near boundary
+    });
+    runRecordingEventFlush(S, flushDeps(c));
+    expect(c.log).toEqual([]);
+    expect(S.clipLength[0][0]).toBe(16); // unchanged
+  });
+
   test("else ladder is a no-op when nothing is pending", () => {
     const c = calls();
     runRecordingEventFlush(flushState(), flushDeps(c));
