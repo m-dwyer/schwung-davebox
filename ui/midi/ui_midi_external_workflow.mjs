@@ -1,4 +1,6 @@
 import {
+    enqueueDrumRecNoteOff,
+    enqueueDrumRecNoteOn,
     isActivelyRecording,
     isActivelyRecordingTrack
 } from '../perform/ui_recording_workflow.mjs';
@@ -37,13 +39,8 @@ export function onMidiExternalImpl(S, deps, data) {
             const isSeqEcho = routeIsMove && S.seqActiveNotes.has(d1);
             const isRec = !isSeqEcho && isActivelyRecordingTrack(S, t);
             if (isRec) {
-                deps.drumRecNoteOns.push({ track: t, laneNote: d1, vel: vel });
                 const recLane = S.drumLaneNote[t].indexOf(d1);
-                if (recLane >= 0) {
-                    S.pendingDrumLaneResync      = 3;
-                    S.pendingDrumLaneResyncTrack = t;
-                    S.pendingDrumLaneResyncLane  = recLane;
-                }
+                enqueueDrumRecNoteOn(S, deps.drumRecNoteOns, t, d1, vel, recLane);
             }
             deps.extHeldNotes.set(d1, { track: t, recording: isRec });
         } else if (msgType === 0x80 || (msgType === 0x90 && d2 === 0)) {
@@ -51,7 +48,7 @@ export function onMidiExternalImpl(S, deps, data) {
             const noteTrack = info ? info.track : t;
             if (S.trackRoute[noteTrack] !== 1) deps.liveSendNote(noteTrack, 0x80, d1, 0);
             if (info && info.recording && isActivelyRecording(S))
-                deps.drumRecNoteOffs.push({ track: noteTrack, laneNote: d1 });
+                enqueueDrumRecNoteOff(deps.drumRecNoteOffs, noteTrack, d1);
             deps.extHeldNotes.delete(d1);
         } else if (msgType === 0xB0 || msgType === 0xD0 || msgType === 0xA0 || msgType === 0xE0) {
             if (!routeIsMove) deps.liveSendNote(t, msgType, d1, d2);

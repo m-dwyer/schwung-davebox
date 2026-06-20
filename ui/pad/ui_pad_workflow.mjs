@@ -29,7 +29,7 @@
  *
  * Handlers take everything via deps so they can be unit-tested without the host. */
 
-import { isArmedForTrack } from '../perform/ui_recording_workflow.mjs';
+import { enqueueDrumRecNoteOff, isArmedForTrack } from '../perform/ui_recording_workflow.mjs';
 
 /* ----------------------------------------------------------------------------
  * _onPadPress preamble + contexts
@@ -540,7 +540,7 @@ export function handleUiPadReleasePadNote(S, deps, d1) {
             const _t = S.activeTrack;
             if (S.trackPadMode[_t] === deps.padModeDrum) {
                 if (_t === S.recordArmedTrack)
-                    deps.drumRecNoteOffs.push({ track: _t, laneNote: pitch });
+                    enqueueDrumRecNoteOff(deps.drumRecNoteOffs, _t, pitch);
             } else {
                 deps.recordNoteOff(pitch);
             }

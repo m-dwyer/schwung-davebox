@@ -107,6 +107,39 @@ export function clearPendingPrerollRecording(S) {
     S.pendingPrerollGate = null;
 }
 
+/* Drum recording capture: enqueue a note-on/off onto the dedicated queues
+ * (RecordingWorkflowState.drumRecNoteOns/Offs) the tick drain flushes into one
+ * coalesced per-track set_param. The element shape is the queue contract — keep
+ * it here, paired with the drain that reads `laneNote`/`vel`. Producers pass
+ * just their queue (interface segregation), not the whole workflowState. */
+
+/**
+ * @param {import('../types').State} S
+ * @param {any[]} drumRecNoteOns  the RecordingWorkflowState.drumRecNoteOns queue
+ * @param {number} track
+ * @param {number} laneNote
+ * @param {number} vel
+ * @param {number} lane  drum-lane index to repaint after capture, or <0 to skip
+ *                       (external MIDI may receive a note mapping to no lane)
+ */
+export function enqueueDrumRecNoteOn(S, drumRecNoteOns, track, laneNote, vel, lane) {
+    drumRecNoteOns.push({ track: track, laneNote: laneNote, vel: vel });
+    if (lane >= 0) {
+        S.pendingDrumLaneResync      = 3;
+        S.pendingDrumLaneResyncTrack = track;
+        S.pendingDrumLaneResyncLane  = lane;
+    }
+}
+
+/**
+ * @param {any[]} drumRecNoteOffs  the RecordingWorkflowState.drumRecNoteOffs queue
+ * @param {number} track
+ * @param {number} laneNote
+ */
+export function enqueueDrumRecNoteOff(drumRecNoteOffs, track, laneNote) {
+    drumRecNoteOffs.push({ track: track, laneNote: laneNote });
+}
+
 /* Disarm real-time recording: clear DSP flag (triggers deferred save), update LED. */
 /**
  * @param {import('../types').State} S

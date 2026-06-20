@@ -1,4 +1,5 @@
 import { SCALE_INTERVALS, drumVelZoneToVelocity } from '../core/ui_constants.mjs';
+import { enqueueDrumRecNoteOn, isActivelyRecordingTrack } from '../perform/ui_recording_workflow.mjs';
 
 export function createLiveNoteQueues(numTracks) {
     return Array.from({length: numTracks}, () => []);
@@ -144,12 +145,8 @@ export function handleDrumVelocityPadPress(S, deps, track, padIdx, target) {
         S.stepBtnPressedTick[S.heldStepBtn] = -1;
     }
 
-    if (S.recordArmed && !S.recordCountingIn && track === S.recordArmedTrack) {
-        deps.drumRecNoteOns.push({ track: track, laneNote: laneNote, vel: velZone });
-        S.pendingDrumLaneResync      = 3;
-        S.pendingDrumLaneResyncTrack = track;
-        S.pendingDrumLaneResyncLane  = lane;
-    }
+    if (isActivelyRecordingTrack(S, track))
+        enqueueDrumRecNoteOn(S, deps.drumRecNoteOns, track, laneNote, velZone, lane);
 
     S.screenDirty = true;
     return true;
@@ -174,13 +171,10 @@ export function handleDrumLanePadPress(S, deps, track, padIdx, rawVelocity, targ
     deps.padPressTick[padIdx] = S.tickCount;
     S.liveActiveNotes.add(laneNote);
 
-    if (S.recordArmed && !S.recordCountingIn && track === S.recordArmedTrack) {
+    if (isActivelyRecordingTrack(S, track)) {
         const tvo = S.trackVelOverride[track];
         const recVel = tvo > 0 ? tvo : vel;
-        deps.drumRecNoteOns.push({ track: track, laneNote: laneNote, vel: recVel });
-        S.pendingDrumLaneResync      = 3;
-        S.pendingDrumLaneResyncTrack = track;
-        S.pendingDrumLaneResyncLane  = lane;
+        enqueueDrumRecNoteOn(S, deps.drumRecNoteOns, track, laneNote, recVel, lane);
     }
 
     if (S.recordArmed && S.recordCountingIn && track === S.recordArmedTrack) {

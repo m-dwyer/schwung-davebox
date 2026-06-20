@@ -3,6 +3,8 @@ import {
   clearRecordingNoteBuffers,
   createRecordingWorkflowState,
   disarmRecordImpl,
+  enqueueDrumRecNoteOff,
+  enqueueDrumRecNoteOn,
   handoffRecordingToTrackImpl,
 } from "@overture-ui/perform/ui_recording_workflow.mjs";
 
@@ -129,6 +131,36 @@ describe("recording workflow", () => {
 
     expect(S.recordArmedTrack).toBe(1);
     expect(c.log).toEqual([]);
+  });
+
+  test("enqueueDrumRecNoteOn pushes the descriptor and arms lane resync when lane >= 0", () => {
+    const S = state({ pendingDrumLaneResync: 0, pendingDrumLaneResyncTrack: -1, pendingDrumLaneResyncLane: -1 });
+    const q: Array<{ track: number; laneNote: number; vel: number }> = [];
+
+    enqueueDrumRecNoteOn(S, q, 2, 38, 96, 1);
+
+    expect(q).toEqual([{ track: 2, laneNote: 38, vel: 96 }]);
+    expect(S.pendingDrumLaneResync).toBe(3);
+    expect(S.pendingDrumLaneResyncTrack).toBe(2);
+    expect(S.pendingDrumLaneResyncLane).toBe(1);
+  });
+
+  test("enqueueDrumRecNoteOn with lane < 0 pushes but does not arm resync", () => {
+    const S = state({ pendingDrumLaneResync: 0, pendingDrumLaneResyncTrack: -1, pendingDrumLaneResyncLane: -1 });
+    const q: Array<{ track: number; laneNote: number; vel: number }> = [];
+
+    enqueueDrumRecNoteOn(S, q, 0, 41, 80, -1);
+
+    expect(q).toEqual([{ track: 0, laneNote: 41, vel: 80 }]);
+    expect(S.pendingDrumLaneResync).toBe(0);
+    expect(S.pendingDrumLaneResyncTrack).toBe(-1);
+    expect(S.pendingDrumLaneResyncLane).toBe(-1);
+  });
+
+  test("enqueueDrumRecNoteOff pushes the descriptor with no side effects", () => {
+    const q: Array<{ track: number; laneNote: number }> = [];
+    enqueueDrumRecNoteOff(q, 3, 36);
+    expect(q).toEqual([{ track: 3, laneNote: 36 }]);
   });
 
   test("note matching cleanup clears melodic and drum recording queues", () => {
