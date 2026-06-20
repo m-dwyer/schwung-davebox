@@ -1,8 +1,3 @@
-// @ts-nocheck — not yet typed. Pulled into the tsc program transitively (a typed
-// module's import chain reaches it), but it imports the on-device Schwung host
-// path and uses host globals (e.g. set_pixel) that need a `paths` remap + ambient
-// host-globals .d.ts before it can be checked. Remove this when ui_constants is
-// added to tsconfig `include` as part of typing the host seam.
 /* ui_constants.mjs
  * Hardware constants, LED palette, reference data, and stateless utilities.
  * No mutable state. Imported by ui.js.
