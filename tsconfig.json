@@ -29,6 +29,9 @@
     "ui/core/ui_constants.mjs",
     "ui/view/ui_session_view_workflow.mjs",
     "ui/perform/ui_recording_workflow.mjs",
-    "ui/perform/ui_live_note_workflow.mjs"
+    "ui/perform/ui_live_note_workflow.mjs",
+    "ui/midi/ui_midi_external_workflow.mjs",
+    "ui/pad/ui_pad_workflow.mjs",
+    "ui/tick/ui_tick_tasks.mjs"
   ]
 }
