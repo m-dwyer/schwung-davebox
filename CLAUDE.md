@@ -24,6 +24,17 @@
 
 dAVEBOx is a Schwung **tool module** (`component_type: "tool"`) for Ableton Move — standalone 8-track MIDI sequencer. No audio. C (DSP) + JavaScript (UI). `button_passthrough: [79]` + `claims_master_knob: true` — Move firmware handles CC 79 natively; `claims_master_knob` prevents Schwung host from running its own acceleration, which caused inconsistent knob speed and MIDI output pauses.
 
+## Boy Scout rule — leave touched code more aligned with the target architecture
+
+The architecture (ADR-0001 deep modules by runtime concept; `CONTEXT.md` ubiquitous language) is reached **incrementally, not by rewrite**. When you change or extend a `ui/*.mjs` module, make a small, bounded improvement in the same commit — scoped to the change's blast radius, never a drive-by rewrite of untouched modules. When you touch a module:
+
+- **Types** — if it's not yet in `tsconfig.json` `include`, add it and JSDoc its `(S, deps, …)` signatures; declare the host slice it needs as a co-located `Deps` `@typedef` (pattern: `ui_recording_workflow.mjs`). If already typed, keep it green. Shared `State` lives in `ui/types.d.ts`; per-module `Deps` live in the module.
+- **Coupling** — don't widen `S` access or add a cross-folder import `dependency-cruiser` forbids. Prefer narrowing: pull a concept's fields toward its own sub-object/typedef. Driving a `warn`-level rule's count down (then promoting it to `error`) is ideal boy-scout work.
+- **Tests** — extend the module's `tests/<folder>/*.test.ts` to pin the behavior you change.
+- **Language** — name things per `CONTEXT.md`; if you coin a load-bearing term, add it there.
+
+**The ratchet (run before every commit):** `pnpm verify` (= `typecheck` + `depcruise` + `test`). It fails closed — a type regression, a forbidden import, or a broken test blocks you. `error`-severity dep rules hold today and must never regress; `warn`-severity rules are enumerated known debt to drive toward zero. **Never loosen a ratchet to make a change pass — fix the change.** (No CI: this is local-only, so `pnpm verify` is the gate. Optionally install it as a pre-push hook, but git hooks aren't committed — this rule is the source of truth.)
+
 ## Upcoming tasks — see [notes/TODO.md](notes/TODO.md)
 
 ## Build / deploy / debug
