@@ -1,4 +1,8 @@
-import { S } from '../core/ui_state.mjs';
+import { S, effectiveClip } from '../core/ui_state.mjs';
+/* Re-exported for back-compat: effectiveClip's home moved to core/ui_state.mjs
+ * (it's a DSP-Mirror read, not presentation). Existing importers of it from this
+ * module keep working; new code should import it from core/ui_state.mjs. */
+export { effectiveClip };
 import {
     NUM_STEPS, NUM_TRACKS, LED_OFF,
     TRACK_COLORS, TRACK_DIM_COLORS, TRACK_PAD_BASE, SCENE_BTN_FLASH_TICKS,
@@ -19,12 +23,6 @@ function clipHasActiveNotes(t, c) {
     const s = S.clipSteps[t][c];
     for (let i = 0; i < NUM_STEPS; i++) if (s[i] === 1) return true;
     return false;
-}
-
-/* When stopped with a clip queued, Track View should operate on the queued clip. */
-export function effectiveClip(t) {
-    const qc = S.trackQueuedClip[t];
-    return (!S.playing && qc >= 0) ? qc : S.trackActiveClip[t];
 }
 
 function effectiveDrumMute(t, l) {
