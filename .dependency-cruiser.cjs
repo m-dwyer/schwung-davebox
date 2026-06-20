@@ -51,20 +51,21 @@ module.exports = {
         path: '^ui/(input|view|perform|menu|drum|bank|sync|persist|tick|corun|lifecycle)/',
       },
     },
-
-    // --- Known debt: drive the count to 0, then promote to `error`. ---
     {
       name: 'core-is-leaf',
-      severity: 'warn',
+      severity: 'error',
       comment:
-        'core/ (state, constants, scene, routes) should be a LEAF — concept folders ' +
-        'depend on it, not the reverse. Known back-edges: core -> render, core -> pad. ' +
-        'Drive to 0 (push those helpers into their concept folders), then make error.',
+        'core/ (state, constants, scene, routes) is a LEAF — concept folders depend ' +
+        'on it, never the reverse. Promoted warn->error once the two back-edges were ' +
+        'removed (SCALE_INTERVALS + drumVelZoneToVelocity moved pad->core; effectiveClip ' +
+        'moved render->core/ui_state). A core/ import of any concept folder now fails CI.',
       from: { path: '^ui/core/' },
       to: {
         path: '^ui/(input|view|perform|menu|drum|bank|sync|render|persist|tick|corun|lifecycle|pad|midi)/',
       },
     },
+
+    // --- Known debt: drive the count to 0, then promote to `error`. ---
     {
       name: 'host-globals-only-in-shell',
       severity: 'warn',

@@ -1,5 +1,4 @@
-import { NOTE_KEYS } from './ui_constants.mjs';
-import { SCALE_INTERVALS, drumVelZoneToVelocity } from '../pad/ui_pad_surface.mjs';
+import { NOTE_KEYS, SCALE_INTERVALS, drumVelZoneToVelocity } from './ui_constants.mjs';
 
 /* Step-edit pitch nudge: move note up/down to next in-scale pitch.
  * When scale-aware is off, shifts by exactly 1 semitone per dir. */

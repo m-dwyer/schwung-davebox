@@ -1,19 +1,4 @@
-export const SCALE_INTERVALS = [
-    [0, 2, 4, 5, 7, 9, 11],        /*  0 Major           */
-    [0, 2, 3, 5, 7, 8, 10],        /*  1 Minor           */
-    [0, 2, 3, 5, 7, 9, 10],        /*  2 Dorian          */
-    [0, 1, 3, 5, 7, 8, 10],        /*  3 Phrygian        */
-    [0, 2, 4, 6, 7, 9, 11],        /*  4 Lydian          */
-    [0, 2, 4, 5, 7, 9, 10],        /*  5 Mixolydian      */
-    [0, 1, 3, 5, 6, 8, 10],        /*  6 Locrian         */
-    [0, 2, 3, 5, 7, 8, 11],        /*  7 Harmonic Minor  */
-    [0, 2, 3, 5, 7, 9, 11],        /*  8 Melodic Minor   */
-    [0, 2, 4, 7, 9],               /*  9 Pentatonic Major*/
-    [0, 3, 5, 7, 10],              /* 10 Pentatonic Minor*/
-    [0, 3, 5, 6, 7, 10],           /* 11 Blues           */
-    [0, 2, 4, 6, 8, 10],           /* 12 Whole Tone      */
-    [0, 2, 3, 5, 6, 8, 9, 11],     /* 13 Diminished      */
-];
+import { SCALE_INTERVALS, drumVelZoneToVelocity } from '../core/ui_constants.mjs';
 
 export function createLiveNoteQueues(numTracks) {
     return Array.from({length: numTracks}, () => []);
@@ -105,10 +90,6 @@ export function drumPadToVelZone(padIdx) {
     if (col < 4) return -1;
     const row = Math.floor(padIdx / 8);
     return row * 4 + (col - 4);
-}
-
-export function drumVelZoneToVelocity(zone) {
-    return Math.round((zone + 1) * 127 / 16);
 }
 
 export function resolveDrumPadTarget(padIdx, lanePage, drumLanes) {

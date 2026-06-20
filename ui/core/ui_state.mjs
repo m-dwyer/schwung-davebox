@@ -528,6 +528,17 @@ export function createInitialState() {
 /* The live UI-runtime state singleton, imported by reference across ui/*.mjs. */
 export const S = createInitialState();
 
+/* The effective clip for a track: the queued clip while stopped (so edits target
+ * what will launch), otherwise the active clip. A pure DSP-Mirror read — lives in
+ * core next to S; render/ui_leds re-exports it for back-compat. (Moved here so
+ * core stays a leaf — it was formerly defined in render/ui_leds.mjs.)
+ * @param {number} t
+ * @returns {number} */
+export function effectiveClip(t) {
+    const qc = S.trackQueuedClip[t];
+    return (!S.playing && qc >= 0) ? qc : S.trackActiveClip[t];
+}
+
 /* Reset the singleton to a pristine state IN PLACE — same object reference, so
  * every `import { S }` holder (and closures captured at module load) stay valid.
  * On device, init() deliberately preserves most UI state across Shift+Back

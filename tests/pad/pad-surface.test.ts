@@ -7,7 +7,6 @@ import {
   createPadRuntimeState,
   drumPadToLane,
   drumPadToVelZone,
-  drumVelZoneToVelocity,
   handleCaptureDrumLanePress,
   handleDrumLanePadPress,
   handleDrumVelocityPadPress,
@@ -21,6 +20,8 @@ import {
   padDispatchMutedNow,
   updatePadNoteMap,
 } from "@overture-ui/pad/ui_pad_surface.mjs";
+// drumVelZoneToVelocity moved to core/ui_constants (pure primitive; keeps core a leaf).
+import { drumVelZoneToVelocity } from "@overture-ui/core/ui_constants.mjs";
 
 function baseState() {
   return {
