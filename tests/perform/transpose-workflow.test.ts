@@ -5,6 +5,7 @@ import {
   xposeCommitImpl,
   xposePreviewSetImpl,
 } from "@overture-ui/perform/ui_transpose_workflow.mjs";
+import { traceDspWrites } from "../helpers/dsp-queue-trace";
 
 const DRUM = 1;
 const MELODIC = 0;
@@ -62,13 +63,21 @@ describe("transpose workflow - melodic content detection", () => {
 describe("transpose workflow - preview", () => {
   test("candidate equal to committed cancels an existing preview", () => {
     const c = calls();
-    const S = state({ xposePrevKey: 7, xposePrevScale: 8 });
+    const S = state({
+      xposePrevKey: 7,
+      xposePrevScale: 8,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     xposePreviewSetImpl(S, deps(c), 2, 5);
     expect(S.xposePrevKey).toBeNull();
     expect(S.xposePrevScale).toBeNull();
-    expect(S.pendingDefaultSetParams).toEqual([
-      { key: "t0_xpose_apply", val: "2 5 2 5 0" },
-    ]);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "t0_xpose_apply", val: "2 5 2 5 0" },
+      ],
+    });
     expect(c.log).toEqual([["computePadNoteMap"]]);
     expect(S.screenDirty).toBe(true);
   });
@@ -116,24 +125,40 @@ describe("transpose workflow - cancel and commit", () => {
 
   test("cancel queues deferred apply-to-committed payload and recomputes pad map", () => {
     const c = calls();
-    const S = state({ xposePrevKey: 9, xposePrevScale: 3 });
+    const S = state({
+      xposePrevKey: 9,
+      xposePrevScale: 3,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     xposeCancelPreviewImpl(S, deps(c));
     expect(S.xposePrevKey).toBeNull();
     expect(S.xposePrevScale).toBeNull();
-    expect(S.pendingDefaultSetParams).toEqual([
-      { key: "t0_xpose_apply", val: "2 5 2 5 0" },
-    ]);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "t0_xpose_apply", val: "2 5 2 5 0" },
+      ],
+    });
     expect(c.log).toEqual([["computePadNoteMap"]]);
     expect(S.screenDirty).toBe(true);
   });
 
   test("commit queues deferred apply payload, adopts key/scale, recomputes, redraws, and dirties", () => {
     const c = calls();
-    const S = state({ xposePrevKey: 9, xposePrevScale: 3 });
+    const S = state({
+      xposePrevKey: 9,
+      xposePrevScale: 3,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     xposeCommitImpl(S, deps(c), 9, 3);
-    expect(S.pendingDefaultSetParams).toEqual([
-      { key: "t0_xpose_apply", val: "2 5 9 3 1" },
-    ]);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "t0_xpose_apply", val: "2 5 9 3 1" },
+      ],
+    });
     expect(S.padKey).toBe(9);
     expect(S.padScale).toBe(3);
     expect(S.xposePrevKey).toBeNull();

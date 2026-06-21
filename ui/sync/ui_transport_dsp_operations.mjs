@@ -3,6 +3,14 @@ import { enqueueDspOperation } from './ui_dsp_operation_queue.mjs';
 /**
  * @param {import('../types').State} S
  */
+export function queueFocusedClipLaunchOperation(S, track, clip) {
+    enqueueDspOperation(S, { key: 't' + track + '_launch_clip', val: String(clip) });
+    S.trackQueuedClip[track] = clip;
+}
+
+/**
+ * @param {import('../types').State} S
+ */
 export function queueMergeStopOperation(S) {
     enqueueDspOperation(S, { key: 'merge_stop', val: '1' });
 }

@@ -522,13 +522,23 @@ describe("pollCountInEnd (Block K)", () => {
 describe("pollTransportTransitions (Block L)", () => {
   test("transport start auto-launches focused empty clip via pendingDefaultSetParams", () => {
     const c = calls();
-    const S = makeState({ playingPrev: false, playing: true, activeTrack: 1, sessionView: false });
+    const S = makeState({
+      playingPrev: false,
+      playing: true,
+      activeTrack: 1,
+      sessionView: false,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     (S.trackQueuedClip as number[])[1] = -1;
     (S.trackActiveClip as number[])[1] = 0;
     pollTransportTransitions(S, makeDeps(c));
     expect(S.transportStartTick).toBe(S.tickCount);
-    expect(S.pendingDefaultSetParams).toContainEqual({ key: "t1_launch_clip", val: "0" });
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "t1_launch_clip", val: "0" },
+    ]);
     expect((S.trackQueuedClip as number[])[1]).toBe(0);
+    expect(c.log).toEqual([["focusedClipIsEmpty", 1]]);
     expect(S.playingPrev).toBe(true);
   });
 
@@ -545,6 +555,7 @@ describe("pollTransportTransitions (Block L)", () => {
     (S.trackQueuedClip as number[])[0] = -1;
     pollTransportTransitions(S, makeDeps(c));
     expect(c.log).toContainEqual(["setParam", "t0_launch_clip", "0"]);
+    expect(S.pendingDefaultSetParams).toEqual([]);
     expect((S.trackQueuedClip as number[])[0]).toBe(0);
   });
 

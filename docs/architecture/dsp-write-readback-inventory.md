@@ -172,11 +172,11 @@ proved sufficient.
 | `input/ui_jog_cc_workflow.mjs` bake / bake_scene | Migrated semantic bake operations | Wrapped clip/drum bake and scene bake commits now route through explicit bake operation helpers that enqueue the DSP write while preserving modal close timing, undo marking, popup order, bank refresh, and delayed scene/clip readback. The melodic single-loop bake path remains a direct `setParam('bake', ...)` write. |
 | `input/ui_jog_cc_workflow.mjs` playback-dir / audio-reverse resets | Migrated compatibility queue family | The reset pairs remain coupled to the broader Delete/Shift+Delete reset gestures for FX reset, automation clear ordering, local mirrors, popup, and redraw behavior. Only the drum-lane and melodic-clip playback reset pair writes now route through `enqueueDspOperation`, preserving FIFO append order and any neighboring raw automation clears. |
 | `view/ui_session_view_workflow.mjs` `snap_delete`, `snap_load`, `launch_scene`, `launch_scene_quant`, `merge_place_row` | Migrated semantic session operations | These session/performance commands now route through explicit session operation helpers while preserving UI modal state, mute/solo mirrors, scene button flashes, and merge placement state. Structural clip/row copy paths remain delegated to structural edit operations. |
-| `sync/ui_polldsp_workflow.mjs` focused empty clip auto-launch: `tN_launch_clip` | Question before migrating | This is queued from a poll/transport transition to avoid clashing with start behavior, while record-arm auto-launch remains direct. Treat as transport timing, not a generic structural writer. |
-| `sync/ui_clip_state_sync.mjs` sidecar restore: `perf_mods` | Question before migrating | This is a post-restore performance-mod replay. It is not a normal user edit and may belong with restore sequencing or direct `sendPerfMods` semantics. |
+| `sync/ui_polldsp_workflow.mjs` focused empty clip auto-launch: `tN_launch_clip` | Migrated semantic transport operation | Focused empty clip launch now routes through the explicit transport operation helper, preserving FIFO append, `trackQueuedClip` mirror update, Session View skip behavior, and the direct record-arm launch path. |
+| `sync/ui_clip_state_sync.mjs` sidecar restore: `perf_mods` | Migrated semantic restore operation | Post-restore performance-mod replay now routes through an explicit restore operation helper, backed by `pendingDefaultSetParams`, while direct drum lane page re-pushes remain direct restore writes. |
 | `input/ui_transport_cc_workflow.mjs` / `input/ui_button_cc_workflow.mjs` merge arm/stop/cancel | Migrated semantic transport operations | Merge arm/stop/cancel now route through explicit transport operation helpers, backed by `pendingDefaultSetParams`. Arm owns pending arm, Sample LED, and popup timing; cancel owns pending placement close; DSP poll remains the readback/reconciliation owner. |
 | `drum/ui_drum_repeat_workflows.mjs` / `perform/ui_latch_workflows.mjs` repeat stop/latch and TARP latch sweeps | Preserve queue timing; performance path | All-track or multi-lane sweeps can emit many same-family writes. Queue timing is probably load-bearing, but these should be migrated only inside a repeat/latch operation boundary. |
-| `perform/ui_transpose_workflow.mjs` `t0_xpose_apply` | Semantic operation first | Commit/cancel both interact with padmap recompute and preview state. A transpose operation can own ordering; do not mechanically wrap first. |
+| `perform/ui_transpose_workflow.mjs` `t0_xpose_apply` | Migrated semantic transpose operation | Transpose commit/cancel now route through an explicit transpose operation helper, preserving preview cleanup, FIFO append, padmap recompute, redraw, and direct preview writes. |
 
 ## Remaining Migration Windows
 
@@ -186,15 +186,12 @@ operations, FIFO order, mirror updates, and delayed readback behavior as
 applicable. Keep migrating one window at a time; do not mechanically wrap
 unrelated raw queue producers.
 
-1. Focused empty clip auto-launch:
-   keep separate from session view because transport-start timing and
-   transport state are part of the behavior.
-2. Repeat, latch, and TARP latch sweeps:
+1. Repeat, latch, and TARP latch sweeps:
    add repeat/latch operation boundaries before migrating multi-track or
    multi-lane queued sweeps.
-3. Transpose and sidecar restore:
-   clean up the remaining small but semantically odd producers after the
-   common operation patterns are established.
+2. Jog automation clear reset branches:
+   keep separate because they mix automation clear, FX reset, bake-adjacent
+   state, and delayed readbacks.
 
 ## Remaining Family Migration Notes
 
@@ -307,14 +304,16 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
 
 - Owners: `sync/ui_polldsp_workflow.mjs` and
   `input/ui_transport_cc_workflow.mjs`.
-- Raw queued keys: focused `tN_launch_clip`.
-- Migrated queued keys: `merge_stop`, `merge_arm`, and `merge_cancel` now route
-  through explicit transport operation helpers, backed by
-  `S.pendingDefaultSetParams`.
+- Migrated queued keys: focused `tN_launch_clip`, `merge_stop`, `merge_arm`,
+  and `merge_cancel` now route through explicit transport operation helpers,
+  backed by `S.pendingDefaultSetParams`.
 - Preserve mirror/timing: transport start behavior, focused empty clip rules,
   record-arm auto-launch differences, merge LEDs, and DSP poll reconciliation.
 - Tests to pin: auto-launch only happens on the intended transport transition,
   and direct launch paths remain direct where required.
+- Tests pin for focused launch migration: no direct `setParam`, FIFO append
+  after older queued work, `trackQueuedClip` mirror update, Session View skip
+  behavior, and direct record-arm launch preservation.
 - Tests pin for merge migration: no direct `setParam`, FIFO append after older
   queued work, pending merge arm/placement mutation boundaries, Sample LED and
   popup timing, and DSP poll reconciliation. Session merge placement remains
@@ -324,12 +323,12 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
 ### Restore and sidecar replay
 
 - Owner: `sync/ui_clip_state_sync.mjs`.
-- Raw queued keys: `perf_mods`; sidecar restore may replace
-  `S.pendingDefaultSetParams` wholesale to prepend restore writes.
+- Migrated queued keys: `perf_mods` now routes through an explicit restore
+  operation helper, backed by `S.pendingDefaultSetParams`.
 - Preserve mirror/timing: restore ordering, performance mod replay, sidecar
   state, and post-load DSP sync behavior.
-- Tests to pin: restore replay order when the queue already contains work, and
-  whether replacement of the backing queue is intentional for that path.
+- Tests pin: restore replay order when the queue already contains work, direct
+  drum lane page re-pushes remain direct, and sidecar mirror state is restored.
 - Out of scope: normal performance-mod LED writes and user-edit queues.
 
 ### Repeat, latch, and TARP sweeps
@@ -348,17 +347,20 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
 ### Transpose preview commit/cancel
 
 - Owner: `perform/ui_transpose_workflow.mjs`.
-- Raw queued keys: `t0_xpose_apply`.
+- Migrated queued keys: `t0_xpose_apply` now routes through an explicit
+  transpose operation helper, backed by `S.pendingDefaultSetParams`.
 - Preserve mirror/timing: preview state, cancel/commit branching, padmap
   recompute, popup/redraw, and active bank state.
-- Tests to pin: commit and cancel payloads, preview cleanup, queue order after
-  existing work, and padmap recompute behavior.
+- Tests pin: commit and cancel payloads, preview cleanup, queue order after
+  existing work, no direct apply write, and padmap recompute behavior.
 - Out of scope: do not touch TARP, scale, or unrelated performance paths.
 
 Recommended next order:
 
-1. Before touching leaving-drum-mode, add tests around queue-empty padmap recompute and same-track ordering.
-2. Defer session, transport, live merge, repeat/latch, transpose, and bake paths until each has a semantic operation boundary.
+1. Repeat/latch/TARP sweeps should move as a performance operation family, not
+   as individual raw queue replacements.
+2. Jog automation reset branches should remain last because they mix clear,
+   reset, bake-adjacent state, and delayed readback behavior.
 
 ## Safest First Compatibility-Migration Candidate
 

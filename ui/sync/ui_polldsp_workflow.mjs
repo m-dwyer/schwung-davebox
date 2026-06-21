@@ -25,6 +25,8 @@
  *
  * Steps take everything via deps so they can be unit-tested without the host. */
 
+import { queueFocusedClipLaunchOperation } from './ui_transport_dsp_operations.mjs';
+
 export function pollDspWorkflow(S, deps) {
     /* Block A runs BEFORE the get_param guard (uses shadow_corun_state, not get_param). */
     pollCoRunReconcile(S, deps);
@@ -296,8 +298,7 @@ export function pollTransportTransitions(S, deps) {
                     && S.trackQueuedClip[_at] === -1
                     && deps.focusedClipIsEmpty(_at)) {
                 const _tac = S.trackActiveClip[_at];
-                S.pendingDefaultSetParams.push({ key: 't' + _at + '_launch_clip', val: String(_tac) });
-                S.trackQueuedClip[_at] = _tac;
+                queueFocusedClipLaunchOperation(S, _at, _tac);
             }
         }
         /* Auto-launch focused clip if record is armed and clip is inactive */
