@@ -11,6 +11,7 @@ import {
 } from "@overture-ui/bank/ui_bank_params.mjs";
 import { BANKS, TPS_VALUES } from "@overture-ui/core/ui_constants.mjs";
 import { S as runtimeState } from "@overture-ui/core/ui_state.mjs";
+import { traceDspWrites } from "../helpers/dsp-queue-trace";
 
 // Param-bank read/write/reset cluster. The resets/applies are
 // COALESCING-SENSITIVE set_param emitters: these tests pin the exact
@@ -314,16 +315,21 @@ describe("readBankParams", () => {
   test("bank 6 Schwung-default path: route 0 + shadow + all types 0 → Sch1-8 + cc_type_assign queue", () => {
     const c = calls();
     const S = makeState({ trackRoute: [0, 0] });
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     readBankParamsImpl(S, makeDeps(c, { hasShadowSetParam: true }), 0, 6);
     expect((S.trackCCType as any)[0]).toEqual([2, 2, 2, 2, 2, 2, 2, 2]);
     expect((S.trackCCAssign as any)[0]).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     expect((S.schLabel as any)[0].every((x: unknown) => x === null)).toBe(true);
-    expect(S.pendingDefaultSetParams).toEqual(
-      Array.from({ length: 8 }, (_, k) => ({
-        key: "t0_cc_type_assign",
-        val: `${k} 2 ${k + 1}`,
-      })),
-    );
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        ...Array.from({ length: 8 }, (_, k) => ({
+          key: "t0_cc_type_assign",
+          val: `${k} 2 ${k + 1}`,
+        })),
+      ],
+    });
   });
 
   test("bank 6 Schwung-default skipped when hasShadowSetParam is false", () => {

@@ -247,7 +247,10 @@ export function readBankParamsImpl(S, deps, t, bankIdx) {
                 S.trackCCType[t][k] = 2;
                 S.trackCCAssign[t][k] = k + 1;
                 S.schLabel[t][k] = null;
-                S.pendingDefaultSetParams.push({ key: 't' + t + '_cc_type_assign', val: k + ' 2 ' + (k + 1) });
+                enqueueDspOperation(S, {
+                    key: 't' + t + '_cc_type_assign',
+                    val: k + ' 2 ' + (k + 1)
+                });
             }
         }
         for (let c = 0; c < NUM_CLIPS; c++) {
