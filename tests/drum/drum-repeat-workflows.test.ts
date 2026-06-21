@@ -900,6 +900,7 @@ describe("drum repeat workflows", () => {
     const c = calls();
     const S = loopState();
     S.drumRepeatHeldPad[0] = 12;
+    S.pendingDefaultSetParams.push({ key: "older", val: "1" });
 
     latchHeldDrumRepeatsOnLoopPress(S, {
       host_module_set_param: c.fn("set"),
@@ -907,6 +908,7 @@ describe("drum repeat workflows", () => {
 
     expect(S.drumRepeatLatched[0]).toBe(true);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_drum_repeat_latched", val: "1" },
     ]);
     expect(c.log).toEqual([]);
@@ -944,6 +946,7 @@ describe("drum repeat workflows", () => {
     S.drumRepeatLatched[0] = true;
     S.drumRepeat2LatchedLanes[0].add(3);
     S.drumRepeat2LatchedLanes[0].add(4);
+    S.pendingDefaultSetParams.push({ key: "older", val: "1" });
 
     expect(handleDrumRepeatLoopTapRelease(S, 32)).toBe(true);
 
@@ -953,6 +956,7 @@ describe("drum repeat workflows", () => {
     expect(S.drumRepeat2LatchedLanes[0].size).toBe(0);
     expect(S.loopTapUnlatchTrack).toBe(-1);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_drum_repeat_stop", val: "1" },
       { key: "t0_drum_repeat2_stop", val: "1" },
     ]);

@@ -28,6 +28,7 @@ describe("latch workflows", () => {
     S.drumRepeat2LatchedLanes[1].add(3);
     S.drumRepeat2LatchedLanes[1].add(4);
     S.bankParams[2][5][7] = 1;
+    S.pendingDefaultSetParams.push({ key: "older", val: "1" });
 
     unlatchAllTracks(S, 3);
 
@@ -37,6 +38,7 @@ describe("latch workflows", () => {
     expect(S.drumRepeat2LatchedLanes[1].size).toBe(0);
     expect(S.bankParams[2][5][7]).toBe(0);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_drum_repeat_stop", val: "1" },
       { key: "t1_drum_repeat2_lane_off", val: "3" },
       { key: "t1_drum_repeat2_lane_off", val: "4" },
@@ -54,10 +56,12 @@ describe("latch workflows", () => {
     S.drumRepeatHeldPad[1] = 7;
     S.drumRepeat2LatchedLanes[1].add(8);
     S.bankParams[1][5][7] = 1;
+    S.pendingDefaultSetParams.push({ key: "older", val: "1" });
 
     unlatchAllTracks(S, 2);
 
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_drum_repeat_stop", val: "1" },
       { key: "t0_drum_repeat2_lane_off", val: "6" },
       { key: "t0_tarp_latch", val: "0" },

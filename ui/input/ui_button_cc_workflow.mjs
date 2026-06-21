@@ -10,6 +10,7 @@
 
 import { resetCcLaneImpl } from '../sync/ui_automation_clear_ops.mjs';
 import { queueMergeCancelOperation } from '../sync/ui_transport_dsp_operations.mjs';
+import { queueTarpLatchOperation } from '../perform/ui_performance_dsp_operations.mjs';
 
 export function handleUiShiftButton(S, deps, d1, d2) {
     if (d1 !== deps.moveShift) return;
@@ -278,12 +279,12 @@ export function handleUiLoopTrackViewButton(S, deps, d1, d2) {
                 /* Latch ON: holding any pad + loop turns it off */
                 S.bankParams[_lrt][5][7] = 0;
                 if (deps.setParam)
-                    S.pendingDefaultSetParams.push({ key: 't' + _lrt + '_tarp_latch', val: '0' });
+                    queueTarpLatchOperation(S, _lrt, false);
             } else if ((S.bankParams[_lrt][5][0] | 0) !== 0) {
                 /* Latch OFF: turn it on (only when TARP style is set) */
                 S.bankParams[_lrt][5][7] = 1;
                 if (deps.setParam)
-                    S.pendingDefaultSetParams.push({ key: 't' + _lrt + '_tarp_latch', val: '1' });
+                    queueTarpLatchOperation(S, _lrt, true);
             }
         } else if (S.trackPadMode[_lrt] !== deps.padModeDrum &&
                    (S.bankParams[_lrt][5][7] | 0) !== 0 &&

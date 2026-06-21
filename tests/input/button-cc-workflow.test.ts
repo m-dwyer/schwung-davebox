@@ -841,15 +841,20 @@ describe("Button CC workflow - Loop track view", () => {
 
   test("TARP latch shortcut turns latch on when off and a style is set", () => {
     const c = calls();
-    const S = state({ activeTrack: 1, liveActiveNotes: new Set([60]) });
+    const S = state({
+      activeTrack: 1,
+      liveActiveNotes: new Set([60]),
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     S.bankParams[1][5][7] = 0; // latch off
     S.bankParams[1][5][0] = 1; // TARP style set
     expect(handleUiLoopTrackViewButton(S, deps(c), LOOP, 127)).toBe(true);
     expect(S.bankParams[1][5][7]).toBe(1);
-    expect(S.pendingDefaultSetParams).toContainEqual({
-      key: "t1_tarp_latch",
-      val: "1",
-    });
+    expect(traceDspWrites(S, c.log).directSetParams).toEqual([]);
+    expect(traceDspWrites(S, c.log).queuedOperations).toEqual([
+      { key: "older", val: "1" },
+      { key: "t1_tarp_latch", val: "1" },
+    ]);
   });
 
   test("TARP latch shortcut is a no-op when latch off and no style set", () => {

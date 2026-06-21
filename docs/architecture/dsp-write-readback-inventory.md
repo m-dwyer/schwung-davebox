@@ -53,6 +53,13 @@ Migrated in `input/ui_jog_cc_workflow.mjs`:
 - wrapped clip bake / drum lane bake / drum clip bake queued commits
 - scene bake queued commits
 
+Migrated through semantic operation helpers:
+
+- focused empty clip auto-launch
+- sidecar performance-mod replay
+- transpose commit/cancel
+- repeat/latch/TARP queued performance sweeps
+
 Migrated through `sync/ui_session_dsp_operations.mjs`:
 
 - session view snapshot delete/load commands
@@ -175,7 +182,7 @@ proved sufficient.
 | `sync/ui_polldsp_workflow.mjs` focused empty clip auto-launch: `tN_launch_clip` | Migrated semantic transport operation | Focused empty clip launch now routes through the explicit transport operation helper, preserving FIFO append, `trackQueuedClip` mirror update, Session View skip behavior, and the direct record-arm launch path. |
 | `sync/ui_clip_state_sync.mjs` sidecar restore: `perf_mods` | Migrated semantic restore operation | Post-restore performance-mod replay now routes through an explicit restore operation helper, backed by `pendingDefaultSetParams`, while direct drum lane page re-pushes remain direct restore writes. |
 | `input/ui_transport_cc_workflow.mjs` / `input/ui_button_cc_workflow.mjs` merge arm/stop/cancel | Migrated semantic transport operations | Merge arm/stop/cancel now route through explicit transport operation helpers, backed by `pendingDefaultSetParams`. Arm owns pending arm, Sample LED, and popup timing; cancel owns pending placement close; DSP poll remains the readback/reconciliation owner. |
-| `drum/ui_drum_repeat_workflows.mjs` / `perform/ui_latch_workflows.mjs` repeat stop/latch and TARP latch sweeps | Preserve queue timing; performance path | All-track or multi-lane sweeps can emit many same-family writes. Queue timing is probably load-bearing, but these should be migrated only inside a repeat/latch operation boundary. |
+| `drum/ui_drum_repeat_workflows.mjs` / `perform/ui_latch_workflows.mjs` / `input/ui_button_cc_workflow.mjs` repeat stop/latch and TARP latch sweeps | Migrated semantic performance operations | Repeat groove reset, repeat latched/stop, repeat2 stop/lane-off, and TARP latch writes now route through explicit performance operation helpers, backed by `pendingDefaultSetParams`. Low-latency direct repeat pad/rate writes remain direct. |
 | `perform/ui_transpose_workflow.mjs` `t0_xpose_apply` | Migrated semantic transpose operation | Transpose commit/cancel now route through an explicit transpose operation helper, preserving preview cleanup, FIFO append, padmap recompute, redraw, and direct preview writes. |
 
 ## Remaining Migration Windows
@@ -186,10 +193,7 @@ operations, FIFO order, mirror updates, and delayed readback behavior as
 applicable. Keep migrating one window at a time; do not mechanically wrap
 unrelated raw queue producers.
 
-1. Repeat, latch, and TARP latch sweeps:
-   add repeat/latch operation boundaries before migrating multi-track or
-   multi-lane queued sweeps.
-2. Jog automation clear reset branches:
+1. Jog automation clear reset branches:
    keep separate because they mix automation clear, FX reset, bake-adjacent
    state, and delayed readbacks.
 
@@ -229,7 +233,7 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
   CC-before-AT DSP operation order, mirror wipe/reset before DSP readback, and
   unchanged nearby TARP latch queue behavior.
 - Still raw/out of scope: selected `input/ui_jog_cc_workflow.mjs`
-  automation-clear reset branches and repeat/latch TARP sweeps.
+  automation-clear reset branches.
 
 ### CC lane geometry
 
@@ -334,13 +338,16 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
 ### Repeat, latch, and TARP sweeps
 
 - Owners: `drum/ui_drum_repeat_workflows.mjs` and
-  `perform/ui_latch_workflows.mjs`.
-- Raw queued keys: repeat groove reset, repeat latched/stop keys,
-  repeat2 stop/lane-off keys, and `tN_tarp_latch`.
+  `perform/ui_latch_workflows.mjs`, plus the Loop+pad TARP latch shortcut in
+  `input/ui_button_cc_workflow.mjs`.
+- Migrated queued keys: repeat groove reset, repeat latched/stop keys,
+  repeat2 stop/lane-off keys, and `tN_tarp_latch` now route through explicit
+  performance operation helpers, backed by `S.pendingDefaultSetParams`.
 - Preserve mirror/timing: performance latency, all-track or multi-lane sweep
   ordering, latch UI state, and low-latency direct repeat writes.
-- Tests to pin: sweep order, no-op gating when nothing is latched, and separation
-  between queued sweep writes and direct performance writes.
+- Tests pin: sweep order, FIFO append after older queued work, no-op gating when
+  nothing is latched, and separation between queued sweep writes and direct
+  performance writes.
 - Out of scope: do not migrate repeat pad/aftertouch/rate writes through this
   compatibility queue.
 
@@ -357,9 +364,7 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
 
 Recommended next order:
 
-1. Repeat/latch/TARP sweeps should move as a performance operation family, not
-   as individual raw queue replacements.
-2. Jog automation reset branches should remain last because they mix clear,
+1. Jog automation reset branches should remain last because they mix clear,
    reset, bake-adjacent state, and delayed readback behavior.
 
 ## Safest First Compatibility-Migration Candidate
