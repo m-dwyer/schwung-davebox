@@ -23,6 +23,20 @@ Migrated in `sync/ui_clip_edit_ops.mjs`:
 - `cutRowImpl`
 - `clearRowImpl`
 
+Migrated in `drum/ui_drum_lane_workflows.mjs`:
+
+- `copyDrumLaneImpl`
+- `cutDrumLaneImpl`
+- `copyDrumClipImpl`
+- `cutDrumClipImpl`
+
+Migrated in `bank/ui_bank_params.mjs`:
+
+- `resetPerClipBankParamsToDefaultImpl`
+- `resetFxBanksImpl`
+- `resetSingleFxBankImpl`
+- `resetTarpImpl`
+
 Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
 
 ## Timing Classes
@@ -57,8 +71,8 @@ Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
 | `sync/ui_clip_edit_ops.mjs` `clearClipImpl` | `tN_cC_drum_clear`, `tN_cC_clear`, `tN_cC_clear_keep`, optional `tN_launch_clip` | Priority queues clear via `unshift`, sets `clearDrainHold = 1`, updates JS mirrors immediately, schedules `pendingStepsReread = 2` for melodic clear. | unshift/priority write, one-per-tick coalescing-sensitive write, optimistic mirror update, delayed readback, clip/drum path |
 | `sync/ui_clip_edit_ops.mjs` `hardResetClipImpl` | `tN_cC_drum_reset`, `tN_cC_hard_reset` | Priority queues reset via `unshift`, sets `clearDrainHold = 1`, resets JS mirrors. Drum active clip mirrors are reset locally. | unshift/priority write, optimistic mirror update, clip/drum path |
 | `sync/ui_clip_edit_ops.mjs` copy/cut/row/step ops | `clip_copy`, `clip_cut`, `row_copy`, `row_cut`, `row_clear`, `tN_lL_step_X_copy_to`, `tN_cC_step_X_copy_to` | Queues single atomic DSP structural commands, updates destination/source mirrors immediately, schedules drum or melodic delayed readback for active affected content. | queued write, one-per-tick coalescing-sensitive write, optimistic mirror update, delayed readback, clip/drum path |
-| `drum/ui_drum_lane_workflows.mjs` lane/clip copy/cut | `tN_lL_copy_to`, `tN_lL_cut_to`, `drum_clip_copy`, `drum_clip_cut` | Queues structural drum edits and updates lane/clip mirrors. Active destination/source paths schedule drum resync or lane resync. | queued write, optimistic mirror update, delayed readback, drum path |
-| `bank/ui_bank_params.mjs` reset banks | `tN_lL_pfx_reset`, `tN_lL_pfx_set`, `tN_pfx_reset`, `tN_cC_pfx_set`, `tN_tarp_reset`, per-bank reset keys | Queues reset and default-override writes. Comments explicitly preserve deferred order so reset and `delay_level 127` land on later ticks. | queued write, one-per-tick coalescing-sensitive write, optimistic mirror update, bank path |
+| `drum/ui_drum_lane_workflows.mjs` lane/clip copy/cut | `tN_lL_copy_to`, `tN_lL_cut_to`, `drum_clip_copy`, `drum_clip_cut` | Routes structural drum edit writes through the compatibility DSP operation queue, backed by `pendingDefaultSetParams`, and updates lane/clip mirrors. Active destination/source paths schedule drum resync or lane resync. | queued write, optimistic mirror update, delayed readback, drum path |
+| `bank/ui_bank_params.mjs` reset banks | `tN_lL_pfx_reset`, `tN_lL_pfx_set`, `tN_pfx_reset`, `tN_cC_pfx_set`, `tN_tarp_reset`, per-bank reset keys | Routes reset and default-override writes through the compatibility DSP operation queue, backed by `pendingDefaultSetParams`. Comments explicitly preserve deferred order so reset and `delay_level 127` land on later ticks. | queued write, one-per-tick coalescing-sensitive write, optimistic mirror update, bank path |
 | `bank/ui_bank_params.mjs` CC assignment defaults | `tN_cc_type_assign` | During CC bank read, default Schwung-routed tracks queue eight assignment writes one per tick. | queued write, one-per-tick coalescing-sensitive write, bank/route path |
 | `bank/ui_bank_params.mjs` leaving drum mode | `tN_active_drum_lane`, `tN_drum_perform_mode` | After direct `tN_pad_mode`, queues downstream mirror writes and defers padmap recompute until queue is empty to avoid same-track interference. | immediate write plus queued write, one-per-tick coalescing-sensitive write, delayed padmap write, bank/drum/route path |
 | `input/ui_button_cc_workflow.mjs` and `menu/ui_clear_auto_workflow.mjs` | CC lane reset, CC auto clear, aftertouch clear, TARP latch | Queues automation and latch clear operations from button/menu handlers. | queued write, bank/clip path |

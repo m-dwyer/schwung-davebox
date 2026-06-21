@@ -69,6 +69,7 @@ function clipboardState() {
 describe("drum lane workflows", () => {
   test("copyDrumLane copies step and repeat-groove mirrors, marks undo, and schedules lane resync", () => {
     const S = clipboardState();
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     S.drumLaneHasNotes[0][3] = true;
     S.drumLaneHasNotes[0][7] = false;
     S.drumClipNonEmpty[0][2] = false;
@@ -78,7 +79,10 @@ describe("drum lane workflows", () => {
     expect(S.undoAvailable).toBe(true);
     expect(S.redoAvailable).toBe(false);
     expect(S.undoSeqArpSnapshot).toBe(null);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "t0_l3_copy_to", val: "7" }]);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "t0_l3_copy_to", val: "7" },
+    ]);
     expect(S.drumLaneSteps[0][7][0]).toBe("A");
     expect(S.drumLaneSteps[0][7][1]).toBe("B");
     expect(S.drumLaneHasNotes[0][7]).toBe(true);
@@ -107,12 +111,16 @@ describe("drum lane workflows", () => {
 
   test("cutDrumLane moves step and repeat-groove mirrors, recomputes clip non-empty, and schedules lane resync", () => {
     const S = clipboardState();
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     S.drumLaneHasNotes[0][3] = true;
     S.drumLaneHasNotes[0][7] = false;
 
     cutDrumLaneImpl(S, { DRUM_LANES: 32, host_module_set_param: () => {} }, 0, 3, 7);
 
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "t0_l3_cut_to", val: "7" }]);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "t0_l3_cut_to", val: "7" },
+    ]);
     expect(S.drumLaneSteps[0][7][0]).toBe("A");
     expect(S.drumLaneSteps[0][3]).toEqual(new Array(256).fill("0"));
     expect(S.drumLaneHasNotes[0][7]).toBe(true);
@@ -142,6 +150,7 @@ describe("drum lane workflows", () => {
 
   test("copyDrumClip mirrors clip content and schedules active destination resync", () => {
     const S = clipboardState();
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     S.trackActiveClip = [2, 1];
     S.drumClipNonEmpty = [
       [false, true, true, false],
@@ -153,7 +162,10 @@ describe("drum lane workflows", () => {
     expect(S.undoAvailable).toBe(true);
     expect(S.redoAvailable).toBe(false);
     expect(S.undoSeqArpSnapshot).toBe(null);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "drum_clip_copy", val: "0 2 1 1" }]);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "drum_clip_copy", val: "0 2 1 1" },
+    ]);
     expect(S.drumClipNonEmpty[1][1]).toBe(true);
     expect(S.pendingDrumResync).toBe(2);
     expect(S.pendingDrumResyncTrack).toBe(1);
@@ -172,6 +184,7 @@ describe("drum lane workflows", () => {
 
   test("cutDrumClip mirrors destination, clears active source lane mirrors, and schedules destination resync", () => {
     const S = clipboardState();
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     S.trackActiveClip = [2, 1];
     S.drumClipNonEmpty = [
       [false, false, true, false],
@@ -180,7 +193,10 @@ describe("drum lane workflows", () => {
 
     cutDrumClipImpl(S, { DRUM_LANES: 32, host_module_set_param: () => {} }, 0, 2, 1, 1);
 
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "drum_clip_cut", val: "0 2 1 1" }]);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "drum_clip_cut", val: "0 2 1 1" },
+    ]);
     expect(S.drumClipNonEmpty[1][1]).toBe(true);
     expect(S.drumClipNonEmpty[0][2]).toBe(false);
     expect(S.drumLaneSteps[0][3]).toEqual(new Array(256).fill("0"));

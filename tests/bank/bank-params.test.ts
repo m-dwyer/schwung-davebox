@@ -119,6 +119,7 @@ describe("resetPerClipBankParamsToDefault", () => {
   test("mirrors banks 1-4 to defaults + queues delay_level re-set", () => {
     const c = calls();
     const S = makeState();
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetPerClipBankParamsToDefaultImpl(S, makeDeps(c), 0);
     for (const b of [1, 2, 3, 4]) {
       for (let k = 0; k < 8; k++) {
@@ -127,6 +128,7 @@ describe("resetPerClipBankParamsToDefault", () => {
       }
     }
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_c0_pfx_set", val: "delay_level 127" },
     ]);
     expect(S.screenDirty).toBe(true);
@@ -145,8 +147,10 @@ describe("resetFxBanks", () => {
   test("melodic: pfx_reset then delay_level re-set; SEQ ARP mirrors reset", () => {
     const c = calls();
     const S = makeState({ trackActiveClip: [1, 0] });
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetFxBanksImpl(S, makeDeps(c), 0);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_pfx_reset", val: "1" },
       { key: "t0_c1_pfx_set", val: "delay_level 127" },
     ]);
@@ -162,8 +166,10 @@ describe("resetFxBanks", () => {
   test("drum: per-lane pfx_reset then delay_level re-set", () => {
     const c = calls();
     const S = makeState({ trackPadMode: [DRUM, MELODIC], activeDrumLane: [3, 0] });
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetFxBanksImpl(S, makeDeps(c), 0);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_l3_pfx_reset", val: "1" },
       { key: "t0_l3_pfx_set", val: "delay_level 127" },
     ]);
@@ -182,8 +188,10 @@ describe("resetSingleFxBank", () => {
   test("melodic noteFx (bank 1) → tN_pfx_noteFx_reset only", () => {
     const c = calls();
     const S = makeState();
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetSingleFxBankImpl(S, makeDeps(c), 0, 1);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_pfx_noteFx_reset", val: "1" },
     ]);
   });
@@ -191,8 +199,10 @@ describe("resetSingleFxBank", () => {
   test("melodic delay (bank 3) → reset + delay_level re-set", () => {
     const c = calls();
     const S = makeState({ trackActiveClip: [1, 0] });
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetSingleFxBankImpl(S, makeDeps(c), 0, 3);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_pfx_delay_reset", val: "1" },
       { key: "t0_c1_pfx_set", val: "delay_level 127" },
     ]);
@@ -201,8 +211,10 @@ describe("resetSingleFxBank", () => {
   test("drum delay (bank 3) → per-lane pfx_set cmd + delay_level re-set", () => {
     const c = calls();
     const S = makeState({ trackPadMode: [DRUM, MELODIC], activeDrumLane: [2, 0] });
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetSingleFxBankImpl(S, makeDeps(c), 0, 3);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_l2_pfx_set", val: "pfx_delay_reset 1" },
       { key: "t0_l2_pfx_set", val: "delay_level 127" },
     ]);
@@ -221,8 +233,10 @@ describe("resetTarp", () => {
   test("queues tarp reset and mirrors ARP IN defaults", () => {
     const c = calls();
     const S = makeState();
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetTarpImpl(S, makeDeps(c), 0);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_tarp_reset", val: "1" },
     ]);
     for (let k = 0; k < 8; k++) {
