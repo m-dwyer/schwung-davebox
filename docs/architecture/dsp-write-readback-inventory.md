@@ -48,6 +48,11 @@ Migrated in `input/ui_navigation_cc_workflow.mjs`:
 
 - CC lane geometry resize writes from Loop+Up/Down on melodic bank 6
 
+Migrated in `input/ui_jog_cc_workflow.mjs`:
+
+- wrapped clip bake / drum lane bake / drum clip bake queued commits
+- scene bake queued commits
+
 Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
 
 ## Timing Classes
@@ -158,7 +163,7 @@ proved sufficient.
 | `menu/ui_clear_auto_workflow.mjs` and `input/ui_button_cc_workflow.mjs`: `tN_cc_auto_clear`, `tN_cC_at_clear`, `tN_cC_kL_cc_lane_reset` | Migrated compatibility queue family | Menu clear and Delete+Loop CC-lane reset now route through shared `clearAutomationImpl` / `resetCcLaneImpl` operation boundaries, preserving FIFO append order, CC-before-AT DSP order, JS mirror wipes/resets, popup text, undo flags, and nearby TARP latch behavior. |
 | Selected `input/ui_jog_cc_workflow.mjs` automation clear/reset paths | Preserve for reset-gesture audit | Jog reset branches still mix automation clears with FX reset, bake-adjacent state, and delayed readbacks. Keep raw until the surrounding reset gestures are characterized. |
 | `input/ui_navigation_cc_workflow.mjs` CC lane TPS / loop / res TPS writes | Migrated compatibility queue family | Loop+Up/Down melodic-bank-6 lane geometry changes now route the ordered `cc_lane_tps`, `cc_loop_set`, and optional `cc_lane_res_tps` sequence through `enqueueDspOperation`, preserving FIFO append order and JS mirror updates. |
-| `input/ui_jog_cc_workflow.mjs` bake / bake_scene | Semantic operation first | Bake writes have modal state transitions, undo marking, bank refresh, and delayed scene/clip readback. They should become explicit bake operations, not raw queue wrappers. |
+| `input/ui_jog_cc_workflow.mjs` bake / bake_scene | Migrated semantic bake operations | Wrapped clip/drum bake and scene bake commits now route through explicit bake operation helpers that enqueue the DSP write while preserving modal close timing, undo marking, popup order, bank refresh, and delayed scene/clip readback. The melodic single-loop bake path remains a direct `setParam('bake', ...)` write. |
 | `input/ui_jog_cc_workflow.mjs` playback-dir / audio-reverse resets | Migrated compatibility queue family | The reset pairs remain coupled to the broader Delete/Shift+Delete reset gestures for FX reset, automation clear ordering, local mirrors, popup, and redraw behavior. Only the drum-lane and melodic-clip playback reset pair writes now route through `enqueueDspOperation`, preserving FIFO append order and any neighboring raw automation clears. |
 | `view/ui_session_view_workflow.mjs` `snap_delete`, `snap_load`, `launch_scene`, `launch_scene_quant`, `merge_place_row` | Semantic operation first; avoid broad migration | These are session/performance commands coupled to UI modal state, mute/solo mirrors, scene buttons, and merge placement. They should be modeled as session operations before any queue migration. |
 | `sync/ui_polldsp_workflow.mjs` focused empty clip auto-launch: `tN_launch_clip` | Question before migrating | This is queued from a poll/transport transition to avoid clashing with start behavior, while record-arm auto-launch remains direct. Treat as transport timing, not a generic structural writer. |
@@ -175,20 +180,17 @@ operations, FIFO order, mirror updates, and delayed readback behavior as
 applicable. Keep migrating one window at a time; do not mechanically wrap
 unrelated raw queue producers.
 
-1. Bake and bake scene:
-   model explicit bake operations that own modal state, undo marking, bank
-   refresh, and delayed scene/clip readback before queue migration.
-2. Session view scene, snapshot, and merge commands:
+1. Session view scene, snapshot, and merge commands:
    model session operations for `snap_delete`, `snap_load`, `launch_scene`,
    `launch_scene_quant`, and `merge_place_row`; treat these as
    session/performance commands, not structural edit writes.
-3. Merge arm, stop, and cancel transport path:
+2. Merge arm, stop, and cancel transport path:
    keep separate from session view because poll/LED reconciliation and
    transport state are part of the behavior.
-4. Repeat, latch, and TARP latch sweeps:
+3. Repeat, latch, and TARP latch sweeps:
    add repeat/latch operation boundaries before migrating multi-track or
    multi-lane queued sweeps.
-5. Transpose, sidecar restore, and focused empty clip auto-launch:
+4. Transpose, sidecar restore, and focused empty clip auto-launch:
    clean up the remaining small but semantically odd producers after the
    common operation patterns are established.
 
@@ -228,7 +230,7 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
   CC-before-AT DSP operation order, mirror wipe/reset before DSP readback, and
   unchanged nearby TARP latch queue behavior.
 - Still raw/out of scope: selected `input/ui_jog_cc_workflow.mjs`
-  automation-clear reset branches, bake, and repeat/latch TARP sweeps.
+  automation-clear reset branches and repeat/latch TARP sweeps.
 
 ### CC lane geometry
 
@@ -257,8 +259,30 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
   exact Dir-before-RvSt pair ordering, automation clear writes before melodic
   Shift+Delete reset pairs, local direction/reverse/follow mirrors, and
   unchanged CC-parameter automation clear behavior.
-- Out of scope: selected jog automation clear raw producers and bake-adjacent
+- Out of scope: selected jog automation clear raw producers and adjacent
   reset gesture state.
+
+### Bake and bake scene
+
+- Owner: `input/ui_jog_cc_workflow.mjs` confirm handlers.
+- Migrated queued keys: wrapped `bake` and `bake_scene` commits now route
+  through explicit bake operation helpers, backed by
+  `S.pendingDefaultSetParams`.
+- Keep immediate: melodic single-loop OK still uses direct
+  `deps.setParam('bake', track + ' ' + clip)`.
+- Preserve modal/timing: loop-count and wrap selection transitions stay UI-only;
+  non-cancel wrapped commits append FIFO after older queued work, mark undo,
+  show the existing popup before delayed readback flags are set, and only close
+  the modal after the commit side effects run.
+- Preserve readback: scene bake schedules `pendingSceneBakeResync` /
+  `pendingSceneBakeClip`; melodic wrapped bake schedules `pendingBankRefresh`
+  and `pendingStepsReread`; active drum wrapped bake schedules
+  `pendingBankRefresh` and active-clip `pendingDrumResync`.
+- Tests pin: direct-write vs queued behavior, FIFO append order, popup-time
+  state relative to modal/undo/readback flags, cancel-without-DSP behavior, and
+  unchanged nearby raw jog automation-clear producers.
+- Out of scope: selected jog automation clear reset branches, session bake
+  picker opening/cancel gestures, and broader session/performance commands.
 
 ### Session, scene, snapshot, and merge placement
 

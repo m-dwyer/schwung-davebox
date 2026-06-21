@@ -371,6 +371,61 @@ describe("Jog CC workflow - scene bake confirm", () => {
     expect(c.log).toEqual([["popup", "SCENE", "BAKED"]]);
   });
 
+  test("wrap-phase click appends scene bake as a queued operation and preserves commit ordering", () => {
+    const c = calls();
+    const S = state({
+      confirmBakeScene: true,
+      confirmBakeSceneWrapPhase: true,
+      confirmBakeSceneWrapSel: 1,
+      confirmBakeSceneClip: 5,
+      confirmBakeSceneLoops: 2,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+    const showActionPopup = (...args: unknown[]) => {
+      c.log.push([
+        "popupAt",
+        ...args,
+        {
+          queued: [...S.pendingDefaultSetParams],
+          undoAvailable: S.undoAvailable,
+          confirmBakeScene: S.confirmBakeScene,
+          pendingSceneBakeResync: S.pendingSceneBakeResync,
+        },
+      ]);
+    };
+
+    expect(handleUiJogBakeScene(S, deps(c, { showActionPopup }), ...CLICK)).toBe(true);
+
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "bake_scene", val: "5 2 0" },
+      ],
+    });
+    expect(c.log).toEqual([
+      [
+        "popupAt",
+        "SCENE",
+        "BAKED",
+        {
+          queued: [
+            { key: "older", val: "1" },
+            { key: "bake_scene", val: "5 2 0" },
+          ],
+          undoAvailable: true,
+          confirmBakeScene: true,
+          pendingSceneBakeResync: 0,
+        },
+      ],
+    ]);
+    expect(S.pendingSceneBakeResync).toBe(2);
+    expect(S.pendingSceneBakeClip).toBe(5);
+    expect(S.confirmBakeScene).toBe(false);
+    expect(S.confirmBakeSceneWrapPhase).toBe(false);
+    expect(S.screenDirty).toBe(true);
+  });
+
   test("rotate cycles the selection 0..3", () => {
     const c = calls();
     const S = state({ confirmBakeScene: true, confirmBakeSceneSel: 3 });
@@ -522,6 +577,149 @@ describe("Jog CC workflow - bake confirm", () => {
     expect(S.pendingDefaultSetParams).toEqual([{ key: "bake", val: "1 0 0 4 0 1" }]);
     expect(S.confirmBake).toBe(false);
     expect(c.log).toContainEqual(["popup", "BAKED", "4x"]);
+  });
+
+  test("melodic single-loop OK remains a direct write and leaves queued work untouched", () => {
+    const c = calls();
+    const S = state({
+      confirmBake: true,
+      confirmBakeIsDrum: false,
+      confirmBakeIsMultiLoop: false,
+      confirmBakeSel: 0,
+      confirmBakeTrack: 1,
+      confirmBakeClip: 2,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+
+    expect(handleUiJogBakeConfirm(S, deps(c), ...CLICK)).toBe(true);
+
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [{ key: "bake", val: "1 2" }],
+      queuedOperations: [{ key: "older", val: "1" }],
+    });
+    expect(S.pendingBankRefresh).toBe(1);
+    expect(S.pendingStepsReread).toBe(2);
+    expect(S.pendingStepsRereadTrack).toBe(1);
+    expect(S.pendingStepsRereadClip).toBe(2);
+    expect(S.confirmBake).toBe(false);
+  });
+
+  test("melodic wrapped bake appends after older queued work and preserves popup/readback ordering", () => {
+    const c = calls();
+    const S = state({
+      confirmBake: true,
+      confirmBakeWrapPhase: true,
+      confirmBakeWrapSel: 0,
+      confirmBakeIsDrum: false,
+      confirmBakeLoops: 4,
+      confirmBakeTrack: 1,
+      confirmBakeClip: 0,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+    const showActionPopup = (...args: unknown[]) => {
+      c.log.push([
+        "popupAt",
+        ...args,
+        {
+          queued: [...S.pendingDefaultSetParams],
+          undoAvailable: S.undoAvailable,
+          confirmBake: S.confirmBake,
+          pendingBankRefresh: S.pendingBankRefresh,
+          pendingStepsReread: S.pendingStepsReread,
+        },
+      ]);
+    };
+
+    expect(handleUiJogBakeConfirm(S, deps(c, { showActionPopup }), ...CLICK)).toBe(true);
+
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "bake", val: "1 0 0 4 0 1" },
+      ],
+    });
+    expect(c.log).toEqual([
+      [
+        "popupAt",
+        "BAKED",
+        "4x",
+        {
+          queued: [
+            { key: "older", val: "1" },
+            { key: "bake", val: "1 0 0 4 0 1" },
+          ],
+          undoAvailable: true,
+          confirmBake: true,
+          pendingBankRefresh: -1,
+          pendingStepsReread: 0,
+        },
+      ],
+    ]);
+    expect(S.pendingBankRefresh).toBe(1);
+    expect(S.pendingStepsReread).toBe(2);
+    expect(S.pendingStepsRereadTrack).toBe(1);
+    expect(S.pendingStepsRereadClip).toBe(0);
+    expect(S.confirmBake).toBe(false);
+    expect(S.confirmBakeWrapPhase).toBe(false);
+  });
+
+  test("drum wrapped lane bake queues lane mode and preserves active-clip readback", () => {
+    const c = calls();
+    const S = state({
+      confirmBake: true,
+      confirmBakeWrapPhase: true,
+      confirmBakeWrapSel: 1,
+      confirmBakeIsDrum: true,
+      confirmBakeLoops: 2,
+      confirmBakeTrack: 0,
+      confirmBakeClip: 0,
+      confirmBakeDrumMode: 1,
+      activeDrumLane: [1, 0],
+      trackActiveClip: [0, 0],
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+
+    expect(handleUiJogBakeConfirm(S, deps(c), ...CLICK)).toBe(true);
+
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "bake", val: "0 0 1 2 1 0" },
+      ],
+    });
+    expect(S.pendingBankRefresh).toBe(0);
+    expect(S.pendingDrumResync).toBe(2);
+    expect(S.pendingDrumResyncTrack).toBe(0);
+    expect(S.confirmBake).toBe(false);
+    expect(S.confirmBakeDrumLoopOpen).toBe(false);
+  });
+
+  test("wrapped bake CANCEL closes modal without DSP writes, undo, popup, or readback", () => {
+    const c = calls();
+    const S = state({
+      confirmBake: true,
+      confirmBakeWrapPhase: true,
+      confirmBakeWrapSel: 2,
+      confirmBakeIsDrum: false,
+      confirmBakeLoops: 4,
+      confirmBakeTrack: 1,
+      confirmBakeClip: 0,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+
+    expect(handleUiJogBakeConfirm(S, deps(c), ...CLICK)).toBe(true);
+
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [{ key: "older", val: "1" }],
+    });
+    expect(S.undoAvailable).toBe(false);
+    expect(S.pendingBankRefresh).toBe(-1);
+    expect(S.pendingStepsReread).toBe(0);
+    expect(S.confirmBake).toBe(false);
+    expect(c.log).toEqual([]);
   });
 
   test("rotate in the wrap phase cycles 0..2", () => {

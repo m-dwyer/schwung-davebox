@@ -98,6 +98,17 @@ export function handleUiJogClearAutoMenu(S, deps, d1, d2) {
 }
 
 /* Scene bake confirm: two-phase jog flow — loop count, then wrap yes/no. */
+function commitBakeSceneOperation(S, deps, wrap) {
+    enqueueDspOperation(S, {
+        key: 'bake_scene',
+        val: S.confirmBakeSceneClip + ' ' + S.confirmBakeSceneLoops + ' ' + wrap
+    });
+    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+    deps.showActionPopup('SCENE', 'BAKED');
+    S.pendingSceneBakeResync = 2;
+    S.pendingSceneBakeClip   = S.confirmBakeSceneClip;
+}
+
 export function handleUiJogBakeScene(S, deps, d1, d2) {
     if (!S.confirmBakeScene) return false;
     if (d1 === 3 && d2 === 127) {
@@ -105,14 +116,7 @@ export function handleUiJogBakeScene(S, deps, d1, d2) {
             /* Wrap dialog: 0=YES, 1=NO, 2=CANCEL */
             if (S.confirmBakeSceneWrapSel < 2) {
                 const _wrap = S.confirmBakeSceneWrapSel === 0 ? 1 : 0;
-                S.pendingDefaultSetParams.push({
-                    key: 'bake_scene',
-                    val: S.confirmBakeSceneClip + ' ' + S.confirmBakeSceneLoops + ' ' + _wrap
-                });
-                S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-                deps.showActionPopup('SCENE', 'BAKED');
-                S.pendingSceneBakeResync = 2;
-                S.pendingSceneBakeClip   = S.confirmBakeSceneClip;
+                commitBakeSceneOperation(S, deps, _wrap);
             }
             S.confirmBakeSceneWrapPhase = false;
             S.confirmBakeScene          = false;
@@ -249,6 +253,34 @@ export function handleUiJogRecordBlocked(S, deps, d1, d2) {
 /* Bake confirm: multi-phase (drum CLIP/LANE → loop count → wrap, or melodic
  * single/multi-loop → wrap). Rotate moves the active selection for whichever
  * phase is open; click commits/advances/cancels. */
+function commitWrappedBakeOperation(S, deps, loops, wrap) {
+    if (S.confirmBakeIsDrum) {
+        const _laneArg = S.confirmBakeDrumMode === 1 ? ' ' + S.activeDrumLane[S.confirmBakeTrack] : ' 0';
+        enqueueDspOperation(S, {
+            key: 'bake',
+            val: S.confirmBakeTrack + ' ' + S.confirmBakeClip + ' ' + S.confirmBakeDrumMode + ' ' + loops + _laneArg + ' ' + wrap
+        });
+        S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+        deps.showActionPopup('BAKED', loops + 'x');
+        S.pendingBankRefresh = S.confirmBakeTrack;
+        if (S.confirmBakeClip === S.trackActiveClip[S.confirmBakeTrack]) {
+            S.pendingDrumResync      = 2;
+            S.pendingDrumResyncTrack = S.confirmBakeTrack;
+        }
+    } else {
+        enqueueDspOperation(S, {
+            key: 'bake',
+            val: S.confirmBakeTrack + ' ' + S.confirmBakeClip + ' 0 ' + loops + ' 0 ' + wrap
+        });
+        S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+        deps.showActionPopup('BAKED', loops + 'x');
+        S.pendingBankRefresh      = S.confirmBakeTrack;
+        S.pendingStepsReread      = 2;
+        S.pendingStepsRereadTrack = S.confirmBakeTrack;
+        S.pendingStepsRereadClip  = S.confirmBakeClip;
+    }
+}
+
 export function handleUiJogBakeConfirm(S, deps, d1, d2) {
     if (!S.confirmBake) return false;
     if (d1 === 3 && d2 === 127) {
@@ -257,31 +289,7 @@ export function handleUiJogBakeConfirm(S, deps, d1, d2) {
             if (S.confirmBakeWrapSel < 2) {
                 const _wrap = S.confirmBakeWrapSel === 0 ? 1 : 0;
                 const _loops = S.confirmBakeLoops;
-                if (S.confirmBakeIsDrum) {
-                    const _laneArg = S.confirmBakeDrumMode === 1 ? ' ' + S.activeDrumLane[S.confirmBakeTrack] : ' 0';
-                    S.pendingDefaultSetParams.push({
-                        key: 'bake',
-                        val: S.confirmBakeTrack + ' ' + S.confirmBakeClip + ' ' + S.confirmBakeDrumMode + ' ' + _loops + _laneArg + ' ' + _wrap
-                    });
-                    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-                    deps.showActionPopup('BAKED', _loops + 'x');
-                    S.pendingBankRefresh = S.confirmBakeTrack;
-                    if (S.confirmBakeClip === S.trackActiveClip[S.confirmBakeTrack]) {
-                        S.pendingDrumResync      = 2;
-                        S.pendingDrumResyncTrack = S.confirmBakeTrack;
-                    }
-                } else {
-                    S.pendingDefaultSetParams.push({
-                        key: 'bake',
-                        val: S.confirmBakeTrack + ' ' + S.confirmBakeClip + ' 0 ' + _loops + ' 0 ' + _wrap
-                    });
-                    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-                    deps.showActionPopup('BAKED', _loops + 'x');
-                    S.pendingBankRefresh      = S.confirmBakeTrack;
-                    S.pendingStepsReread      = 2;
-                    S.pendingStepsRereadTrack = S.confirmBakeTrack;
-                    S.pendingStepsRereadClip  = S.confirmBakeClip;
-                }
+                commitWrappedBakeOperation(S, deps, _loops, _wrap);
             }
             S.confirmBakeWrapPhase    = false;
             S.confirmBakeDrumLoopOpen = false;
