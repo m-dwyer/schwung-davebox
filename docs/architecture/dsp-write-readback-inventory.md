@@ -44,6 +44,10 @@ Migrated through `sync/ui_automation_clear_ops.mjs`:
 - `clearAutomationImpl`
 - `resetCcLaneImpl`
 
+Migrated in `input/ui_navigation_cc_workflow.mjs`:
+
+- CC lane geometry resize writes from Loop+Up/Down on melodic bank 6
+
 Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
 
 ## Timing Classes
@@ -83,7 +87,7 @@ Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
 | `bank/ui_bank_params.mjs` CC assignment defaults | `tN_cc_type_assign` | During CC bank read, default Schwung-routed tracks route eight assignment writes through the compatibility DSP operation queue, backed by `pendingDefaultSetParams`, one per tick. | queued write, one-per-tick coalescing-sensitive write, bank/route path |
 | `bank/ui_bank_params.mjs` leaving drum mode | `tN_active_drum_lane`, `tN_drum_perform_mode` | After direct `tN_pad_mode`, queues downstream mirror writes and defers padmap recompute until queue is empty to avoid same-track interference. | immediate write plus queued write, one-per-tick coalescing-sensitive write, delayed padmap write, bank/drum/route path |
 | `input/ui_button_cc_workflow.mjs` and `menu/ui_clear_auto_workflow.mjs` | CC lane reset, CC auto clear, aftertouch clear, TARP latch | Queues automation and latch clear operations from button/menu handlers. | queued write, bank/clip path |
-| `input/ui_jog_cc_workflow.mjs` and `input/ui_navigation_cc_workflow.mjs` | bake, clip playback dir/reverse reset, CC lane loop/resolution/TPS writes, automation clear | Mixes queued structural/automation writes with direct action writes. Several sites schedule `pendingStepsReread` or `pendingDrumResync`. | queued write, immediate write, delayed readback, bank/loop/clip/drum path |
+| `input/ui_jog_cc_workflow.mjs` and `input/ui_navigation_cc_workflow.mjs` | bake, clip playback dir/reverse reset, CC lane loop/resolution/TPS writes, automation clear | Mixes queued structural/automation writes with direct action writes. CC lane geometry resize from navigation now routes through the compatibility DSP operation queue; several other sites schedule `pendingStepsReread` or `pendingDrumResync`. | queued write, immediate write, delayed readback, bank/loop/clip/drum path |
 | `view/ui_session_view_workflow.mjs` | `snap_delete`, `snap_load`, `launch_scene`, `merge_place_row` | Queues session/performance operations from step/pad/row gestures. Clip/row copy paths delegate to structural edit ops above. | queued write, transport/performance path, clip path |
 | `input/ui_transport_cc_workflow.mjs` sample/live merge | `merge_stop`, `merge_arm` | Queues merge arm/stop so placement/finalization can reconcile through poll state. | queued write, transport/performance path |
 | `perform/ui_latch_workflows.mjs` and drum repeat stop/latch queues | `tN_drum_repeat_stop`, `tN_drum_repeat2_lane_off`, `tN_tarp_latch`, queued repeat latch/stop variants | Queues unlatch/stop operations where all-track sweeps would otherwise emit multiple same-buffer writes. | queued write, one-per-tick coalescing-sensitive write, transport/performance path, drum path |
@@ -153,7 +157,7 @@ proved sufficient.
 | `sync/ui_clip_edit_ops.mjs` `clearStepImpl` / `doLaneDoubleFillImpl`: `tN_cC_step_X_clear`, `tN_cC_kL_cc_lane_double_fill` | Migrated compatibility queue family | Structural step clear and CC-lane double-fill now route through `enqueueDspOperation` while preserving FIFO append order, optimistic mirrors, active-step note refresh, popup, and redraw behavior. |
 | `menu/ui_clear_auto_workflow.mjs` and `input/ui_button_cc_workflow.mjs`: `tN_cc_auto_clear`, `tN_cC_at_clear`, `tN_cC_kL_cc_lane_reset` | Migrated compatibility queue family | Menu clear and Delete+Loop CC-lane reset now route through shared `clearAutomationImpl` / `resetCcLaneImpl` operation boundaries, preserving FIFO append order, CC-before-AT DSP order, JS mirror wipes/resets, popup text, undo flags, and nearby TARP latch behavior. |
 | Selected `input/ui_jog_cc_workflow.mjs` automation clear/reset paths | Preserve for reset-gesture audit | Jog reset branches still mix automation clears with FX reset, bake-adjacent state, playback direction/audio-reverse reset side effects, and delayed readbacks. Keep raw until the surrounding reset gestures are characterized. |
-| `input/ui_navigation_cc_workflow.mjs` CC lane TPS / loop / res TPS writes | Preserve queue timing; possible semantic CC-lane resize operation | These are ordered multi-write lane geometry changes (`cc_lane_tps`, `cc_loop_set`, optional `cc_lane_res_tps`) with JS mirror changes. Do not simplify to direct writes without proving same-buffer ordering is safe. |
+| `input/ui_navigation_cc_workflow.mjs` CC lane TPS / loop / res TPS writes | Migrated compatibility queue family | Loop+Up/Down melodic-bank-6 lane geometry changes now route the ordered `cc_lane_tps`, `cc_loop_set`, and optional `cc_lane_res_tps` sequence through `enqueueDspOperation`, preserving FIFO append order and JS mirror updates. |
 | `input/ui_jog_cc_workflow.mjs` bake / bake_scene | Semantic operation first | Bake writes have modal state transitions, undo marking, bank refresh, and delayed scene/clip readback. They should become explicit bake operations, not raw queue wrappers. |
 | `input/ui_jog_cc_workflow.mjs` playback-dir / audio-reverse resets | Simplification candidate after audit | These are reset side-effects around broader bank reset gestures. Some may not need queue timing if they are independent keys, but they often run next to reset FX and automation clears. Keep raw until grouped by reset gesture and tested. |
 | `view/ui_session_view_workflow.mjs` `snap_delete`, `snap_load`, `launch_scene`, `launch_scene_quant`, `merge_place_row` | Semantic operation first; avoid broad migration | These are session/performance commands coupled to UI modal state, mute/solo mirrors, scene buttons, and merge placement. They should be modeled as session operations before any queue migration. |
@@ -171,26 +175,23 @@ operations, FIFO order, mirror updates, and delayed readback behavior as
 applicable. Keep migrating one window at a time; do not mechanically wrap
 unrelated raw queue producers.
 
-1. CC lane resize:
-   migrate the ordered `cc_lane_tps`, `cc_loop_set`, and optional
-   `cc_lane_res_tps` sequence with tests for FIFO order and JS mirrors.
-2. Playback direction and audio reverse reset side effects:
+1. Playback direction and audio reverse reset side effects:
    audit the broader reset gestures first, then migrate only the reset-pair
    families for drum lanes and melodic clips.
-3. Bake and bake scene:
+2. Bake and bake scene:
    model explicit bake operations that own modal state, undo marking, bank
    refresh, and delayed scene/clip readback before queue migration.
-4. Session view scene, snapshot, and merge commands:
+3. Session view scene, snapshot, and merge commands:
    model session operations for `snap_delete`, `snap_load`, `launch_scene`,
    `launch_scene_quant`, and `merge_place_row`; treat these as
    session/performance commands, not structural edit writes.
-5. Merge arm, stop, and cancel transport path:
+4. Merge arm, stop, and cancel transport path:
    keep separate from session view because poll/LED reconciliation and
    transport state are part of the behavior.
-6. Repeat, latch, and TARP latch sweeps:
+5. Repeat, latch, and TARP latch sweeps:
    add repeat/latch operation boundaries before migrating multi-track or
    multi-lane queued sweeps.
-7. Transpose, sidecar restore, and focused empty clip auto-launch:
+6. Transpose, sidecar restore, and focused empty clip auto-launch:
    clean up the remaining small but semantically odd producers after the
    common operation patterns are established.
 
@@ -236,12 +237,15 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
 ### CC lane geometry
 
 - Owner: `input/ui_navigation_cc_workflow.mjs`.
-- Raw queued keys: `tN_cC_kL_cc_lane_tps`, `tN_cC_kL_cc_loop_set`,
-  optional `tN_cC_kL_cc_lane_res_tps`.
+- Migrated queued keys: `tN_cC_kL_cc_lane_tps`, `tN_cC_kL_cc_loop_set`,
+  optional `tN_cC_kL_cc_lane_res_tps` now route through
+  `enqueueDspOperation`, backed by `S.pendingDefaultSetParams`.
 - Preserve mirror/timing: lane length, loop start, TPS/resolution mirrors, and
   ordered multi-write geometry changes.
-- Tests to pin: queued write order for the three-key path, fallback two-key
-  path, mirror updates, and active-lane redraw behavior.
+- Tests pin: no direct writes for the resize branch, FIFO append after
+  existing queued work, exact ordered two-key and three-key paths, invalid
+  resolution reset write behavior, mirror updates, active-lane redraw behavior,
+  and unchanged nearby page-nav resolution direct write behavior.
 - Out of scope: unrelated jog-bank resets and automation clears.
 
 ### Playback direction and audio reverse resets

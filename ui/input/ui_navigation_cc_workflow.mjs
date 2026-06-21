@@ -1,3 +1,5 @@
+import { enqueueDspOperation } from '../sync/ui_dsp_operation_queue.mjs';
+
 /* Track/Session navigation buttons split out of _onCC_transport.
  *
  * handleUiPageNavButton — Left/Right page navigation (and Loop+bank-6
@@ -101,11 +103,11 @@ export function handleUiSceneNavButton(S, deps, d1, d2) {
                     S.ccLaneResTps[_zt][_zac][_zL] = _zResValid ? _zNewRes : 0;
                 }
                 var _zPre = 't' + _zt + '_c' + _zac + '_k' + _zL;
-                S.pendingDefaultSetParams.push({ key: _zPre + '_cc_lane_tps', val: String(_zNewTps) });
-                S.pendingDefaultSetParams.push({ key: _zPre + '_cc_loop_set',
+                enqueueDspOperation(S, { key: _zPre + '_cc_lane_tps', val: String(_zNewTps) });
+                enqueueDspOperation(S, { key: _zPre + '_cc_loop_set',
                     val: String(((S.ccLaneLoopStart[_zt][_zac][_zL] | 0) << 16) | (_zNewLen & 0xFFFF)) });
                 if (_zOldRes > 0)
-                    S.pendingDefaultSetParams.push({ key: _zPre + '_cc_lane_res_tps',
+                    enqueueDspOperation(S, { key: _zPre + '_cc_lane_res_tps',
                         val: String(S.ccLaneResTps[_zt][_zac][_zL]) });
                 var _zMaxPage = Math.max(0, Math.ceil(_zNewLen / 16) - 1);
                 if (S.trackCurrentPage[_zt] > _zMaxPage) S.trackCurrentPage[_zt] = _zMaxPage;
