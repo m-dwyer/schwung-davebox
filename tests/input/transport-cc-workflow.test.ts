@@ -7,6 +7,7 @@ import {
   handleUiSampleButton,
   handleUiUndoButton,
 } from "@overture-ui/input/ui_transport_cc_workflow.mjs";
+import { traceDspWrites } from "../helpers/dsp-queue-trace";
 
 function calls() {
   const log: Array<[string, ...unknown[]]> = [];
@@ -401,12 +402,21 @@ describe("Transport CC workflow - Sample button", () => {
 
   test("Sample press during merge queues merge stop", () => {
     const c = calls();
-    const S = state({ dspMergeState: 2 });
+    const S = state({
+      dspMergeState: 2,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
 
     handleUiSampleButton(S, deps(c), 118, 127);
 
     expect(S.sampleUsedAsModifier).toBe(true);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "merge_stop", val: "1" }]);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "merge_stop", val: "1" },
+      ],
+    });
     expect(c.log).toEqual([]);
   });
 
@@ -434,14 +444,25 @@ describe("Transport CC workflow - Sample button", () => {
 
   test("Sample release in Session View arms live merge when unused", () => {
     const c = calls();
-    const S = state({ sampleHeld: true, sessionView: true, tickCount: 2000 });
+    const S = state({
+      sampleHeld: true,
+      sessionView: true,
+      tickCount: 2000,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
 
     handleUiSampleButton(S, deps(c), 118, 0);
 
     expect(S.sampleHeld).toBe(false);
     expect(S.pendingMergeArm).toBe(true);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "merge_arm", val: "1" }]);
     expect(S.actionPopupEndTick).toBe(2280);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "merge_arm", val: "1" },
+      ],
+    });
     expect(c.log).toEqual([
       ["led", 118, 5],
       ["popup", "LIVE MERGE", "Capturing all 8", "tracks. Tap Sample", "again to stop."],
@@ -450,13 +471,24 @@ describe("Transport CC workflow - Sample button", () => {
 
   test("Sample release in Session View stops active merge", () => {
     const c = calls();
-    const S = state({ sampleHeld: true, sessionView: true, dspMergeState: 1 });
+    const S = state({
+      sampleHeld: true,
+      sessionView: true,
+      dspMergeState: 1,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
 
     handleUiSampleButton(S, deps(c), 118, 0);
 
     expect(S.sampleHeld).toBe(false);
     expect(S.pendingMergeArm).toBe(false);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "merge_stop", val: "1" }]);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "merge_stop", val: "1" },
+      ],
+    });
     expect(c.log).toEqual([]);
   });
 

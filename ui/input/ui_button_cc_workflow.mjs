@@ -9,6 +9,7 @@
  * Handlers take everything via deps so they can be unit-tested without the host. */
 
 import { resetCcLaneImpl } from '../sync/ui_automation_clear_ops.mjs';
+import { queueMergeCancelOperation } from '../sync/ui_transport_dsp_operations.mjs';
 
 export function handleUiShiftButton(S, deps, d1, d2) {
     if (d1 !== deps.moveShift) return;
@@ -97,9 +98,8 @@ export function handleUiCaptureButton(S, deps, d1, d2) {
          * Sample's press behavior. */
         if (S.pendingSceneBakePicker) { S.pendingSceneBakePicker = false; S.captureUsedAsModifier = true; }
         if (S.pendingMergePlacement)  {
-            S.pendingMergePlacement = false;
             S.captureUsedAsModifier = true;
-            S.pendingDefaultSetParams.push({ key: 'merge_cancel', val: '1' });
+            queueMergeCancelOperation(S);
         }
         if (S.confirmBake)            { S.confirmBake            = false; S.captureUsedAsModifier = true;
                                         S.confirmBakeDrumLoopOpen = false; S.confirmBakeWrapPhase = false; }

@@ -1,3 +1,8 @@
+import {
+    queueMergeArmOperation,
+    queueMergeStopOperation
+} from '../sync/ui_transport_dsp_operations.mjs';
+
 export function handleUiBackButton(S, deps, d1, d2) {
     if (d1 !== deps.moveBack || d2 !== 127) return;
 
@@ -295,7 +300,7 @@ export function handleUiSampleButton(S, deps, d1, d2) {
             S.sampleUsedAsModifier    = true;
             deps.forceRedraw();
         } else if (S.dspMergeState !== 0) {
-            S.pendingDefaultSetParams.push({ key: 'merge_stop', val: '1' });
+            queueMergeStopOperation(S);
             S.sampleUsedAsModifier = true;
             /* LED stays green until DSP finalizes at page boundary. */
         }
@@ -307,14 +312,10 @@ export function handleUiSampleButton(S, deps, d1, d2) {
         S.sampleHeld = false;
         if (!S.sampleUsedAsModifier && S.sessionView) {
             if (S.dspMergeState !== 0) {
-                S.pendingDefaultSetParams.push({ key: 'merge_stop', val: '1' });
+                queueMergeStopOperation(S);
                 /* LED stays Red until DSP finalizes at page boundary. */
             } else {
-                S.pendingDefaultSetParams.push({ key: 'merge_arm', val: '1' });
-                S.pendingMergeArm = true;
-                deps.setButtonLED(deps.moveSample, deps.red);
-                deps.showActionPopup('LIVE MERGE', 'Capturing all 8', 'tracks. Tap Sample', 'again to stop.');
-                S.actionPopupEndTick = S.tickCount + 280;
+                queueMergeArmOperation(S, deps);
             }
         }
     }

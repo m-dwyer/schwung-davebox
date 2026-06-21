@@ -174,7 +174,7 @@ proved sufficient.
 | `view/ui_session_view_workflow.mjs` `snap_delete`, `snap_load`, `launch_scene`, `launch_scene_quant`, `merge_place_row` | Migrated semantic session operations | These session/performance commands now route through explicit session operation helpers while preserving UI modal state, mute/solo mirrors, scene button flashes, and merge placement state. Structural clip/row copy paths remain delegated to structural edit operations. |
 | `sync/ui_polldsp_workflow.mjs` focused empty clip auto-launch: `tN_launch_clip` | Question before migrating | This is queued from a poll/transport transition to avoid clashing with start behavior, while record-arm auto-launch remains direct. Treat as transport timing, not a generic structural writer. |
 | `sync/ui_clip_state_sync.mjs` sidecar restore: `perf_mods` | Question before migrating | This is a post-restore performance-mod replay. It is not a normal user edit and may belong with restore sequencing or direct `sendPerfMods` semantics. |
-| `input/ui_transport_cc_workflow.mjs` merge arm/stop/cancel | Semantic operation first; transport/performance path | Merge commands intentionally reconcile through DSP poll state and LEDs. Keep separate from structural DSP queue migration. |
+| `input/ui_transport_cc_workflow.mjs` / `input/ui_button_cc_workflow.mjs` merge arm/stop/cancel | Migrated semantic transport operations | Merge arm/stop/cancel now route through explicit transport operation helpers, backed by `pendingDefaultSetParams`. Arm owns pending arm, Sample LED, and popup timing; cancel owns pending placement close; DSP poll remains the readback/reconciliation owner. |
 | `drum/ui_drum_repeat_workflows.mjs` / `perform/ui_latch_workflows.mjs` repeat stop/latch and TARP latch sweeps | Preserve queue timing; performance path | All-track or multi-lane sweeps can emit many same-family writes. Queue timing is probably load-bearing, but these should be migrated only inside a repeat/latch operation boundary. |
 | `perform/ui_transpose_workflow.mjs` `t0_xpose_apply` | Semantic operation first | Commit/cancel both interact with padmap recompute and preview state. A transpose operation can own ordering; do not mechanically wrap first. |
 
@@ -186,13 +186,13 @@ operations, FIFO order, mirror updates, and delayed readback behavior as
 applicable. Keep migrating one window at a time; do not mechanically wrap
 unrelated raw queue producers.
 
-1. Merge arm, stop, and cancel transport path:
-   keep separate from session view because poll/LED reconciliation and
+1. Focused empty clip auto-launch:
+   keep separate from session view because transport-start timing and
    transport state are part of the behavior.
 2. Repeat, latch, and TARP latch sweeps:
    add repeat/latch operation boundaries before migrating multi-track or
    multi-lane queued sweeps.
-3. Transpose, sidecar restore, and focused empty clip auto-launch:
+3. Transpose and sidecar restore:
    clean up the remaining small but semantically odd producers after the
    common operation patterns are established.
 
@@ -299,20 +299,26 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
   snapshot mute/solo mirror restore before `snap_load`, scene button flash
   state for quantized launch, merge placement close plus exact row payloads,
   and structural clip/row copy delegation without local queue writes.
-- Out of scope: merge arm/stop/cancel transport path and broader DSP poll merge
-  reconciliation beyond the existing poll state tests.
+- Out of scope for the session migration: transport-owned merge arm/stop/cancel
+  and broader DSP poll merge reconciliation beyond the existing poll state
+  tests.
 
 ### Transport and focused empty clip auto-launch
 
 - Owners: `sync/ui_polldsp_workflow.mjs` and
   `input/ui_transport_cc_workflow.mjs`.
-- Raw queued keys: focused `tN_launch_clip`, `merge_stop`, `merge_arm`,
-  `merge_cancel`.
+- Raw queued keys: focused `tN_launch_clip`.
+- Migrated queued keys: `merge_stop`, `merge_arm`, and `merge_cancel` now route
+  through explicit transport operation helpers, backed by
+  `S.pendingDefaultSetParams`.
 - Preserve mirror/timing: transport start behavior, focused empty clip rules,
   record-arm auto-launch differences, merge LEDs, and DSP poll reconciliation.
 - Tests to pin: auto-launch only happens on the intended transport transition,
-  merge arm/stop/cancel still reconcile via poll state, and direct launch paths
-  remain direct where required.
+  and direct launch paths remain direct where required.
+- Tests pin for merge migration: no direct `setParam`, FIFO append after older
+  queued work, pending merge arm/placement mutation boundaries, Sample LED and
+  popup timing, and DSP poll reconciliation. Session merge placement remains
+  delegated to `ui_session_dsp_operations.mjs`.
 - Out of scope: do not merge with structural clip launch/select behavior.
 
 ### Restore and sidecar replay

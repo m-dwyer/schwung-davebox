@@ -375,13 +375,23 @@ describe("Button CC workflow - Capture button", () => {
 
   test("Capture press cancels pending merge placement and queues merge_cancel", () => {
     const c = calls();
-    const S = state({ pendingMergePlacement: true });
+    const S = state({
+      pendingMergePlacement: true,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
 
     handleUiCaptureButton(S, deps(c), CAPTURE, 127);
 
     expect(S.pendingMergePlacement).toBe(false);
     expect(S.captureUsedAsModifier).toBe(true);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "merge_cancel", val: "1" }]);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "merge_cancel", val: "1" },
+      ],
+    });
+    expect(c.log).toEqual([["padmap"], ["redraw"]]);
   });
 
   test("Capture press cancels the clip-bake confirm and its sub-flags", () => {

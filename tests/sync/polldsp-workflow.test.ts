@@ -341,6 +341,22 @@ describe("pollMergeStateMachine (Block F)", () => {
     expect(S.pendingMergeArm).toBe(false);
   });
 
+  test("merge arm write remains reconciled by DSP poll state", () => {
+    const c = calls();
+    const S = makeState({
+      pendingMergeArm: true,
+      pendingDefaultSetParams: [{ key: "merge_arm", val: "1" }],
+    });
+
+    pollMergeStateMachine(S, makeDeps(c), snap({ 55: "1" }));
+
+    expect(S.pendingMergeArm).toBe(false);
+    expect(S.dspMergeState).toBe(1);
+    expect(S.pendingMergePlacement).toBe(false);
+    expect(S.pendingDefaultSetParams).toEqual([{ key: "merge_arm", val: "1" }]);
+    expect(c.log).toEqual([]);
+  });
+
   test("transition into CAPTURED (4) shows placement dialog", () => {
     const c = calls();
     const S = makeState({ dspMergeState: 1 });
