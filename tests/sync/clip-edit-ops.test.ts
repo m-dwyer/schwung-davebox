@@ -306,12 +306,15 @@ describe("copyRow / cutRow / clearRow", () => {
 });
 
 describe("copyStep", () => {
-  test("melodic: pushes step copy_to + mirrors clip step", () => {
+  test("melodic: appends step copy_to + mirrors clip step", () => {
     const c = calls();
-    const S = makeState();
+    const S = makeState({
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     (S.clipSteps as any)[0][0][3] = 6;
     copyStepImpl(S, makeDeps(c), 0, 0, 3, 7);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_c0_step_3_copy_to", val: "7" },
     ]);
     expect((S.clipSteps as any)[0][0][7]).toBe(6);
@@ -319,16 +322,29 @@ describe("copyStep", () => {
     expect(S.pendingStepsReread).toBe(2);
   });
 
-  test("drum: pushes lane step copy_to + mirrors lane step", () => {
+  test("drum: appends lane step copy_to + mirrors lane step", () => {
     const c = calls();
-    const S = makeState({ trackPadMode: [DRUM, MELODIC], activeDrumLane: [4, 0] });
+    const S = makeState({
+      trackPadMode: [DRUM, MELODIC],
+      activeDrumLane: [4, 0],
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     (S.drumLaneSteps as any)[0][4][3] = "7";
     copyStepImpl(S, makeDeps(c), 0, 0, 3, 9);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_l4_step_3_copy_to", val: "9" },
     ]);
     expect((S.drumLaneSteps as any)[0][4][9]).toBe("7");
     expect(S.pendingDrumLaneResyncLane).toBe(4);
+  });
+
+  test("no setParam → no-op", () => {
+    const c = calls();
+    const S = makeState();
+    copyStepImpl(S, makeDeps(c, { noSet: true }), 0, 0, 3, 7);
+    expect(S.pendingDefaultSetParams).toEqual([]);
+    expect(S.undoAvailable).toBe(false);
   });
 });
 

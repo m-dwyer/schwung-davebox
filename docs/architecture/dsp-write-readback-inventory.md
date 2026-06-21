@@ -6,6 +6,26 @@ This inventory documents current Overture UI DSP writes and DSP readback schedul
 
 This is not a refactor proposal.
 
+## Compatibility Migration Progress
+
+The compatibility migration keeps `S.pendingDefaultSetParams` as the backing
+storage while routing selected structural writes through
+`sync/ui_dsp_operation_queue.mjs`.
+
+Migrated in `sync/ui_clip_edit_ops.mjs`:
+
+- `clearClipImpl`
+- `hardResetClipImpl`
+- `copyClipImpl`
+- `cutClipImpl`
+- `copyStepImpl`
+
+Still intentionally raw in `sync/ui_clip_edit_ops.mjs`:
+
+- `copyRowImpl`
+- `cutRowImpl`
+- `clearRowImpl`
+
 ## Timing Classes
 
 | Class | Current meaning |
