@@ -499,7 +499,10 @@ describe("applyBankParam", () => {
     const c = calls();
     const S = makeState();
     applyBankParamImpl(S, makeDeps(c), 0, 1, 0, 3); // NOTE FX Oct
-    expect(c.log).toEqual([["setParam", "t0_noteFX_octave", "3"]]);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [{ key: "t0_noteFX_octave", val: "3" }],
+      queuedOperations: [],
+    });
   });
 
   test("drum bank 1-3 → per-lane pfx_set", () => {
@@ -528,13 +531,15 @@ describe("applyBankParam", () => {
     applyBankParamImpl(S, makeDeps(c), 0, 4, 4, 2); // SEQ ARP Stps
     applyBankParamImpl(S, makeDeps(c), 0, 5, 4, 1); // ARP IN Stps
     applyBankParamImpl(S, makeDeps(c), 0, 3, 6, 1); // DELAY Rtrg
-    expect(c.names()).toEqual([]); // no direct setParam
-    expect(S.pendingDefaultSetParams).toEqual([
-      { key: "older", val: "1" },
-      { key: "t0_seq_arp_steps_mode", val: "2" },
-      { key: "t0_tarp_steps_mode", val: "1" },
-      { key: "t0_delay_retrig", val: "1" },
-    ]);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "t0_seq_arp_steps_mode", val: "2" },
+        { key: "t0_tarp_steps_mode", val: "1" },
+        { key: "t0_delay_retrig", val: "1" },
+      ],
+    });
   });
 
   test("clip_resolution → mirror clipTPS + setParam idx; blocked while record-armed on track", () => {
