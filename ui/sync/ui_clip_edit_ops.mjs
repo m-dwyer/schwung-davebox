@@ -27,7 +27,7 @@ import {
 } from './ui_dsp_operation_queue.mjs';
 
 /* deps: setParam, resetPerClipBankParamsToDefault, refreshPerClipBankParams,
- * forceRedraw, effectiveClip */
+ * forceRedraw, effectiveClip, clipHasContent, refreshSeqNotesIfCurrent */
 
 export function clearClipImpl(S, deps, t, ac, keepPlaying) {
     if (!deps.setParam) return;
@@ -287,6 +287,16 @@ export function copyStepImpl(S, deps, t, ac, srcAbs, dstAbs) {
     }
 }
 
+/* Clear all notes from a step and deactivate it (single atomic DSP write, JS mirror update). */
+export function clearStepImpl(S, deps, t, ac, absIdx) {
+    if (!deps.setParam) return;
+    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+    enqueueDspOperation(S, { key: 't' + t + '_c' + ac + '_step_' + absIdx + '_clear', val: '1' });
+    S.clipSteps[t][ac][absIdx] = 0;
+    if (S.clipNonEmpty[t][ac]) S.clipNonEmpty[t][ac] = deps.clipHasContent(t, ac);
+    deps.refreshSeqNotesIfCurrent(t, ac, absIdx);
+}
+
 /* Clear all 8 tracks for a scene row (single atomic DSP write, JS mirror update). */
 export function clearRowImpl(S, deps, rowIdx) {
     if (!deps.setParam) return;
@@ -395,4 +405,19 @@ export function doDoubleFillImpl(S, deps) {
             deps.forceRedraw();
         }
     }
+}
+
+export function doLaneDoubleFillImpl(S, deps) {
+    var _t = S.activeTrack, _ac = deps.effectiveClip(_t), _l = S.ccActiveLane[_t];
+    var _len = S.ccLaneLength[_t][_ac][_l] || S.clipLength[_t][_ac];
+    if (_len * 2 > 256) {
+        showActionPopup('LANE FULL');
+        return;
+    }
+    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+    S.ccLaneLength[_t][_ac][_l] = _len * 2;
+    var _pre = 't' + _t + '_c' + _ac + '_k' + _l;
+    enqueueDspOperation(S, { key: _pre + '_cc_lane_double_fill', val: '1' });
+    showActionPopup('LANE LOOP', 'DOUBLED');
+    deps.forceRedraw();
 }

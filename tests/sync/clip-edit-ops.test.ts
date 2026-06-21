@@ -2,12 +2,14 @@ import { describe, expect, test } from "vitest";
 import {
   clearClipImpl,
   clearRowImpl,
+  clearStepImpl,
   copyClipImpl,
   copyRowImpl,
   copyStepImpl,
   cutClipImpl,
   cutRowImpl,
   doDoubleFillImpl,
+  doLaneDoubleFillImpl,
   hardResetClipImpl,
   selectClipOnTrackImpl,
 } from "@overture-ui/sync/ui_clip_edit_ops.mjs";
@@ -47,6 +49,8 @@ function makeDeps(c: ReturnType<typeof calls>, opts: { noSet?: boolean; effClip?
     refreshPerClipBankParams: c.fn("refreshPerClipBankParams"),
     forceRedraw: c.fn("forceRedraw"),
     effectiveClip: (t: number) => opts.effClip ?? 0,
+    clipHasContent: c.fn("clipHasContent"),
+    refreshSeqNotesIfCurrent: c.fn("refreshSeqNotesIfCurrent"),
   };
 }
 
@@ -60,6 +64,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
     undoSeqArpSnapshot: { x: 1 },
     activeTrack: 0,
     activeBank: 0,
+    ccActiveLane: Array(NT).fill(0),
     playing: false,
     clearDrainHold: 0,
     trackPadMode: Array(NT).fill(MELODIC),
@@ -459,6 +464,35 @@ describe("copyStep", () => {
   });
 });
 
+describe("clearStep", () => {
+  test("appends step clear, clears mirror, refreshes active notes", () => {
+    const c = calls();
+    const S = makeState({
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+    (S.clipSteps as any)[0][0][5] = 1;
+    clearStepImpl(S, makeDeps(c), 0, 0, 5);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "t0_c0_step_5_clear", val: "1" },
+    ]);
+    expect((S.clipSteps as any)[0][0][5]).toBe(0);
+    expect(c.log).toContainEqual(["clipHasContent", 0, 0]);
+    expect(c.log).toContainEqual(["refreshSeqNotesIfCurrent", 0, 0, 5]);
+    expect(S.undoAvailable).toBe(true);
+    expect(S.redoAvailable).toBe(false);
+    expect(S.undoSeqArpSnapshot).toBeNull();
+  });
+
+  test("no setParam → no-op", () => {
+    const c = calls();
+    const S = makeState();
+    clearStepImpl(S, makeDeps(c, { noSet: true }), 0, 0, 5);
+    expect(S.pendingDefaultSetParams).toEqual([]);
+    expect(S.undoAvailable).toBe(false);
+  });
+});
+
 describe("selectClipOnTrack — 4-branch state machine", () => {
   test("playing active clip, pending stop → re-launch legato", () => {
     const c = calls();
@@ -549,5 +583,53 @@ describe("doDoubleFill", () => {
     doDoubleFillImpl(S, makeDeps(c, { effClip: 0 }));
     expect(c.names()).not.toContain("setParam");
     expect((S.clipLength as any)[0][0]).toBe(200);
+  });
+});
+
+describe("doLaneDoubleFill", () => {
+  test("appends cc lane double-fill, doubles effective lane length, and redraws", () => {
+    const c = calls();
+    const S = makeState({
+      activeTrack: 0,
+      ccActiveLane: [3, 0],
+      ccLaneLength: grid([2, 2, 8], () => 9),
+      clipLength: grid([2, 2], () => 16),
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+    doLaneDoubleFillImpl(S, makeDeps(c, { effClip: 1 }));
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "t0_c1_k3_cc_lane_double_fill", val: "1" },
+    ]);
+    expect((S.ccLaneLength as any)[0][1][3]).toBe(18);
+    expect(c.names()).toContain("forceRedraw");
+    expect(S.undoAvailable).toBe(true);
+    expect(S.redoAvailable).toBe(false);
+    expect(S.undoSeqArpSnapshot).toBeNull();
+  });
+
+  test("uses clip length when lane length is unset", () => {
+    const c = calls();
+    const S = makeState({
+      ccLaneLength: grid([2, 2, 8], () => 0),
+      clipLength: grid([2, 2], () => 16),
+    });
+    doLaneDoubleFillImpl(S, makeDeps(c, { effClip: 0 }));
+    expect((S.ccLaneLength as any)[0][0][0]).toBe(32);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "t0_c0_k0_cc_lane_double_fill", val: "1" },
+    ]);
+  });
+
+  test("lane already too long → LANE FULL, no queued write", () => {
+    const c = calls();
+    const S = makeState({
+      ccLaneLength: grid([2, 2, 8], () => 200),
+      clipLength: grid([2, 2], () => 16),
+    });
+    doLaneDoubleFillImpl(S, makeDeps(c, { effClip: 0 }));
+    expect(S.pendingDefaultSetParams).toEqual([]);
+    expect((S.ccLaneLength as any)[0][0][0]).toBe(200);
+    expect(S.undoAvailable).toBe(false);
   });
 });

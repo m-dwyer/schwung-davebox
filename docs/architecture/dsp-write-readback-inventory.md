@@ -19,9 +19,11 @@ Migrated in `sync/ui_clip_edit_ops.mjs`:
 - `copyClipImpl`
 - `cutClipImpl`
 - `copyStepImpl`
+- `clearStepImpl`
 - `copyRowImpl`
 - `cutRowImpl`
 - `clearRowImpl`
+- `doLaneDoubleFillImpl`
 
 Migrated in `drum/ui_drum_lane_workflows.mjs`:
 
@@ -70,7 +72,7 @@ Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
 | --- | --- | --- | --- |
 | `sync/ui_clip_edit_ops.mjs` `clearClipImpl` | `tN_cC_drum_clear`, `tN_cC_clear`, `tN_cC_clear_keep`, optional `tN_launch_clip` | Priority queues clear via `unshift`, sets `clearDrainHold = 1`, updates JS mirrors immediately, schedules `pendingStepsReread = 2` for melodic clear. | unshift/priority write, one-per-tick coalescing-sensitive write, optimistic mirror update, delayed readback, clip/drum path |
 | `sync/ui_clip_edit_ops.mjs` `hardResetClipImpl` | `tN_cC_drum_reset`, `tN_cC_hard_reset` | Priority queues reset via `unshift`, sets `clearDrainHold = 1`, resets JS mirrors. Drum active clip mirrors are reset locally. | unshift/priority write, optimistic mirror update, clip/drum path |
-| `sync/ui_clip_edit_ops.mjs` copy/cut/row/step ops | `clip_copy`, `clip_cut`, `row_copy`, `row_cut`, `row_clear`, `tN_lL_step_X_copy_to`, `tN_cC_step_X_copy_to` | Queues single atomic DSP structural commands, updates destination/source mirrors immediately, schedules drum or melodic delayed readback for active affected content. | queued write, one-per-tick coalescing-sensitive write, optimistic mirror update, delayed readback, clip/drum path |
+| `sync/ui_clip_edit_ops.mjs` copy/cut/row/step ops | `clip_copy`, `clip_cut`, `row_copy`, `row_cut`, `row_clear`, `tN_lL_step_X_copy_to`, `tN_cC_step_X_copy_to`, `tN_cC_step_X_clear`, `tN_cC_kL_cc_lane_double_fill` | Queues single atomic DSP structural commands, updates destination/source mirrors immediately, schedules drum or melodic delayed readback for active affected content. Step clear refreshes active-step notes; CC lane double-fill preserves popup/redraw behavior. | queued write, one-per-tick coalescing-sensitive write, optimistic mirror update, delayed readback, clip/drum/bank path |
 | `drum/ui_drum_lane_workflows.mjs` lane/clip copy/cut | `tN_lL_copy_to`, `tN_lL_cut_to`, `drum_clip_copy`, `drum_clip_cut` | Routes structural drum edit writes through the compatibility DSP operation queue, backed by `pendingDefaultSetParams`, and updates lane/clip mirrors. Active destination/source paths schedule drum resync or lane resync. | queued write, optimistic mirror update, delayed readback, drum path |
 | `bank/ui_bank_params.mjs` reset banks | `tN_lL_pfx_reset`, `tN_lL_pfx_set`, `tN_pfx_reset`, `tN_cC_pfx_set`, `tN_tarp_reset`, per-bank reset keys | Routes reset and default-override writes through the compatibility DSP operation queue, backed by `pendingDefaultSetParams`. Comments explicitly preserve deferred order so reset and `delay_level 127` land on later ticks. | queued write, one-per-tick coalescing-sensitive write, optimistic mirror update, bank path |
 | `bank/ui_bank_params.mjs` CC assignment defaults | `tN_cc_type_assign` | During CC bank read, default Schwung-routed tracks route eight assignment writes through the compatibility DSP operation queue, backed by `pendingDefaultSetParams`, one per tick. | queued write, one-per-tick coalescing-sensitive write, bank/route path |
@@ -81,7 +83,6 @@ Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
 | `input/ui_transport_cc_workflow.mjs` sample/live merge | `merge_stop`, `merge_arm` | Queues merge arm/stop so placement/finalization can reconcile through poll state. | queued write, transport/performance path |
 | `perform/ui_latch_workflows.mjs` and drum repeat stop/latch queues | `tN_drum_repeat_stop`, `tN_drum_repeat2_lane_off`, `tN_tarp_latch`, queued repeat latch/stop variants | Queues unlatch/stop operations where all-track sweeps would otherwise emit multiple same-buffer writes. | queued write, one-per-tick coalescing-sensitive write, transport/performance path, drum path |
 | `perform/ui_transpose_workflow.mjs` | `t0_xpose_apply` | Queues transpose apply/cancel operations after preview. | queued write, bank/performance path |
-| `ui.js` local `clearStep` and `doLaneDoubleFill` | `tN_cC_step_X_clear`, `tN_cC_kL_cc_lane_double_fill` | Still-local wrappers queue single-step and CC-lane structural operations, update mirrors immediately. | queued write, optimistic mirror update, clip/bank path |
 
 ## Immediate Write Producers
 
@@ -144,8 +145,7 @@ proved sufficient.
 | `bank/ui_bank_params.mjs` CC assignment defaults: `tN_cc_type_assign` | Migrated compatibility queue family | Runs after CC bank read when defaulting Schwung-routed tracks to Sch1-8. It now routes through `enqueueDspOperation` while preserving FIFO append order on `pendingDefaultSetParams`. |
 | `bank/ui_bank_params.mjs` leaving drum mode: `tN_active_drum_lane`, `tN_drum_perform_mode`, `pendingPadNoteMapRecompute` | Preserve queue timing; do not simplify casually | This has the strongest local timing comment: direct `tN_pad_mode=0` followed by same-callback `tN_*` pushes can drop `pad_mode`, and padmap recompute waits until the queue is empty. If migrated, include padmap timing tests; do not split from `pendingPadNoteMapRecompute`. |
 | `bank/ui_bank_params.mjs` deferred bank apply keys: `seq_arp_steps_mode`, `tarp_steps_mode`, `delay_retrig` | Preserve queue timing; good narrow next migration | Comment documents same-track same-buffer coalescing, especially `delay_retrig` followed by clip launch. This is a small writer family, but keep direct writes for the rest of `applyBankParamImpl`. |
-| `ui/ui.js` local `clearStep`: `tN_cC_step_X_clear` | Likely preserve queue timing; semantic-operation candidate | This is a structural step edit with optimistic mirror updates and active-note refresh, similar to migrated step copy. Prefer moving it out of `ui.js` into the clip edit operation module before or while routing through the queue helper. |
-| `ui/ui.js` local `doLaneDoubleFill`: `tN_cC_kL_cc_lane_double_fill` | Likely preserve queue timing; semantic-operation candidate | Structural CC-lane edit with mirror update and redraw. It should probably join the clip/bank structural edit family instead of staying as a local raw queue push. |
+| `sync/ui_clip_edit_ops.mjs` `clearStepImpl` / `doLaneDoubleFillImpl`: `tN_cC_step_X_clear`, `tN_cC_kL_cc_lane_double_fill` | Migrated compatibility queue family | Structural step clear and CC-lane double-fill now route through `enqueueDspOperation` while preserving FIFO append order, optimistic mirrors, active-step note refresh, popup, and redraw behavior. |
 | `menu/ui_clear_auto_workflow.mjs` and automation clears in input workflows: `tN_cc_auto_clear`, `tN_cC_at_clear`, CC lane reset keys | Preserve for now; semantic automation-clear operation first | Several callers update CC/AT mirrors and sometimes schedule readback. A shared `clearAutomation` / `resetCcLane` operation could remove duplication before queue migration. |
 | `input/ui_navigation_cc_workflow.mjs` CC lane TPS / loop / res TPS writes | Preserve queue timing; possible semantic CC-lane resize operation | These are ordered multi-write lane geometry changes (`cc_lane_tps`, `cc_loop_set`, optional `cc_lane_res_tps`) with JS mirror changes. Do not simplify to direct writes without proving same-buffer ordering is safe. |
 | `input/ui_jog_cc_workflow.mjs` bake / bake_scene | Semantic operation first | Bake writes have modal state transitions, undo marking, bank refresh, and delayed scene/clip readback. They should become explicit bake operations, not raw queue wrappers. |
@@ -159,10 +159,8 @@ proved sufficient.
 
 Recommended next order:
 
-1. Migrate `applyBankParamImpl` deferred keys through the compatibility queue helper, with FIFO tests.
-2. Either migrate CC assignment defaults, or pause to extract local `ui.js` structural ops (`clearStep`, `doLaneDoubleFill`) into proper operation modules.
-3. Before touching leaving-drum-mode, add tests around queue-empty padmap recompute and same-track ordering.
-4. Defer session, transport, live merge, repeat/latch, transpose, and bake paths until each has a semantic operation boundary.
+1. Before touching leaving-drum-mode, add tests around queue-empty padmap recompute and same-track ordering.
+2. Defer session, transport, live merge, repeat/latch, transpose, and bake paths until each has a semantic operation boundary.
 
 ## Safest First Compatibility-Migration Candidate
 

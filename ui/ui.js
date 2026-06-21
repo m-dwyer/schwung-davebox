@@ -393,12 +393,14 @@ import {
 import {
     clearClipImpl,
     clearRowImpl,
+    clearStepImpl,
     copyClipImpl,
     copyRowImpl,
     copyStepImpl,
     cutClipImpl,
     cutRowImpl,
     doDoubleFillImpl,
+    doLaneDoubleFillImpl,
     hardResetClipImpl,
     selectClipOnTrackImpl
 } from './sync/ui_clip_edit_ops.mjs';
@@ -806,12 +808,7 @@ function refreshSeqNotesIfCurrent(t, ac, absIdx) {
 
 /* Clear all notes from a step and deactivate it (atomic DSP write). */
 function clearStep(t, ac, absIdx) {
-    if (typeof host_module_set_param !== 'function') return;
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 't' + t + '_c' + ac + '_step_' + absIdx + '_clear', val: '1' });
-    S.clipSteps[t][ac][absIdx] = 0;
-    if (S.clipNonEmpty[t][ac]) S.clipNonEmpty[t][ac] = clipHasContent(t, ac);
-    refreshSeqNotesIfCurrent(t, ac, absIdx);
+    return clearStepImpl(S, createClipEditOpsDeps(), t, ac, absIdx);
 }
 
 function showModePopup(title, items, activeIdx) {
@@ -834,7 +831,9 @@ function createClipEditOpsDeps() {
         resetPerClipBankParamsToDefault,
         refreshPerClipBankParams,
         forceRedraw,
-        effectiveClip
+        effectiveClip,
+        clipHasContent,
+        refreshSeqNotesIfCurrent
     };
 }
 
@@ -1000,18 +999,7 @@ function doDoubleFill() {
 }
 
 function doLaneDoubleFill() {
-    var _t = S.activeTrack, _ac = effectiveClip(_t), _l = S.ccActiveLane[_t];
-    var _len = S.ccLaneLength[_t][_ac][_l] || S.clipLength[_t][_ac];
-    if (_len * 2 > 256) {
-        showActionPopup('LANE FULL');
-        return;
-    }
-    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.ccLaneLength[_t][_ac][_l] = _len * 2;
-    var _pre = 't' + _t + '_c' + _ac + '_k' + _l;
-    S.pendingDefaultSetParams.push({ key: _pre + '_cc_lane_double_fill', val: '1' });
-    showActionPopup('LANE LOOP', 'DOUBLED');
-    forceRedraw();
+    return doLaneDoubleFillImpl(S, createClipEditOpsDeps());
 }
 
 function openGlobalMenu() {
