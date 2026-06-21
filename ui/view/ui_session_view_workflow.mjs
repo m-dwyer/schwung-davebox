@@ -1,3 +1,11 @@
+import {
+    queueMergePlaceRowOperation,
+    queueQuantizedSceneLaunchOperation,
+    queueSceneLaunchOperation,
+    queueSnapshotDeleteOperation,
+    queueSnapshotLoadOperation
+} from '../sync/ui_session_dsp_operations.mjs';
+
 /**
  * Host slice this module needs (Interface Segregation). The composition root in
  * ui.js structurally satisfies this; `State` is the shared contract (ui/types).
@@ -49,7 +57,7 @@ export function handleSessionViewStepPress(S, deps, idx) {
             deps.showActionPopup('PERF PRESET', 'CLEARED');
         } else if (S.muteHeld) {
             S.snapshots[idx] = null;
-            S.pendingDefaultSetParams.push({ key: 'snap_delete', val: String(idx) });
+            queueSnapshotDeleteOperation(S, idx);
             deps.showActionPopup('MUTE STATE', 'CLEARED');
         }
         deps.forceRedraw();
@@ -74,7 +82,7 @@ export function handleSessionViewStepPress(S, deps, idx) {
 
     if (S.pendingMergePlacement) {
         S.pendingMergePlacement = false;
-        S.pendingDefaultSetParams.push({ key: 'merge_place_row', val: String(idx) });
+        queueMergePlaceRowOperation(S, idx);
         S.screenDirty = true;
         return true;
     }
@@ -93,7 +101,7 @@ export function handleSessionViewStepPress(S, deps, idx) {
     }
 
     if (!S.deleteHeld) {
-        S.pendingDefaultSetParams.push({ key: 'launch_scene', val: String(idx) });
+        queueSceneLaunchOperation(S, idx);
     }
     return true;
 }
@@ -132,7 +140,7 @@ export function handleSessionViewStepRelease(S, deps, btn) {
                     S.drumLaneSolo[t] = 0;
                 }
             }
-            S.pendingDefaultSetParams.push({ key: 'snap_load', val: String(btn) });
+            queueSnapshotLoadOperation(S, btn);
         }
     }
 
@@ -296,7 +304,7 @@ export function handleSessionViewSideRowPress(S, deps, rowIdx) {
 
     if (S.pendingMergePlacement) {
         S.pendingMergePlacement = false;
-        S.pendingDefaultSetParams.push({ key: 'merge_place_row', val: String(clipIdx) });
+        queueMergePlaceRowOperation(S, clipIdx);
         S.screenDirty = true;
         return true;
     }
@@ -373,9 +381,7 @@ export function handleSessionViewSideRowPress(S, deps, rowIdx) {
     if (!S.sessionView) return false;
 
     S.sceneBtnFlashTick[3 - rowIdx] = S.tickCount;
-    S.pendingDefaultSetParams.push({
-        key: S.shiftHeld ? 'launch_scene_quant' : 'launch_scene',
-        val: String(clipIdx)
-    });
+    if (S.shiftHeld) queueQuantizedSceneLaunchOperation(S, clipIdx);
+    else queueSceneLaunchOperation(S, clipIdx);
     return true;
 }

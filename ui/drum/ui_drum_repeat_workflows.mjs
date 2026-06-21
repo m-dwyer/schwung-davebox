@@ -1,3 +1,10 @@
+import {
+    queueDrumRepeat2StopOperation,
+    queueDrumRepeatGrooveResetOperation,
+    queueDrumRepeatLatchedOperation,
+    queueDrumRepeatStopOperation
+} from '../perform/ui_performance_dsp_operations.mjs';
+
 const REPEAT_GROOVE_DEFAULT_GATE = 0xFF;
 const REPEAT_GROOVE_DEFAULT_GATE_LEN = 8;
 const REPEAT_GROOVE_DEFAULT_VEL_SCALE = 100;
@@ -20,7 +27,7 @@ export function resetDrumRepeatGrooveMirrorsForLane(S, track, lane) {
 
 export function resetDrumRepeatGrooveForLane(S, deps, track, lane) {
     resetDrumRepeatGrooveShapeMirrorsForLane(S, track, lane);
-    S.pendingDefaultSetParams.push({ key: 't' + track + '_l' + lane + '_repeat_groove_reset', val: '1' });
+    queueDrumRepeatGrooveResetOperation(S, track, lane);
     deps.showActionPopup('RPT GROOVE', 'RESET');
 }
 
@@ -328,7 +335,7 @@ export function latchHeldDrumRepeatsOnLoopPress(S, deps, track) {
     } else if (S.drumRepeatHeldPad[track] >= 0) {
         S.drumRepeatLatched[track] = true;
         if (typeof deps.host_module_set_param === 'function')
-            S.pendingDefaultSetParams.push({ key: 't' + track + '_drum_repeat_latched', val: '1' });
+            queueDrumRepeatLatchedOperation(S, track);
     }
 }
 
@@ -345,12 +352,12 @@ export function handleDrumRepeatLoopTapRelease(S, loopTapTicks) {
         S.drumRepeatLatched[track] = false;
         S.drumRepeatHeldPad[track] = -1;
         S.drumRepeatHeldPadsStack[track].length = 0;
-        S.pendingDefaultSetParams.push({ key: 't' + track + '_drum_repeat_stop', val: '1' });
+        queueDrumRepeatStopOperation(S, track);
         handled = true;
     }
     if (S.drumRepeat2LatchedLanes[track].size > 0) {
         S.drumRepeat2LatchedLanes[track].clear();
-        S.pendingDefaultSetParams.push({ key: 't' + track + '_drum_repeat2_stop', val: '1' });
+        queueDrumRepeat2StopOperation(S, track);
         handled = true;
     }
     return handled;

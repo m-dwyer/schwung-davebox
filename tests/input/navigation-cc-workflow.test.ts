@@ -3,6 +3,7 @@ import {
   handleUiPageNavButton,
   handleUiSceneNavButton,
 } from "@overture-ui/input/ui_navigation_cc_workflow.mjs";
+import { traceDspWrites } from "../helpers/dsp-queue-trace";
 
 // Real Move CC values for the nav buttons (injected via deps, so only matter
 // for readability here).
@@ -254,11 +255,89 @@ describe("Navigation CC workflow - Up/Down scene/zoom/octave nav", () => {
 
     expect(S.ccLaneTps[1][0][2]).toBe(48);
     expect(S.ccLaneLength[1][0][2]).toBe(8);
-    expect(S.pendingDefaultSetParams).toEqual([
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
       { key: "t1_c0_k2_cc_lane_tps", val: "48" },
       { key: "t1_c0_k2_cc_loop_set", val: String((0 << 16) | (8 & 0xffff)) },
-    ]);
+      ],
+    });
     expect(c.log).toContainEqual(["redraw"]);
+  });
+
+  test("Loop+bank6 melodic Down appends the exact three-write resize sequence after existing queued work", () => {
+    const c = calls();
+    const S = state({
+      loopHeld: true,
+      activeBank: 6,
+      activeTrack: 1,
+      trackCurrentPage: [0, 3, 0, 0],
+      pendingDefaultSetParams: [{ key: "older", val: "0" }],
+    });
+    // old tps 96 (index 3) -> Down to 48; lane length 12 -> ticks 1152 -> newLen 24
+    S.ccLaneTps[1][0][2] = 96;
+    S.ccLaneLength[1][0][2] = 12;
+    S.ccLaneLoopStart[1][0][2] = 4;
+    S.ccLaneResTps[1][0][2] = 192;
+
+    handleUiSceneNavButton(S, deps(c), DOWN, 127);
+
+    expect(S.ccLaneTps[1][0][2]).toBe(48);
+    expect(S.ccLaneLength[1][0][2]).toBe(24);
+    expect(S.ccLaneLoopStart[1][0][2]).toBe(4);
+    expect(S.ccLaneResTps[1][0][2]).toBe(96);
+    expect(S.trackCurrentPage[1]).toBe(1);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "0" },
+        { key: "t1_c0_k2_cc_lane_tps", val: "48" },
+        { key: "t1_c0_k2_cc_loop_set", val: String((4 << 16) | (24 & 0xffff)) },
+        { key: "t1_c0_k2_cc_lane_res_tps", val: "96" },
+      ],
+    });
+    expect(c.log).toEqual([["effectiveClip", 1], ["redraw"]]);
+  });
+
+  test("Loop+bank6 melodic resize preserves invalid resolution fallback and writes reset res TPS", () => {
+    const c = calls();
+    const S = state({
+      loopHeld: true,
+      activeBank: 6,
+      activeTrack: 1,
+    });
+    // old res scales to 192, which is not a supported RES_TPS value, so the
+    // JS mirror resets to 0 and the optional third DSP write preserves that.
+    S.ccLaneTps[1][0][2] = 24;
+    S.ccLaneLength[1][0][2] = 16;
+    S.ccLaneResTps[1][0][2] = 96;
+
+    handleUiSceneNavButton(S, deps(c), UP, 127);
+
+    expect(S.ccLaneTps[1][0][2]).toBe(48);
+    expect(S.ccLaneLength[1][0][2]).toBe(8);
+    expect(S.ccLaneResTps[1][0][2]).toBe(0);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "t1_c0_k2_cc_lane_tps", val: "48" },
+        { key: "t1_c0_k2_cc_loop_set", val: String((0 << 16) | (8 & 0xffff)) },
+        { key: "t1_c0_k2_cc_lane_res_tps", val: "0" },
+      ],
+    });
+  });
+
+  test("Loop+bank6 melodic resize leaves unrelated page-nav resolution producer unchanged", () => {
+    const c = calls();
+    const S = state({ loopHeld: true, activeBank: 6, activeTrack: 1 });
+    S.ccLaneResTps[1][0][2] = 48;
+
+    handleUiPageNavButton(S, deps(c), LEFT, 127);
+
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [{ key: "t1_c0_k2_cc_lane_res_tps", val: "24" }],
+      queuedOperations: [],
+    });
   });
 
   test("Loop+bank6 zoom short-circuits the octave handlers", () => {

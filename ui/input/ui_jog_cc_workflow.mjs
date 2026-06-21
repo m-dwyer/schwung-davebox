@@ -1,3 +1,6 @@
+import { enqueueDspOperation } from '../sync/ui_dsp_operation_queue.mjs';
+import { clearAutomationImpl } from '../sync/ui_automation_clear_ops.mjs';
+
 /* Jog-wheel CC handlers split out of _onCC_jog.
  *
  * The jog wheel emits two CCs: a physical CLICK (MoveMainButton = CC 3, fired
@@ -96,6 +99,17 @@ export function handleUiJogClearAutoMenu(S, deps, d1, d2) {
 }
 
 /* Scene bake confirm: two-phase jog flow — loop count, then wrap yes/no. */
+function commitBakeSceneOperation(S, deps, wrap) {
+    enqueueDspOperation(S, {
+        key: 'bake_scene',
+        val: S.confirmBakeSceneClip + ' ' + S.confirmBakeSceneLoops + ' ' + wrap
+    });
+    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+    deps.showActionPopup('SCENE', 'BAKED');
+    S.pendingSceneBakeResync = 2;
+    S.pendingSceneBakeClip   = S.confirmBakeSceneClip;
+}
+
 export function handleUiJogBakeScene(S, deps, d1, d2) {
     if (!S.confirmBakeScene) return false;
     if (d1 === 3 && d2 === 127) {
@@ -103,14 +117,7 @@ export function handleUiJogBakeScene(S, deps, d1, d2) {
             /* Wrap dialog: 0=YES, 1=NO, 2=CANCEL */
             if (S.confirmBakeSceneWrapSel < 2) {
                 const _wrap = S.confirmBakeSceneWrapSel === 0 ? 1 : 0;
-                S.pendingDefaultSetParams.push({
-                    key: 'bake_scene',
-                    val: S.confirmBakeSceneClip + ' ' + S.confirmBakeSceneLoops + ' ' + _wrap
-                });
-                S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-                deps.showActionPopup('SCENE', 'BAKED');
-                S.pendingSceneBakeResync = 2;
-                S.pendingSceneBakeClip   = S.confirmBakeSceneClip;
+                commitBakeSceneOperation(S, deps, _wrap);
             }
             S.confirmBakeSceneWrapPhase = false;
             S.confirmBakeScene          = false;
@@ -247,6 +254,34 @@ export function handleUiJogRecordBlocked(S, deps, d1, d2) {
 /* Bake confirm: multi-phase (drum CLIP/LANE → loop count → wrap, or melodic
  * single/multi-loop → wrap). Rotate moves the active selection for whichever
  * phase is open; click commits/advances/cancels. */
+function commitWrappedBakeOperation(S, deps, loops, wrap) {
+    if (S.confirmBakeIsDrum) {
+        const _laneArg = S.confirmBakeDrumMode === 1 ? ' ' + S.activeDrumLane[S.confirmBakeTrack] : ' 0';
+        enqueueDspOperation(S, {
+            key: 'bake',
+            val: S.confirmBakeTrack + ' ' + S.confirmBakeClip + ' ' + S.confirmBakeDrumMode + ' ' + loops + _laneArg + ' ' + wrap
+        });
+        S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+        deps.showActionPopup('BAKED', loops + 'x');
+        S.pendingBankRefresh = S.confirmBakeTrack;
+        if (S.confirmBakeClip === S.trackActiveClip[S.confirmBakeTrack]) {
+            S.pendingDrumResync      = 2;
+            S.pendingDrumResyncTrack = S.confirmBakeTrack;
+        }
+    } else {
+        enqueueDspOperation(S, {
+            key: 'bake',
+            val: S.confirmBakeTrack + ' ' + S.confirmBakeClip + ' 0 ' + loops + ' 0 ' + wrap
+        });
+        S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
+        deps.showActionPopup('BAKED', loops + 'x');
+        S.pendingBankRefresh      = S.confirmBakeTrack;
+        S.pendingStepsReread      = 2;
+        S.pendingStepsRereadTrack = S.confirmBakeTrack;
+        S.pendingStepsRereadClip  = S.confirmBakeClip;
+    }
+}
+
 export function handleUiJogBakeConfirm(S, deps, d1, d2) {
     if (!S.confirmBake) return false;
     if (d1 === 3 && d2 === 127) {
@@ -255,31 +290,7 @@ export function handleUiJogBakeConfirm(S, deps, d1, d2) {
             if (S.confirmBakeWrapSel < 2) {
                 const _wrap = S.confirmBakeWrapSel === 0 ? 1 : 0;
                 const _loops = S.confirmBakeLoops;
-                if (S.confirmBakeIsDrum) {
-                    const _laneArg = S.confirmBakeDrumMode === 1 ? ' ' + S.activeDrumLane[S.confirmBakeTrack] : ' 0';
-                    S.pendingDefaultSetParams.push({
-                        key: 'bake',
-                        val: S.confirmBakeTrack + ' ' + S.confirmBakeClip + ' ' + S.confirmBakeDrumMode + ' ' + _loops + _laneArg + ' ' + _wrap
-                    });
-                    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-                    deps.showActionPopup('BAKED', _loops + 'x');
-                    S.pendingBankRefresh = S.confirmBakeTrack;
-                    if (S.confirmBakeClip === S.trackActiveClip[S.confirmBakeTrack]) {
-                        S.pendingDrumResync      = 2;
-                        S.pendingDrumResyncTrack = S.confirmBakeTrack;
-                    }
-                } else {
-                    S.pendingDefaultSetParams.push({
-                        key: 'bake',
-                        val: S.confirmBakeTrack + ' ' + S.confirmBakeClip + ' 0 ' + _loops + ' 0 ' + _wrap
-                    });
-                    S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-                    deps.showActionPopup('BAKED', _loops + 'x');
-                    S.pendingBankRefresh      = S.confirmBakeTrack;
-                    S.pendingStepsReread      = 2;
-                    S.pendingStepsRereadTrack = S.confirmBakeTrack;
-                    S.pendingStepsRereadClip  = S.confirmBakeClip;
-                }
+                commitWrappedBakeOperation(S, deps, _loops, _wrap);
             }
             S.confirmBakeWrapPhase    = false;
             S.confirmBakeDrumLoopOpen = false;
@@ -580,8 +591,8 @@ export function handleUiJogShiftDeleteReset(S, deps, d1, d2) {
         S.bankParams[_dt][0][6] = 0;
         S.clipSeqFollow[_dt][_dac] = true;
         S.bankParams[_dt][0][7] = 1;
-        S.pendingDefaultSetParams.push({ key: 't' + _dt + '_l' + _dl + '_playback_dir', val: '0' });
-        S.pendingDefaultSetParams.push({ key: 't' + _dt + '_l' + _dl + '_playback_audio_reverse', val: '0' });
+        enqueueDspOperation(S, { key: 't' + _dt + '_l' + _dl + '_playback_dir', val: '0' });
+        enqueueDspOperation(S, { key: 't' + _dt + '_l' + _dl + '_playback_audio_reverse', val: '0' });
         deps.showActionPopup('LANE PARAMS', 'RESET');
     } else {
         /* Melodic: full reset — NOTE FX, HARMZ, MIDI DLY, + SEQ ARP */
@@ -596,12 +607,7 @@ export function handleUiJogShiftDeleteReset(S, deps, d1, d2) {
         }
         /* Bank reset also clears ALL automation (CC + AT, + PB later) for the clip. */
         const _ac2 = deps.effectiveClip(_arpTrack);
-        S.trackCCAutoBits[_arpTrack][_ac2] = 0;
-        S.trackCCLiveVal[_arpTrack] = new Array(8).fill(-1);
-        S.clipCCVal[_arpTrack][_ac2] = new Array(8).fill(-1);
-        S.clipAtHas[_arpTrack][_ac2] = false;
-        S.pendingDefaultSetParams.push({ key: 't' + _arpTrack + '_cc_auto_clear', val: String(_ac2) });
-        S.pendingDefaultSetParams.push({ key: 't' + _arpTrack + '_c' + _ac2 + '_at_clear', val: '1' });
+        clearAutomationImpl(S, _arpTrack, _ac2, { cc: true, at: true });
         S.undoSeqArpSnapshot = { track: _arpTrack, params: _arpParams };
         const _mac = deps.effectiveClip(_arpTrack);
         S.clipPlaybackDir[_arpTrack][_mac] = 0;
@@ -609,8 +615,8 @@ export function handleUiJogShiftDeleteReset(S, deps, d1, d2) {
         S.bankParams[_arpTrack][0][6] = 0;
         S.clipSeqFollow[_arpTrack][_mac] = true;
         S.bankParams[_arpTrack][0][7] = 1;
-        S.pendingDefaultSetParams.push({ key: 't' + _arpTrack + '_clip_playback_dir', val: '0' });
-        S.pendingDefaultSetParams.push({ key: 't' + _arpTrack + '_clip_playback_audio_reverse', val: '0' });
+        enqueueDspOperation(S, { key: 't' + _arpTrack + '_clip_playback_dir', val: '0' });
+        enqueueDspOperation(S, { key: 't' + _arpTrack + '_clip_playback_audio_reverse', val: '0' });
         deps.showActionPopup('CLIP PARAMS', 'RESET');
     }
     return true;
@@ -631,15 +637,10 @@ export function handleUiJogDeleteReset(S, deps, d1, d2) {
         /* AUTOMATION bank: Delete+jog clears ALL automation types for the
          * active clip (CC + AT, and PB once implemented). */
         const _t = S.activeTrack, _c = deps.effectiveClip(_t);
-        S.trackCCAutoBits[_t][_c] = 0;
-        S.trackCCLiveVal[_t] = new Array(8).fill(-1);
         /* Reset the resting values too → "—" (cc_auto_clear clears both
          * automation and rest_val DSP-side). */
-        S.clipCCVal[_t][_c] = new Array(8).fill(-1);
-        S.clipAtHas[_t][_c] = false;
         /* Defer clear pushes — synchronous from jog handler coalesces. */
-        S.pendingDefaultSetParams.push({ key: 't' + _t + '_cc_auto_clear', val: String(_c) });
-        S.pendingDefaultSetParams.push({ key: 't' + _t + '_c' + _c + '_at_clear', val: '1' });
+        clearAutomationImpl(S, _t, _c, { cc: true, at: true });
         deps.showActionPopup('AUTOMATION', 'CLEAR');
         deps.invalidateLEDCache();
         return true;
@@ -662,8 +663,8 @@ export function handleUiJogDeleteReset(S, deps, d1, d2) {
             S.bankParams[_bt][0][6] = 0;
             S.clipSeqFollow[_bt][_bac] = true;
             S.bankParams[_bt][0][7] = 1;
-            S.pendingDefaultSetParams.push({ key: 't' + _bt + '_l' + _bl + '_playback_dir', val: '0' });
-            S.pendingDefaultSetParams.push({ key: 't' + _bt + '_l' + _bl + '_playback_audio_reverse', val: '0' });
+            enqueueDspOperation(S, { key: 't' + _bt + '_l' + _bl + '_playback_dir', val: '0' });
+            enqueueDspOperation(S, { key: 't' + _bt + '_l' + _bl + '_playback_audio_reverse', val: '0' });
             deps.showActionPopup('BANK RESET');
         }
     } else if (S.activeBank === 5) {
@@ -682,8 +683,8 @@ export function handleUiJogDeleteReset(S, deps, d1, d2) {
         S.bankParams[_mt][0][6] = 0;
         S.clipSeqFollow[_mt][_mac2] = true;
         S.bankParams[_mt][0][7] = 1;
-        S.pendingDefaultSetParams.push({ key: 't' + _mt + '_clip_playback_dir', val: '0' });
-        S.pendingDefaultSetParams.push({ key: 't' + _mt + '_clip_playback_audio_reverse', val: '0' });
+        enqueueDspOperation(S, { key: 't' + _mt + '_clip_playback_dir', val: '0' });
+        enqueueDspOperation(S, { key: 't' + _mt + '_clip_playback_audio_reverse', val: '0' });
         deps.showActionPopup('BANK RESET');
     }
     return true;

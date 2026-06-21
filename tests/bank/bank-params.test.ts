@@ -11,6 +11,7 @@ import {
 } from "@overture-ui/bank/ui_bank_params.mjs";
 import { BANKS, TPS_VALUES } from "@overture-ui/core/ui_constants.mjs";
 import { S as runtimeState } from "@overture-ui/core/ui_state.mjs";
+import { traceDspWrites } from "../helpers/dsp-queue-trace";
 
 // Param-bank read/write/reset cluster. The resets/applies are
 // COALESCING-SENSITIVE set_param emitters: these tests pin the exact
@@ -119,6 +120,7 @@ describe("resetPerClipBankParamsToDefault", () => {
   test("mirrors banks 1-4 to defaults + queues delay_level re-set", () => {
     const c = calls();
     const S = makeState();
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetPerClipBankParamsToDefaultImpl(S, makeDeps(c), 0);
     for (const b of [1, 2, 3, 4]) {
       for (let k = 0; k < 8; k++) {
@@ -127,6 +129,7 @@ describe("resetPerClipBankParamsToDefault", () => {
       }
     }
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_c0_pfx_set", val: "delay_level 127" },
     ]);
     expect(S.screenDirty).toBe(true);
@@ -145,8 +148,10 @@ describe("resetFxBanks", () => {
   test("melodic: pfx_reset then delay_level re-set; SEQ ARP mirrors reset", () => {
     const c = calls();
     const S = makeState({ trackActiveClip: [1, 0] });
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetFxBanksImpl(S, makeDeps(c), 0);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_pfx_reset", val: "1" },
       { key: "t0_c1_pfx_set", val: "delay_level 127" },
     ]);
@@ -162,8 +167,10 @@ describe("resetFxBanks", () => {
   test("drum: per-lane pfx_reset then delay_level re-set", () => {
     const c = calls();
     const S = makeState({ trackPadMode: [DRUM, MELODIC], activeDrumLane: [3, 0] });
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetFxBanksImpl(S, makeDeps(c), 0);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_l3_pfx_reset", val: "1" },
       { key: "t0_l3_pfx_set", val: "delay_level 127" },
     ]);
@@ -182,8 +189,10 @@ describe("resetSingleFxBank", () => {
   test("melodic noteFx (bank 1) → tN_pfx_noteFx_reset only", () => {
     const c = calls();
     const S = makeState();
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetSingleFxBankImpl(S, makeDeps(c), 0, 1);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_pfx_noteFx_reset", val: "1" },
     ]);
   });
@@ -191,8 +200,10 @@ describe("resetSingleFxBank", () => {
   test("melodic delay (bank 3) → reset + delay_level re-set", () => {
     const c = calls();
     const S = makeState({ trackActiveClip: [1, 0] });
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetSingleFxBankImpl(S, makeDeps(c), 0, 3);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_pfx_delay_reset", val: "1" },
       { key: "t0_c1_pfx_set", val: "delay_level 127" },
     ]);
@@ -201,8 +212,10 @@ describe("resetSingleFxBank", () => {
   test("drum delay (bank 3) → per-lane pfx_set cmd + delay_level re-set", () => {
     const c = calls();
     const S = makeState({ trackPadMode: [DRUM, MELODIC], activeDrumLane: [2, 0] });
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetSingleFxBankImpl(S, makeDeps(c), 0, 3);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_l2_pfx_set", val: "pfx_delay_reset 1" },
       { key: "t0_l2_pfx_set", val: "delay_level 127" },
     ]);
@@ -221,8 +234,10 @@ describe("resetTarp", () => {
   test("queues tarp reset and mirrors ARP IN defaults", () => {
     const c = calls();
     const S = makeState();
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     resetTarpImpl(S, makeDeps(c), 0);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_tarp_reset", val: "1" },
     ]);
     for (let k = 0; k < 8; k++) {
@@ -300,16 +315,21 @@ describe("readBankParams", () => {
   test("bank 6 Schwung-default path: route 0 + shadow + all types 0 → Sch1-8 + cc_type_assign queue", () => {
     const c = calls();
     const S = makeState({ trackRoute: [0, 0] });
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     readBankParamsImpl(S, makeDeps(c, { hasShadowSetParam: true }), 0, 6);
     expect((S.trackCCType as any)[0]).toEqual([2, 2, 2, 2, 2, 2, 2, 2]);
     expect((S.trackCCAssign as any)[0]).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     expect((S.schLabel as any)[0].every((x: unknown) => x === null)).toBe(true);
-    expect(S.pendingDefaultSetParams).toEqual(
-      Array.from({ length: 8 }, (_, k) => ({
-        key: "t0_cc_type_assign",
-        val: `${k} 2 ${k + 1}`,
-      })),
-    );
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        ...Array.from({ length: 8 }, (_, k) => ({
+          key: "t0_cc_type_assign",
+          val: `${k} 2 ${k + 1}`,
+        })),
+      ],
+    });
   });
 
   test("bank 6 Schwung-default skipped when hasShadowSetParam is false", () => {
@@ -385,14 +405,38 @@ describe("applyTrackConfig", () => {
   test("pad_mode→Keys defers lane resets + flags pad-map recompute", () => {
     const c = calls();
     const S = makeState({ trackPadMode: [DRUM, MELODIC], activeTrack: 0, activeBank: 7 });
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     applyTrackConfigImpl(S, makeDeps(c), 0, "pad_mode", MELODIC);
     expect(S.activeBank).toBe(0); // bank 7 hidden on melodic
-    expect(S.pendingDefaultSetParams).toEqual([
-      { key: "t0_active_drum_lane", val: "0" },
-      { key: "t0_drum_perform_mode", val: "0" },
-    ]);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [{ key: "t0_pad_mode", val: "0" }],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "t0_active_drum_lane", val: "0" },
+        { key: "t0_drum_perform_mode", val: "0" },
+      ],
+    });
     expect(S.pendingPadNoteMapRecompute).toBe(true);
     expect(c.names()).toContain("forceRedraw");
+  });
+
+  test("pad_mode→Keys keeps pad-map recompute coupled to the active track only", () => {
+    const c = calls();
+    const S = makeState({ trackPadMode: [DRUM, DRUM], activeTrack: 0, activeBank: 0 });
+    applyTrackConfigImpl(S, makeDeps(c), 1, "pad_mode", MELODIC);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [{ key: "t1_pad_mode", val: "0" }],
+      queuedOperations: [
+        { key: "t1_active_drum_lane", val: "0" },
+        { key: "t1_drum_perform_mode", val: "0" },
+      ],
+    });
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "t1_active_drum_lane", val: "0" },
+      { key: "t1_drum_perform_mode", val: "0" },
+    ]);
+    expect(S.pendingPadNoteMapRecompute).toBe(false);
+    expect(c.names()).not.toContain("forceRedraw");
   });
 });
 
@@ -455,7 +499,10 @@ describe("applyBankParam", () => {
     const c = calls();
     const S = makeState();
     applyBankParamImpl(S, makeDeps(c), 0, 1, 0, 3); // NOTE FX Oct
-    expect(c.log).toEqual([["setParam", "t0_noteFX_octave", "3"]]);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [{ key: "t0_noteFX_octave", val: "3" }],
+      queuedOperations: [],
+    });
   });
 
   test("drum bank 1-3 → per-lane pfx_set", () => {
@@ -477,16 +524,22 @@ describe("applyBankParam", () => {
     expect(cBlk.names()).toEqual([]);
   });
 
-  test("deferred keys (seq_arp_steps_mode / delay_retrig) queue instead of direct set", () => {
+  test("deferred keys append FIFO through the DSP operation queue", () => {
     const c = calls();
     const S = makeState();
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     applyBankParamImpl(S, makeDeps(c), 0, 4, 4, 2); // SEQ ARP Stps
+    applyBankParamImpl(S, makeDeps(c), 0, 5, 4, 1); // ARP IN Stps
     applyBankParamImpl(S, makeDeps(c), 0, 3, 6, 1); // DELAY Rtrg
-    expect(c.names()).toEqual([]); // no direct setParam
-    expect(S.pendingDefaultSetParams).toEqual([
-      { key: "t0_seq_arp_steps_mode", val: "2" },
-      { key: "t0_delay_retrig", val: "1" },
-    ]);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "t0_seq_arp_steps_mode", val: "2" },
+        { key: "t0_tarp_steps_mode", val: "1" },
+        { key: "t0_delay_retrig", val: "1" },
+      ],
+    });
   });
 
   test("clip_resolution → mirror clipTPS + setParam idx; blocked while record-armed on track", () => {

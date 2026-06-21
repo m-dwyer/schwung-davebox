@@ -1,3 +1,5 @@
+import { clearAutomationImpl } from '../sync/ui_automation_clear_ops.mjs';
+
 export function openClearAutoMenuImpl(S) {
     S.clearAutoMenu = { sel: 0, at: false, cc: false };
     S.screenDirty = true;
@@ -24,16 +26,7 @@ export function clearAutoMenuClickImpl(S, deps) {
     else if (m.sel === 4) { closeClearAutoMenuImpl(S); return; }   /* Cancel */
     else {                                           /* CLEAR — execute */
         const t = S.activeTrack, c = deps.effectiveClip(t);
-        if (m.cc) {
-            S.trackCCAutoBits[t][c] = 0;
-            S.trackCCLiveVal[t] = new Array(8).fill(-1);
-            S.clipCCVal[t][c] = new Array(8).fill(-1);
-            S.pendingDefaultSetParams.push({ key: 't' + t + '_cc_auto_clear', val: String(c) });
-        }
-        if (m.at) {
-            S.clipAtHas[t][c] = false;
-            S.pendingDefaultSetParams.push({ key: 't' + t + '_c' + c + '_at_clear', val: '1' });
-        }
+        clearAutomationImpl(S, t, c, { cc: m.cc, at: m.at });
         const done = [];
         if (m.at) done.push('AT');
         if (m.cc) done.push('CC');

@@ -3,6 +3,7 @@ import {
     readDrumActiveLaneFromDsp,
     readTargetedClipRestorePairFromDsp
 } from './ui_clip_track_sync.mjs';
+import { queueRestoredPerfModsOperation } from './ui_restore_dsp_operations.mjs';
 import { uuidToUiStatePath } from '../persist/ui_persistence.mjs';
 
 /* Immediately refresh S.seqActiveNotes for the given step if it is the current
@@ -92,7 +93,7 @@ export function restoreUiSidecarImpl(S, deps, applyDefaultsNow) {
                 }
             }
             const _pm = S.perfModsToggled | S.perfModsHeld;
-            if (_pm) S.pendingDefaultSetParams.push({ key: 'perf_mods', val: String(_pm) });
+            if (_pm) queueRestoredPerfModsOperation(S, _pm);
         }
         /* us.ss (per-track Schwung slot) is obsolete -- the co-run slot is now
          * derived from each slot's receive channel at entry time, so old sidecars'

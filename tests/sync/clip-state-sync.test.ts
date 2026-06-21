@@ -7,6 +7,7 @@ import {
   syncMuteSoloFromDspImpl,
 } from "@overture-ui/sync/ui_clip_state_sync.mjs";
 import { DRUM_LANES, NUM_CLIPS, NUM_STEPS, NUM_TRACKS, PAD_MODE_DRUM } from "@overture-ui/core/ui_constants.mjs";
+import { traceDspWrites } from "../helpers/dsp-queue-trace";
 
 function calls() {
   const log: Array<[string, ...unknown[]]> = [];
@@ -262,7 +263,9 @@ describe("restoreUiSidecarImpl", () => {
       am: [0, 1, 2, 3],
       pchr: [true, false, true],
     };
-    const S = makeRestoreState();
+    const S = makeRestoreState({
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     restoreUiSidecarImpl(S, makeRestoreDeps(c, sidecar), true);
     expect(c.log.slice(0, 2)).toEqual([
       ["fileExists", "/data/UserData/schwung/set_state/abc/seq8-ui-state.json"],
@@ -292,7 +295,10 @@ describe("restoreUiSidecarImpl", () => {
     expect(S.trackActiveClip).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     expect(S.sessionView).toBe(true);
     expect(S.beatMarkersEnabled).toBe(true);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "perf_mods", val: "7" }]);
+    expect(traceDspWrites(S, c.log).queuedOperations).toEqual([
+      { key: "older", val: "1" },
+      { key: "perf_mods", val: "7" },
+    ]);
     expect((S.perfSnapshots as number[]).slice(8, 16)).toEqual([10, 11, 12, 13, 14, 15, 16, 17]);
     expect(S.drumVelZoneArmed).toEqual([true, false, true, false, true, false, true, false]);
     expect((S.drumLaneEuclidN as any)[0][3]).toBe(3);

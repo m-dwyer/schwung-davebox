@@ -2,12 +2,14 @@ import { describe, expect, test } from "vitest";
 import {
   clearClipImpl,
   clearRowImpl,
+  clearStepImpl,
   copyClipImpl,
   copyRowImpl,
   copyStepImpl,
   cutClipImpl,
   cutRowImpl,
   doDoubleFillImpl,
+  doLaneDoubleFillImpl,
   hardResetClipImpl,
   selectClipOnTrackImpl,
 } from "@overture-ui/sync/ui_clip_edit_ops.mjs";
@@ -47,6 +49,8 @@ function makeDeps(c: ReturnType<typeof calls>, opts: { noSet?: boolean; effClip?
     refreshPerClipBankParams: c.fn("refreshPerClipBankParams"),
     forceRedraw: c.fn("forceRedraw"),
     effectiveClip: (t: number) => opts.effClip ?? 0,
+    clipHasContent: c.fn("clipHasContent"),
+    refreshSeqNotesIfCurrent: c.fn("refreshSeqNotesIfCurrent"),
   };
 }
 
@@ -60,6 +64,7 @@ function makeState(overrides: Record<string, unknown> = {}) {
     undoSeqArpSnapshot: { x: 1 },
     activeTrack: 0,
     activeBank: 0,
+    ccActiveLane: Array(NT).fill(0),
     playing: false,
     clearDrainHold: 0,
     trackPadMode: Array(NT).fill(MELODIC),
@@ -265,36 +270,117 @@ describe("copyClip / cutClip", () => {
 describe("copyRow / cutRow / clearRow", () => {
   test("copyRow copies all tracks + pushes row_copy", () => {
     const c = calls();
-    const S = makeState();
+    const S = makeState({
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     (S.clipSteps as any)[0][0][0] = 3;
     (S.clipSteps as any)[1][0][0] = 4;
     copyRowImpl(S, makeDeps(c), 0, 1);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "row_copy", val: "0 1" }]);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "row_copy", val: "0 1" },
+    ]);
     expect((S.clipSteps as any)[0][1][0]).toBe(3);
     expect((S.clipSteps as any)[1][1][0]).toBe(4);
   });
 
+  test("copyRow active destination refreshes banks, clears sequencer, and schedules drum resync", () => {
+    const c = calls();
+    const modes = Array(NT).fill(MELODIC);
+    modes[2] = DRUM;
+    const S = makeState({
+      trackPadMode: modes,
+      trackActiveClip: Array(NT).fill(1),
+    });
+
+    copyRowImpl(S, makeDeps(c), 0, 1);
+
+    expect(c.names().filter((n) => n === "refreshPerClipBankParams").length).toBe(NT);
+    expect((S.seqActiveNotes as Set<number>).size).toBe(0);
+    expect(S.seqLastStep).toBe(-1);
+    expect(S.pendingDrumResync).toBe(2);
+    expect(S.pendingDrumResyncTrack).toBe(2);
+  });
+
+  test("copyRow same row or no setParam → no-op", () => {
+    const c = calls();
+    const sameRow = makeState();
+    const noSet = makeState();
+
+    copyRowImpl(sameRow, makeDeps(c), 1, 1);
+    copyRowImpl(noSet, makeDeps(c, { noSet: true }), 0, 1);
+
+    expect(sameRow.pendingDefaultSetParams).toEqual([]);
+    expect(sameRow.undoAvailable).toBe(false);
+    expect(noSet.pendingDefaultSetParams).toEqual([]);
+    expect(noSet.undoAvailable).toBe(false);
+  });
+
   test("cutRow copies dst then clears src on every track", () => {
     const c = calls();
-    const S = makeState();
+    const S = makeState({
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     (S.clipSteps as any)[0][0][0] = 3;
     cutRowImpl(S, makeDeps(c), 0, 1);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "row_cut", val: "0 1" }]);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "row_cut", val: "0 1" },
+    ]);
     expect((S.clipSteps as any)[0][1][0]).toBe(3);
     expect((S.clipSteps as any)[0][0][0]).toBe(0); // src wiped
     expect((S.clipNonEmpty as any)[0][0]).toBe(false);
     expect((S.clipLength as any)[0][0]).toBe(16);
   });
 
+  test("cutRow active source resets banks, clears sequencer, and schedules drum resync", () => {
+    const c = calls();
+    const modes = Array(NT).fill(MELODIC);
+    modes[3] = DRUM;
+    const S = makeState({
+      trackPadMode: modes,
+      trackActiveClip: Array(NT).fill(0),
+    });
+
+    cutRowImpl(S, makeDeps(c), 0, 1);
+
+    expect(c.names().filter((n) => n === "resetPerClipBankParamsToDefault").length).toBe(NT);
+    expect((S.seqActiveNotes as Set<number>).size).toBe(0);
+    expect(S.seqLastStep).toBe(-1);
+    expect(S.seqNoteOnClipTick).toBe(-1);
+    expect(S.pendingDrumResync).toBe(2);
+    expect(S.pendingDrumResyncTrack).toBe(3);
+  });
+
+  test("cutRow same row or no setParam → no-op", () => {
+    const c = calls();
+    const sameRow = makeState();
+    const noSet = makeState();
+
+    cutRowImpl(sameRow, makeDeps(c), 1, 1);
+    cutRowImpl(noSet, makeDeps(c, { noSet: true }), 0, 1);
+
+    expect(sameRow.pendingDefaultSetParams).toEqual([]);
+    expect(sameRow.undoAvailable).toBe(false);
+    expect(noSet.pendingDefaultSetParams).toEqual([]);
+    expect(noSet.undoAvailable).toBe(false);
+  });
+
   test("clearRow wipes every track's clip at rowIdx + pushes row_clear", () => {
     const c = calls();
-    const S = makeState();
+    const S = makeState({
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     (S.clipSteps as any)[0][1][0] = 5;
     clearRowImpl(S, makeDeps(c), 1);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "row_clear", val: "1" }]);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "row_clear", val: "1" },
+    ]);
     expect((S.clipSteps as any)[0][1][0]).toBe(0);
     expect((S.clipNonEmpty as any)[0][1]).toBe(false);
     expect((S.drumClipNonEmpty as any)[0][1]).toBe(false);
+    expect((S.clipLoopStart as any)[0][1]).toBe(0);
   });
 
   test("clearRow resets bank params for the active clip row", () => {
@@ -303,15 +389,48 @@ describe("copyRow / cutRow / clearRow", () => {
     clearRowImpl(S, makeDeps(c), 0); // rowIdx === active clip on every track
     expect(c.names().filter((n) => n === "resetPerClipBankParamsToDefault").length).toBe(NT);
   });
+
+  test("clearRow active drum row resets page and schedules drum resync", () => {
+    const c = calls();
+    const modes = Array(NT).fill(MELODIC);
+    modes[4] = DRUM;
+    const S = makeState({
+      trackPadMode: modes,
+      trackActiveClip: Array(NT).fill(1),
+      trackCurrentPage: Array(NT).fill(3),
+    });
+
+    clearRowImpl(S, makeDeps(c), 1);
+
+    expect((S.trackCurrentPage as any)[4]).toBe(0);
+    expect((S.drumLaneLoopStart as any)[4]).toBe(0);
+    expect((S.seqActiveNotes as Set<number>).size).toBe(0);
+    expect(S.seqLastStep).toBe(-1);
+    expect(S.pendingDrumResync).toBe(2);
+    expect(S.pendingDrumResyncTrack).toBe(4);
+  });
+
+  test("clearRow no setParam → no-op", () => {
+    const c = calls();
+    const S = makeState();
+
+    clearRowImpl(S, makeDeps(c, { noSet: true }), 1);
+
+    expect(S.pendingDefaultSetParams).toEqual([]);
+    expect(S.undoAvailable).toBe(false);
+  });
 });
 
 describe("copyStep", () => {
-  test("melodic: pushes step copy_to + mirrors clip step", () => {
+  test("melodic: appends step copy_to + mirrors clip step", () => {
     const c = calls();
-    const S = makeState();
+    const S = makeState({
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     (S.clipSteps as any)[0][0][3] = 6;
     copyStepImpl(S, makeDeps(c), 0, 0, 3, 7);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_c0_step_3_copy_to", val: "7" },
     ]);
     expect((S.clipSteps as any)[0][0][7]).toBe(6);
@@ -319,16 +438,58 @@ describe("copyStep", () => {
     expect(S.pendingStepsReread).toBe(2);
   });
 
-  test("drum: pushes lane step copy_to + mirrors lane step", () => {
+  test("drum: appends lane step copy_to + mirrors lane step", () => {
     const c = calls();
-    const S = makeState({ trackPadMode: [DRUM, MELODIC], activeDrumLane: [4, 0] });
+    const S = makeState({
+      trackPadMode: [DRUM, MELODIC],
+      activeDrumLane: [4, 0],
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     (S.drumLaneSteps as any)[0][4][3] = "7";
     copyStepImpl(S, makeDeps(c), 0, 0, 3, 9);
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_l4_step_3_copy_to", val: "9" },
     ]);
     expect((S.drumLaneSteps as any)[0][4][9]).toBe("7");
     expect(S.pendingDrumLaneResyncLane).toBe(4);
+  });
+
+  test("no setParam → no-op", () => {
+    const c = calls();
+    const S = makeState();
+    copyStepImpl(S, makeDeps(c, { noSet: true }), 0, 0, 3, 7);
+    expect(S.pendingDefaultSetParams).toEqual([]);
+    expect(S.undoAvailable).toBe(false);
+  });
+});
+
+describe("clearStep", () => {
+  test("appends step clear, clears mirror, refreshes active notes", () => {
+    const c = calls();
+    const S = makeState({
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+    (S.clipSteps as any)[0][0][5] = 1;
+    clearStepImpl(S, makeDeps(c), 0, 0, 5);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "t0_c0_step_5_clear", val: "1" },
+    ]);
+    expect((S.clipSteps as any)[0][0][5]).toBe(0);
+    expect(c.log).toContainEqual(["clipHasContent", 0, 0]);
+    expect(c.log).toContainEqual(["refreshSeqNotesIfCurrent", 0, 0, 5]);
+    expect(S.undoAvailable).toBe(true);
+    expect(S.redoAvailable).toBe(false);
+    expect(S.undoSeqArpSnapshot).toBeNull();
+  });
+
+  test("no setParam → no-op", () => {
+    const c = calls();
+    const S = makeState();
+    clearStepImpl(S, makeDeps(c, { noSet: true }), 0, 0, 5);
+    expect(S.pendingDefaultSetParams).toEqual([]);
+    expect(S.undoAvailable).toBe(false);
   });
 });
 
@@ -422,5 +583,53 @@ describe("doDoubleFill", () => {
     doDoubleFillImpl(S, makeDeps(c, { effClip: 0 }));
     expect(c.names()).not.toContain("setParam");
     expect((S.clipLength as any)[0][0]).toBe(200);
+  });
+});
+
+describe("doLaneDoubleFill", () => {
+  test("appends cc lane double-fill, doubles effective lane length, and redraws", () => {
+    const c = calls();
+    const S = makeState({
+      activeTrack: 0,
+      ccActiveLane: [3, 0],
+      ccLaneLength: grid([2, 2, 8], () => 9),
+      clipLength: grid([2, 2], () => 16),
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+    doLaneDoubleFillImpl(S, makeDeps(c, { effClip: 1 }));
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "t0_c1_k3_cc_lane_double_fill", val: "1" },
+    ]);
+    expect((S.ccLaneLength as any)[0][1][3]).toBe(18);
+    expect(c.names()).toContain("forceRedraw");
+    expect(S.undoAvailable).toBe(true);
+    expect(S.redoAvailable).toBe(false);
+    expect(S.undoSeqArpSnapshot).toBeNull();
+  });
+
+  test("uses clip length when lane length is unset", () => {
+    const c = calls();
+    const S = makeState({
+      ccLaneLength: grid([2, 2, 8], () => 0),
+      clipLength: grid([2, 2], () => 16),
+    });
+    doLaneDoubleFillImpl(S, makeDeps(c, { effClip: 0 }));
+    expect((S.ccLaneLength as any)[0][0][0]).toBe(32);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "t0_c0_k0_cc_lane_double_fill", val: "1" },
+    ]);
+  });
+
+  test("lane already too long → LANE FULL, no queued write", () => {
+    const c = calls();
+    const S = makeState({
+      ccLaneLength: grid([2, 2, 8], () => 200),
+      clipLength: grid([2, 2], () => 16),
+    });
+    doLaneDoubleFillImpl(S, makeDeps(c, { effClip: 0 }));
+    expect(S.pendingDefaultSetParams).toEqual([]);
+    expect((S.ccLaneLength as any)[0][0][0]).toBe(200);
+    expect(S.undoAvailable).toBe(false);
   });
 });

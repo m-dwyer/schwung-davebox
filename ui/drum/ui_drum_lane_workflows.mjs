@@ -4,13 +4,14 @@ import {
     resetDrumRepeatGrooveMirrorsForLane
 } from './ui_drum_repeat_workflows.mjs';
 import { scheduleDrumLaneResync } from '../core/ui_state.mjs';
+import { enqueueDspOperation } from '../sync/ui_dsp_operation_queue.mjs';
 
 /* Copy active clip's lane srcLane to dstLane (same track, preserves dst midi_note). */
 export function copyDrumLaneImpl(S, deps, t, srcLane, dstLane) {
     if (srcLane === dstLane) return;
     if (typeof deps.host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + srcLane + '_copy_to', val: String(dstLane) });
+    enqueueDspOperation(S, { key: 't' + t + '_l' + srcLane + '_copy_to', val: String(dstLane) });
     const steps = S.drumLaneSteps[t];
     for (let s = 0; s < 256; s++) steps[dstLane][s] = steps[srcLane][s];
     S.drumLaneHasNotes[t][dstLane] = S.drumLaneHasNotes[t][srcLane];
@@ -24,7 +25,7 @@ export function cutDrumLaneImpl(S, deps, t, srcLane, dstLane) {
     if (srcLane === dstLane) return;
     if (typeof deps.host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + srcLane + '_cut_to', val: String(dstLane) });
+    enqueueDspOperation(S, { key: 't' + t + '_l' + srcLane + '_cut_to', val: String(dstLane) });
     const steps = S.drumLaneSteps[t];
     for (let s = 0; s < 256; s++) { steps[dstLane][s] = steps[srcLane][s]; steps[srcLane][s] = '0'; }
     S.drumLaneHasNotes[t][dstLane] = S.drumLaneHasNotes[t][srcLane];
@@ -41,7 +42,7 @@ export function copyDrumClipImpl(S, deps, srcT, srcC, dstT, dstC) {
     if (srcT === dstT && srcC === dstC) return;
     if (typeof deps.host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'drum_clip_copy', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
+    enqueueDspOperation(S, { key: 'drum_clip_copy', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
     S.drumClipNonEmpty[dstT][dstC] = S.drumClipNonEmpty[srcT][srcC];
     if (dstC === S.trackActiveClip[dstT]) { S.pendingDrumResync = 2; S.pendingDrumResyncTrack = dstT; }
 }
@@ -51,7 +52,7 @@ export function cutDrumClipImpl(S, deps, srcT, srcC, dstT, dstC) {
     if (srcT === dstT && srcC === dstC) return;
     if (typeof deps.host_module_set_param !== 'function') return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'drum_clip_cut', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
+    enqueueDspOperation(S, { key: 'drum_clip_cut', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
     S.drumClipNonEmpty[dstT][dstC] = S.drumClipNonEmpty[srcT][srcC];
     S.drumClipNonEmpty[srcT][srcC] = false;
     if (srcC === S.trackActiveClip[srcT]) {

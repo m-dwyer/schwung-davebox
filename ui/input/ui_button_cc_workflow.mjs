@@ -8,6 +8,10 @@
  *
  * Handlers take everything via deps so they can be unit-tested without the host. */
 
+import { resetCcLaneImpl } from '../sync/ui_automation_clear_ops.mjs';
+import { queueMergeCancelOperation } from '../sync/ui_transport_dsp_operations.mjs';
+import { queueTarpLatchOperation } from '../perform/ui_performance_dsp_operations.mjs';
+
 export function handleUiShiftButton(S, deps, d1, d2) {
     if (d1 !== deps.moveShift) return;
 
@@ -36,12 +40,8 @@ export function handleUiDeleteButton(S, deps, d1, d2) {
     if (d2 === 127 && S.loopHeld && S.activeBank === 6 &&
             S.trackPadMode[S.activeTrack] !== deps.padModeDrum && !S.sessionView) {
         var _rdt = S.activeTrack, _rdac = deps.effectiveClip(_rdt), _rdl = S.ccActiveLane[_rdt];
-        S.ccLaneLoopStart[_rdt][_rdac][_rdl] = 0;
-        S.ccLaneLength[_rdt][_rdac][_rdl] = 0;
-        S.ccLaneTps[_rdt][_rdac][_rdl] = 0;
-        S.ccLaneResTps[_rdt][_rdac][_rdl] = 0;
+        resetCcLaneImpl(S, _rdt, _rdac, _rdl);
         S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-        S.pendingDefaultSetParams.push({ key: 't' + _rdt + '_c' + _rdac + '_k' + _rdl + '_cc_lane_reset', val: '1' });
         deps.showActionPopup('LANE LOOP', 'RESET');
         deps.forceRedraw();
         deps.computePadNoteMap();
@@ -99,9 +99,8 @@ export function handleUiCaptureButton(S, deps, d1, d2) {
          * Sample's press behavior. */
         if (S.pendingSceneBakePicker) { S.pendingSceneBakePicker = false; S.captureUsedAsModifier = true; }
         if (S.pendingMergePlacement)  {
-            S.pendingMergePlacement = false;
             S.captureUsedAsModifier = true;
-            S.pendingDefaultSetParams.push({ key: 'merge_cancel', val: '1' });
+            queueMergeCancelOperation(S);
         }
         if (S.confirmBake)            { S.confirmBake            = false; S.captureUsedAsModifier = true;
                                         S.confirmBakeDrumLoopOpen = false; S.confirmBakeWrapPhase = false; }
@@ -262,12 +261,8 @@ export function handleUiLoopTrackViewButton(S, deps, d1, d2) {
         if (S.deleteHeld && S.activeBank === 6 && S.trackPadMode[_lrt] !== deps.padModeDrum) {
             var _rac = deps.effectiveClip(_lrt);
             var _rl = S.ccActiveLane[_lrt];
-            S.ccLaneLoopStart[_lrt][_rac][_rl] = 0;
-            S.ccLaneLength[_lrt][_rac][_rl] = 0;
-            S.ccLaneTps[_lrt][_rac][_rl] = 0;
-            S.ccLaneResTps[_lrt][_rac][_rl] = 0;
+            resetCcLaneImpl(S, _lrt, _rac, _rl);
             S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-            S.pendingDefaultSetParams.push({ key: 't' + _lrt + '_c' + _rac + '_k' + _rl + '_cc_lane_reset', val: '1' });
             deps.showActionPopup('LANE LOOP', 'RESET');
             deps.forceRedraw();
             return true;
@@ -284,12 +279,12 @@ export function handleUiLoopTrackViewButton(S, deps, d1, d2) {
                 /* Latch ON: holding any pad + loop turns it off */
                 S.bankParams[_lrt][5][7] = 0;
                 if (deps.setParam)
-                    S.pendingDefaultSetParams.push({ key: 't' + _lrt + '_tarp_latch', val: '0' });
+                    queueTarpLatchOperation(S, _lrt, false);
             } else if ((S.bankParams[_lrt][5][0] | 0) !== 0) {
                 /* Latch OFF: turn it on (only when TARP style is set) */
                 S.bankParams[_lrt][5][7] = 1;
                 if (deps.setParam)
-                    S.pendingDefaultSetParams.push({ key: 't' + _lrt + '_tarp_latch', val: '1' });
+                    queueTarpLatchOperation(S, _lrt, true);
             }
         } else if (S.trackPadMode[_lrt] !== deps.padModeDrum &&
                    (S.bankParams[_lrt][5][7] | 0) !== 0 &&

@@ -7,9 +7,9 @@
  * same-named wrapper in ui.js over the *Impl exported here.
  *
  * COALESCING-SENSITIVE: the resets/applies are set_param emitters. The
- * deferred S.pendingDefaultSetParams.push(...) ordering (incl. the
+ * deferred queue ordering (backed by S.pendingDefaultSetParams, incl. the
  * delay_level=127 re-queue that lands a tick after the pfx reset) and the
- * direct setParam calls are preserved byte-for-byte from the originals.
+ * direct setParam calls are preserved from the originals.
  *
  * Shared-module symbols are imported directly; only ui.js-local helpers +
  * host get/set params thread through `deps`. */
@@ -27,6 +27,7 @@ import {
     altIndicatorActiveImpl,
     bankHasAltParamsImpl
 } from './ui_bank_state.mjs';
+import { enqueueDspOperation } from '../sync/ui_dsp_operation_queue.mjs';
 
 /* Per-clip banks: NOTE FX (2), HARMZ (3), SEQ ARP (4), MIDI DLY (5) */
 const PER_CLIP_BANKS = [1, 2, 3, 4];
@@ -45,7 +46,7 @@ export function resetPerClipBankParamsToDefaultImpl(S, deps, t) {
      * onto the pendingDefaultSetParams queue so they land on a later tick and
      * don't coalesce with the clear set_param fired by the caller. */
     const _ac = S.trackActiveClip[t];
-    S.pendingDefaultSetParams.push({
+    enqueueDspOperation(S, {
         key: 't' + t + '_c' + _ac + '_pfx_set',
         val: 'delay_level 127'
     });
@@ -64,15 +65,15 @@ export function resetFxBanksImpl(S, deps, t) {
     S.undoAvailable = true; S.redoAvailable = false;
     if (S.trackPadMode[t] === PAD_MODE_DRUM) {
         const lane = S.activeDrumLane[t];
-        S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + lane + '_pfx_reset', val: '1' });
-        S.pendingDefaultSetParams.push({
+        enqueueDspOperation(S, { key: 't' + t + '_l' + lane + '_pfx_reset', val: '1' });
+        enqueueDspOperation(S, {
             key: 't' + t + '_l' + lane + '_pfx_set',
             val: 'delay_level 127'
         });
     } else {
-        S.pendingDefaultSetParams.push({ key: 't' + t + '_pfx_reset', val: '1' });
+        enqueueDspOperation(S, { key: 't' + t + '_pfx_reset', val: '1' });
         const _ac = S.trackActiveClip[t];
-        S.pendingDefaultSetParams.push({
+        enqueueDspOperation(S, {
             key: 't' + t + '_c' + _ac + '_pfx_set',
             val: 'delay_level 127'
         });
@@ -105,18 +106,18 @@ export function resetSingleFxBankImpl(S, deps, t, bankIdx) {
     if (S.trackPadMode[t] === PAD_MODE_DRUM) {
         const lane = S.activeDrumLane[t];
         /* Defer the reset push (same coalescing concern as resetFxBanks). */
-        S.pendingDefaultSetParams.push({ key: 't' + t + '_l' + lane + '_pfx_set', val: dspCmd + ' 1' });
+        enqueueDspOperation(S, { key: 't' + t + '_l' + lane + '_pfx_set', val: dspCmd + ' 1' });
         if (bankIdx === 3) {
-            S.pendingDefaultSetParams.push({
+            enqueueDspOperation(S, {
                 key: 't' + t + '_l' + lane + '_pfx_set',
                 val: 'delay_level 127'
             });
         }
     } else {
-        S.pendingDefaultSetParams.push({ key: 't' + t + '_' + dspCmd, val: '1' });
+        enqueueDspOperation(S, { key: 't' + t + '_' + dspCmd, val: '1' });
         if (bankIdx === 3) {
             const _ac = S.trackActiveClip[t];
-            S.pendingDefaultSetParams.push({
+            enqueueDspOperation(S, {
                 key: 't' + t + '_c' + _ac + '_pfx_set',
                 val: 'delay_level 127'
             });
@@ -137,7 +138,7 @@ export function resetSingleFxBankImpl(S, deps, t, bankIdx) {
 export function resetTarpImpl(S, deps, t) {
     if (!deps.setParam) return;
     S.undoAvailable = true; S.redoAvailable = false;
-    S.pendingDefaultSetParams.push({ key: 't' + t + '_tarp_reset', val: '1' });
+    enqueueDspOperation(S, { key: 't' + t + '_tarp_reset', val: '1' });
     for (let k = 0; k < 8; k++) {
         const pm = BANKS[5].knobs[k];
         if (pm) S.bankParams[t][5][k] = pm.def;
@@ -246,7 +247,10 @@ export function readBankParamsImpl(S, deps, t, bankIdx) {
                 S.trackCCType[t][k] = 2;
                 S.trackCCAssign[t][k] = k + 1;
                 S.schLabel[t][k] = null;
-                S.pendingDefaultSetParams.push({ key: 't' + t + '_cc_type_assign', val: k + ' 2 ' + (k + 1) });
+                enqueueDspOperation(S, {
+                    key: 't' + t + '_cc_type_assign',
+                    val: k + ' 2 ' + (k + 1)
+                });
             }
         }
         for (let c = 0; c < NUM_CLIPS; c++) {
@@ -364,8 +368,8 @@ export function applyTrackConfigImpl(S, deps, t, key, val) {
              * pending flag handled at the top of next tick. */
             S.drumVelZoneArmed[t] = false;
             S.drumLastVelZone[t]  = 0;
-            S.pendingDefaultSetParams.push({ key: 't' + t + '_active_drum_lane',  val: '0' });
-            S.pendingDefaultSetParams.push({ key: 't' + t + '_drum_perform_mode', val: '0' });
+            enqueueDspOperation(S, { key: 't' + t + '_active_drum_lane',  val: '0' });
+            enqueueDspOperation(S, { key: 't' + t + '_drum_perform_mode', val: '0' });
             if (t === S.activeTrack) { S.pendingPadNoteMapRecompute = true; deps.forceRedraw(); }
         }
         if (t === S.activeTrack && val === PAD_MODE_DRUM) { deps.computePadNoteMap(); deps.forceRedraw(); }
@@ -413,7 +417,7 @@ export function applyBankParamImpl(S, deps, t, bankIdx, knobIdx, val) {
              * first one (see set-param-per-buffer-per-key memory). delay_retrig
              * + a clip pad press (launch_clip) in quick succession was losing
              * the retrig write. One-per-tick drain guarantees it lands alone. */
-            S.pendingDefaultSetParams.push({ key: 't' + t + '_' + pm.dspKey, val: strVal });
+            enqueueDspOperation(S, { key: 't' + t + '_' + pm.dspKey, val: strVal });
             return;
         }
         deps.setParam('t' + t + '_' + pm.dspKey, strVal);
