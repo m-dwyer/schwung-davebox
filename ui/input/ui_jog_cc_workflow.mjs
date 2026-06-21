@@ -1,4 +1,5 @@
 import { enqueueDspOperation } from '../sync/ui_dsp_operation_queue.mjs';
+import { clearAutomationImpl } from '../sync/ui_automation_clear_ops.mjs';
 
 /* Jog-wheel CC handlers split out of _onCC_jog.
  *
@@ -606,12 +607,7 @@ export function handleUiJogShiftDeleteReset(S, deps, d1, d2) {
         }
         /* Bank reset also clears ALL automation (CC + AT, + PB later) for the clip. */
         const _ac2 = deps.effectiveClip(_arpTrack);
-        S.trackCCAutoBits[_arpTrack][_ac2] = 0;
-        S.trackCCLiveVal[_arpTrack] = new Array(8).fill(-1);
-        S.clipCCVal[_arpTrack][_ac2] = new Array(8).fill(-1);
-        S.clipAtHas[_arpTrack][_ac2] = false;
-        S.pendingDefaultSetParams.push({ key: 't' + _arpTrack + '_cc_auto_clear', val: String(_ac2) });
-        S.pendingDefaultSetParams.push({ key: 't' + _arpTrack + '_c' + _ac2 + '_at_clear', val: '1' });
+        clearAutomationImpl(S, _arpTrack, _ac2, { cc: true, at: true });
         S.undoSeqArpSnapshot = { track: _arpTrack, params: _arpParams };
         const _mac = deps.effectiveClip(_arpTrack);
         S.clipPlaybackDir[_arpTrack][_mac] = 0;
@@ -641,15 +637,10 @@ export function handleUiJogDeleteReset(S, deps, d1, d2) {
         /* AUTOMATION bank: Delete+jog clears ALL automation types for the
          * active clip (CC + AT, and PB once implemented). */
         const _t = S.activeTrack, _c = deps.effectiveClip(_t);
-        S.trackCCAutoBits[_t][_c] = 0;
-        S.trackCCLiveVal[_t] = new Array(8).fill(-1);
         /* Reset the resting values too → "—" (cc_auto_clear clears both
          * automation and rest_val DSP-side). */
-        S.clipCCVal[_t][_c] = new Array(8).fill(-1);
-        S.clipAtHas[_t][_c] = false;
         /* Defer clear pushes — synchronous from jog handler coalesces. */
-        S.pendingDefaultSetParams.push({ key: 't' + _t + '_cc_auto_clear', val: String(_c) });
-        S.pendingDefaultSetParams.push({ key: 't' + _t + '_c' + _c + '_at_clear', val: '1' });
+        clearAutomationImpl(S, _t, _c, { cc: true, at: true });
         deps.showActionPopup('AUTOMATION', 'CLEAR');
         deps.invalidateLEDCache();
         return true;

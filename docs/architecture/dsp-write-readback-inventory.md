@@ -174,7 +174,7 @@ proved sufficient.
 | `bank/ui_bank_params.mjs` deferred bank apply keys: `seq_arp_steps_mode`, `tarp_steps_mode`, `delay_retrig` | Migrated compatibility queue family | Comment documents same-track same-buffer coalescing, especially `delay_retrig` followed by clip launch. These three keys now route through `enqueueDspOperation` while preserving FIFO append order on `pendingDefaultSetParams`; direct writes remain for unrelated `applyBankParamImpl` track keys. |
 | `sync/ui_clip_edit_ops.mjs` `clearStepImpl` / `doLaneDoubleFillImpl`: `tN_cC_step_X_clear`, `tN_cC_kL_cc_lane_double_fill` | Migrated compatibility queue family | Structural step clear and CC-lane double-fill now route through `enqueueDspOperation` while preserving FIFO append order, optimistic mirrors, active-step note refresh, popup, and redraw behavior. |
 | `menu/ui_clear_auto_workflow.mjs` and `input/ui_button_cc_workflow.mjs`: `tN_cc_auto_clear`, `tN_cC_at_clear`, `tN_cC_kL_cc_lane_reset` | Migrated compatibility queue family | Menu clear and Delete+Loop CC-lane reset now route through shared `clearAutomationImpl` / `resetCcLaneImpl` operation boundaries, preserving FIFO append order, CC-before-AT DSP order, JS mirror wipes/resets, popup text, undo flags, and nearby TARP latch behavior. |
-| Selected `input/ui_jog_cc_workflow.mjs` automation clear/reset paths | Preserve for reset-gesture audit | Jog reset branches still mix automation clears with FX reset, bake-adjacent state, and delayed readbacks. Keep raw until the surrounding reset gestures are characterized. |
+| Selected `input/ui_jog_cc_workflow.mjs` automation clear/reset paths | Migrated compatibility queue family | Jog Delete/Shift+Delete automation clear branches now reuse `clearAutomationImpl`, preserving CC-before-AT order, local mirror wipes, popup/LED behavior, FX reset ordering, and neighboring playback reset writes. |
 | `input/ui_navigation_cc_workflow.mjs` CC lane TPS / loop / res TPS writes | Migrated compatibility queue family | Loop+Up/Down melodic-bank-6 lane geometry changes now route the ordered `cc_lane_tps`, `cc_loop_set`, and optional `cc_lane_res_tps` sequence through `enqueueDspOperation`, preserving FIFO append order and JS mirror updates. |
 | `input/ui_jog_cc_workflow.mjs` bake / bake_scene | Migrated semantic bake operations | Wrapped clip/drum bake and scene bake commits now route through explicit bake operation helpers that enqueue the DSP write while preserving modal close timing, undo marking, popup order, bank refresh, and delayed scene/clip readback. The melodic single-loop bake path remains a direct `setParam('bake', ...)` write. |
 | `input/ui_jog_cc_workflow.mjs` playback-dir / audio-reverse resets | Migrated compatibility queue family | The reset pairs remain coupled to the broader Delete/Shift+Delete reset gestures for FX reset, automation clear ordering, local mirrors, popup, and redraw behavior. Only the drum-lane and melodic-clip playback reset pair writes now route through `enqueueDspOperation`, preserving FIFO append order and any neighboring raw automation clears. |
@@ -187,15 +187,9 @@ proved sufficient.
 
 ## Remaining Migration Windows
 
-These windows group the remaining raw queue sites by behavior and risk. Each
-window should add focused tests that prove direct DSP writes, queued DSP
-operations, FIFO order, mirror updates, and delayed readback behavior as
-applicable. Keep migrating one window at a time; do not mechanically wrap
-unrelated raw queue producers.
-
-1. Jog automation clear reset branches:
-   keep separate because they mix automation clear, FX reset, bake-adjacent
-   state, and delayed readbacks.
+The raw `pendingDefaultSetParams.push/unshift` migration is complete. Current
+remaining occurrences are the compatibility queue helper itself plus comments
+that describe legacy drain behavior.
 
 ## Remaining Family Migration Notes
 
@@ -232,8 +226,8 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
 - Tests pin: no direct `setParam`, FIFO append after existing queued work,
   CC-before-AT DSP operation order, mirror wipe/reset before DSP readback, and
   unchanged nearby TARP latch queue behavior.
-- Still raw/out of scope: selected `input/ui_jog_cc_workflow.mjs`
-  automation-clear reset branches.
+- Jog Delete/Shift+Delete reset branches now reuse this same operation boundary
+  while preserving FX reset ordering and neighboring playback reset writes.
 
 ### CC lane geometry
 
@@ -364,8 +358,8 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
 
 Recommended next order:
 
-1. Jog automation reset branches should remain last because they mix clear,
-   reset, bake-adjacent state, and delayed readback behavior.
+1. Future DSP-write work should start from semantic behavior, not raw queue
+   search results; raw `pendingDefaultSetParams` producers are now centralized.
 
 ## Safest First Compatibility-Migration Candidate
 

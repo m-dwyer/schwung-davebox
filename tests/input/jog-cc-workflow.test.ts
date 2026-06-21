@@ -959,7 +959,7 @@ describe("Jog CC workflow - delete reset", () => {
     expect(c.log).toContainEqual(["ledInvalidate"]);
   });
 
-  test("CC PARAM bank automation clear remains the unrelated raw queue producer", () => {
+  test("CC PARAM bank automation clear routes through the shared automation operation", () => {
     const c = calls();
     const S = state({
       deleteHeld: true,
