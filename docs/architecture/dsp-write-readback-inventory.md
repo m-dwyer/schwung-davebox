@@ -157,6 +157,123 @@ proved sufficient.
 | `drum/ui_drum_repeat_workflows.mjs` / `perform/ui_latch_workflows.mjs` repeat stop/latch and TARP latch sweeps | Preserve queue timing; performance path | All-track or multi-lane sweeps can emit many same-family writes. Queue timing is probably load-bearing, but these should be migrated only inside a repeat/latch operation boundary. |
 | `perform/ui_transpose_workflow.mjs` `t0_xpose_apply` | Semantic operation first | Commit/cancel both interact with padmap recompute and preview state. A transpose operation can own ordering; do not mechanically wrap first. |
 
+## Remaining Family Migration Notes
+
+Use these notes as a pre-flight checklist before migrating any remaining raw
+queue family. Each migration should add focused tests before or alongside the
+queue-helper change, and should keep unrelated raw queue producers untouched.
+
+### Leaving drum mode
+
+- Owner: `bank/ui_bank_params.mjs` `applyTrackConfigImpl`.
+- Raw queued keys: `tN_active_drum_lane`, `tN_drum_perform_mode`.
+- Keep immediate: `tN_pad_mode=0` must remain a direct `setParam` write.
+- Preserve mirror/timing: `S.trackPadMode[t]`, drum-bank fallback state, and
+  `S.pendingPadNoteMapRecompute` stay coupled to this operation.
+- Tests to pin: direct `tN_pad_mode` precedes queued follow-up writes; queued
+  follow-up writes append FIFO after existing queued work; padmap recompute does
+  not run while `pendingDefaultSetParams` is non-empty or `clearDrainHold > 0`.
+- Out of scope: broader route/padmap self-heal behavior and unrelated track
+  config keys.
+
+### Automation and CC lane clears
+
+- Owners: `menu/ui_clear_auto_workflow.mjs`,
+  `input/ui_button_cc_workflow.mjs`, and selected
+  `input/ui_jog_cc_workflow.mjs` clear/reset paths.
+- Raw queued keys: `tN_cc_auto_clear`, `tN_cC_at_clear`,
+  `tN_cC_kL_cc_lane_reset`, plus nearby TARP latch side effects.
+- Preserve mirror/readback: CC automation bit mirrors, aftertouch flags,
+  `pendingCCBitsRefresh`, popup state, undo flags, and active-bank indicators.
+- Tests to pin: FIFO order for multi-clear gestures, mirror wipe before DSP
+  readback, and no-op behavior for inactive/irrelevant clear commands.
+- Out of scope: bake, playback direction resets, and repeat/latch TARP sweeps.
+  Prefer a semantic `clearAutomation` / `resetCcLane` operation before queue
+  migration.
+
+### CC lane geometry
+
+- Owner: `input/ui_navigation_cc_workflow.mjs`.
+- Raw queued keys: `tN_cC_kL_cc_lane_tps`, `tN_cC_kL_cc_loop_set`,
+  optional `tN_cC_kL_cc_lane_res_tps`.
+- Preserve mirror/timing: lane length, loop start, TPS/resolution mirrors, and
+  ordered multi-write geometry changes.
+- Tests to pin: queued write order for the three-key path, fallback two-key
+  path, mirror updates, and active-lane redraw behavior.
+- Out of scope: unrelated jog-bank resets and automation clears.
+
+### Playback direction and audio reverse resets
+
+- Owner: selected reset branches in `input/ui_jog_cc_workflow.mjs`.
+- Raw queued keys: drum-lane `playback_dir` / `playback_audio_reverse` and
+  melodic clip `clip_playback_dir` / `clip_playback_audio_reverse`.
+- Preserve mirror/timing: associated bank params, reset gesture popup/redraw,
+  and any neighboring reset or clear writes in the same gesture.
+- Tests to pin: whether queue timing is required when these writes are adjacent
+  to FX reset, automation clear, or clip/lane reset operations.
+- Out of scope: do not migrate as standalone writes until the surrounding reset
+  gesture is characterized.
+
+### Session, scene, snapshot, and merge placement
+
+- Owner: `view/ui_session_view_workflow.mjs`.
+- Raw queued keys: `snap_delete`, `snap_load`, `launch_scene`,
+  `launch_scene_quant`, `merge_place_row`.
+- Preserve mirror/timing: modal/session state, selected scene/clip indices,
+  mute/solo or merge mirrors, launch quantization behavior, LEDs, and poll-DSP
+  reconciliation.
+- Tests to pin: modal state transitions, queued command order, and merge state
+  reconciliation through poll state.
+- Out of scope: structural clip/row copy paths already delegated to structural
+  edit operations. Model these as session operations before queue migration.
+
+### Transport and focused empty clip auto-launch
+
+- Owners: `sync/ui_polldsp_workflow.mjs` and
+  `input/ui_transport_cc_workflow.mjs`.
+- Raw queued keys: focused `tN_launch_clip`, `merge_stop`, `merge_arm`,
+  `merge_cancel`.
+- Preserve mirror/timing: transport start behavior, focused empty clip rules,
+  record-arm auto-launch differences, merge LEDs, and DSP poll reconciliation.
+- Tests to pin: auto-launch only happens on the intended transport transition,
+  merge arm/stop/cancel still reconcile via poll state, and direct launch paths
+  remain direct where required.
+- Out of scope: do not merge with structural clip launch/select behavior.
+
+### Restore and sidecar replay
+
+- Owner: `sync/ui_clip_state_sync.mjs`.
+- Raw queued keys: `perf_mods`; sidecar restore may replace
+  `S.pendingDefaultSetParams` wholesale to prepend restore writes.
+- Preserve mirror/timing: restore ordering, performance mod replay, sidecar
+  state, and post-load DSP sync behavior.
+- Tests to pin: restore replay order when the queue already contains work, and
+  whether replacement of the backing queue is intentional for that path.
+- Out of scope: normal performance-mod LED writes and user-edit queues.
+
+### Repeat, latch, and TARP sweeps
+
+- Owners: `drum/ui_drum_repeat_workflows.mjs` and
+  `perform/ui_latch_workflows.mjs`.
+- Raw queued keys: repeat groove reset, repeat latched/stop keys,
+  repeat2 stop/lane-off keys, and `tN_tarp_latch`.
+- Preserve mirror/timing: performance latency, all-track or multi-lane sweep
+  ordering, latch UI state, and low-latency direct repeat writes.
+- Tests to pin: sweep order, no-op gating when nothing is latched, and separation
+  between queued sweep writes and direct performance writes.
+- Out of scope: do not migrate repeat pad/aftertouch/rate writes through this
+  compatibility queue.
+
+### Transpose preview commit/cancel
+
+- Owner: `perform/ui_transpose_workflow.mjs`.
+- Raw queued keys: `t0_xpose_apply`.
+- Preserve mirror/timing: preview state, cancel/commit branching, padmap
+  recompute, popup/redraw, and active bank state.
+- Tests to pin: commit and cancel payloads, preview cleanup, queue order after
+  existing work, and padmap recompute behavior.
+- Out of scope: do not touch TARP, scale, or unrelated performance paths.
+
 Recommended next order:
 
 1. Before touching leaving-drum-mode, add tests around queue-empty padmap recompute and same-track ordering.
