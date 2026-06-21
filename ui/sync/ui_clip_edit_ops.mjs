@@ -198,7 +198,7 @@ export function copyRowImpl(S, deps, srcRow, dstRow) {
     if (srcRow === dstRow) return;
     if (!deps.setParam) return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'row_copy', val: `${srcRow} ${dstRow}` });
+    enqueueDspOperation(S, { key: 'row_copy', val: `${srcRow} ${dstRow}` });
     for (let t = 0; t < NUM_TRACKS; t++) {
         S.clipSteps[t][dstRow] = S.clipSteps[t][srcRow].slice();
         S.clipLength[t][dstRow] = S.clipLength[t][srcRow];
@@ -226,7 +226,7 @@ export function cutRowImpl(S, deps, srcRow, dstRow) {
     if (srcRow === dstRow) return;
     if (!deps.setParam) return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'row_cut', val: `${srcRow} ${dstRow}` });
+    enqueueDspOperation(S, { key: 'row_cut', val: `${srcRow} ${dstRow}` });
     for (let t = 0; t < NUM_TRACKS; t++) {
         S.clipSteps[t][dstRow] = S.clipSteps[t][srcRow].slice();
         S.clipLength[t][dstRow] = S.clipLength[t][srcRow];
@@ -291,7 +291,7 @@ export function copyStepImpl(S, deps, t, ac, srcAbs, dstAbs) {
 export function clearRowImpl(S, deps, rowIdx) {
     if (!deps.setParam) return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'row_clear', val: String(rowIdx) });
+    enqueueDspOperation(S, { key: 'row_clear', val: String(rowIdx) });
     for (let t = 0; t < NUM_TRACKS; t++) {
         const len = S.clipLength[t][rowIdx];
         for (let s = 0; s < len; s++) S.clipSteps[t][rowIdx][s] = 0;

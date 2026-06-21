@@ -265,36 +265,117 @@ describe("copyClip / cutClip", () => {
 describe("copyRow / cutRow / clearRow", () => {
   test("copyRow copies all tracks + pushes row_copy", () => {
     const c = calls();
-    const S = makeState();
+    const S = makeState({
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     (S.clipSteps as any)[0][0][0] = 3;
     (S.clipSteps as any)[1][0][0] = 4;
     copyRowImpl(S, makeDeps(c), 0, 1);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "row_copy", val: "0 1" }]);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "row_copy", val: "0 1" },
+    ]);
     expect((S.clipSteps as any)[0][1][0]).toBe(3);
     expect((S.clipSteps as any)[1][1][0]).toBe(4);
   });
 
+  test("copyRow active destination refreshes banks, clears sequencer, and schedules drum resync", () => {
+    const c = calls();
+    const modes = Array(NT).fill(MELODIC);
+    modes[2] = DRUM;
+    const S = makeState({
+      trackPadMode: modes,
+      trackActiveClip: Array(NT).fill(1),
+    });
+
+    copyRowImpl(S, makeDeps(c), 0, 1);
+
+    expect(c.names().filter((n) => n === "refreshPerClipBankParams").length).toBe(NT);
+    expect((S.seqActiveNotes as Set<number>).size).toBe(0);
+    expect(S.seqLastStep).toBe(-1);
+    expect(S.pendingDrumResync).toBe(2);
+    expect(S.pendingDrumResyncTrack).toBe(2);
+  });
+
+  test("copyRow same row or no setParam → no-op", () => {
+    const c = calls();
+    const sameRow = makeState();
+    const noSet = makeState();
+
+    copyRowImpl(sameRow, makeDeps(c), 1, 1);
+    copyRowImpl(noSet, makeDeps(c, { noSet: true }), 0, 1);
+
+    expect(sameRow.pendingDefaultSetParams).toEqual([]);
+    expect(sameRow.undoAvailable).toBe(false);
+    expect(noSet.pendingDefaultSetParams).toEqual([]);
+    expect(noSet.undoAvailable).toBe(false);
+  });
+
   test("cutRow copies dst then clears src on every track", () => {
     const c = calls();
-    const S = makeState();
+    const S = makeState({
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     (S.clipSteps as any)[0][0][0] = 3;
     cutRowImpl(S, makeDeps(c), 0, 1);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "row_cut", val: "0 1" }]);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "row_cut", val: "0 1" },
+    ]);
     expect((S.clipSteps as any)[0][1][0]).toBe(3);
     expect((S.clipSteps as any)[0][0][0]).toBe(0); // src wiped
     expect((S.clipNonEmpty as any)[0][0]).toBe(false);
     expect((S.clipLength as any)[0][0]).toBe(16);
   });
 
+  test("cutRow active source resets banks, clears sequencer, and schedules drum resync", () => {
+    const c = calls();
+    const modes = Array(NT).fill(MELODIC);
+    modes[3] = DRUM;
+    const S = makeState({
+      trackPadMode: modes,
+      trackActiveClip: Array(NT).fill(0),
+    });
+
+    cutRowImpl(S, makeDeps(c), 0, 1);
+
+    expect(c.names().filter((n) => n === "resetPerClipBankParamsToDefault").length).toBe(NT);
+    expect((S.seqActiveNotes as Set<number>).size).toBe(0);
+    expect(S.seqLastStep).toBe(-1);
+    expect(S.seqNoteOnClipTick).toBe(-1);
+    expect(S.pendingDrumResync).toBe(2);
+    expect(S.pendingDrumResyncTrack).toBe(3);
+  });
+
+  test("cutRow same row or no setParam → no-op", () => {
+    const c = calls();
+    const sameRow = makeState();
+    const noSet = makeState();
+
+    cutRowImpl(sameRow, makeDeps(c), 1, 1);
+    cutRowImpl(noSet, makeDeps(c, { noSet: true }), 0, 1);
+
+    expect(sameRow.pendingDefaultSetParams).toEqual([]);
+    expect(sameRow.undoAvailable).toBe(false);
+    expect(noSet.pendingDefaultSetParams).toEqual([]);
+    expect(noSet.undoAvailable).toBe(false);
+  });
+
   test("clearRow wipes every track's clip at rowIdx + pushes row_clear", () => {
     const c = calls();
-    const S = makeState();
+    const S = makeState({
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     (S.clipSteps as any)[0][1][0] = 5;
     clearRowImpl(S, makeDeps(c), 1);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "row_clear", val: "1" }]);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "row_clear", val: "1" },
+    ]);
     expect((S.clipSteps as any)[0][1][0]).toBe(0);
     expect((S.clipNonEmpty as any)[0][1]).toBe(false);
     expect((S.drumClipNonEmpty as any)[0][1]).toBe(false);
+    expect((S.clipLoopStart as any)[0][1]).toBe(0);
   });
 
   test("clearRow resets bank params for the active clip row", () => {
@@ -302,6 +383,36 @@ describe("copyRow / cutRow / clearRow", () => {
     const S = makeState(); // every track's active clip defaults to 0
     clearRowImpl(S, makeDeps(c), 0); // rowIdx === active clip on every track
     expect(c.names().filter((n) => n === "resetPerClipBankParamsToDefault").length).toBe(NT);
+  });
+
+  test("clearRow active drum row resets page and schedules drum resync", () => {
+    const c = calls();
+    const modes = Array(NT).fill(MELODIC);
+    modes[4] = DRUM;
+    const S = makeState({
+      trackPadMode: modes,
+      trackActiveClip: Array(NT).fill(1),
+      trackCurrentPage: Array(NT).fill(3),
+    });
+
+    clearRowImpl(S, makeDeps(c), 1);
+
+    expect((S.trackCurrentPage as any)[4]).toBe(0);
+    expect((S.drumLaneLoopStart as any)[4]).toBe(0);
+    expect((S.seqActiveNotes as Set<number>).size).toBe(0);
+    expect(S.seqLastStep).toBe(-1);
+    expect(S.pendingDrumResync).toBe(2);
+    expect(S.pendingDrumResyncTrack).toBe(4);
+  });
+
+  test("clearRow no setParam → no-op", () => {
+    const c = calls();
+    const S = makeState();
+
+    clearRowImpl(S, makeDeps(c, { noSet: true }), 1);
+
+    expect(S.pendingDefaultSetParams).toEqual([]);
+    expect(S.undoAvailable).toBe(false);
   });
 });
 

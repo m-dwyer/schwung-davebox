@@ -19,12 +19,11 @@ Migrated in `sync/ui_clip_edit_ops.mjs`:
 - `copyClipImpl`
 - `cutClipImpl`
 - `copyStepImpl`
-
-Still intentionally raw in `sync/ui_clip_edit_ops.mjs`:
-
 - `copyRowImpl`
 - `cutRowImpl`
 - `clearRowImpl`
+
+Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
 
 ## Timing Classes
 
