@@ -2,15 +2,21 @@
 
 ## Purpose
 
-This inventory documents current Overture UI DSP writes and DSP readback scheduling sites. It follows the approved direction in `approved-target-architecture.md` and `boundary-validation.md`: characterize current DSP timing before introducing any compatibility DSP operation queue.
+This inventory documents current Overture UI DSP writes, DSP readback
+scheduling sites, and post-migration write policy. It follows the approved
+direction in `approved-target-architecture.md` and `boundary-validation.md`:
+keep DSP timing behavior explicit and route deferred DSP operations through a
+small compatibility queue boundary.
 
-This is not a refactor proposal.
+This is policy and audit documentation, not a refactor proposal.
 
 ## Compatibility Migration Progress
 
 The compatibility migration keeps `S.pendingDefaultSetParams` as the backing
-storage while routing selected structural writes through
-`sync/ui_dsp_operation_queue.mjs`.
+storage and centralizes raw queue mutation in
+`sync/ui_dsp_operation_queue.mjs`. Raw `pendingDefaultSetParams.push/unshift`
+producers outside that helper have been migrated to semantic operation helpers
+or existing shared operation boundaries.
 
 Migrated in `sync/ui_clip_edit_ops.mjs`:
 
@@ -66,15 +72,15 @@ Migrated through `sync/ui_session_dsp_operations.mjs`:
 - session view scene launch / quantized scene launch commands
 - session view merge row placement commands
 
-Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
+No raw queue producers remain outside `sync/ui_dsp_operation_queue.mjs`.
 
 ## Timing Classes
 
 | Class | Current meaning |
 | --- | --- |
 | Immediate write | Calls `host_module_set_param` / `deps.setParam` in the current handler or tick task. |
-| Queued write | Pushes `{ key, val }` into `S.pendingDefaultSetParams`. |
-| Unshift / priority write | Uses `S.pendingDefaultSetParams.unshift(...)` so the operation drains before older queued writes. |
+| Queued write | Calls `enqueueDspOperation` or a semantic helper backed by `S.pendingDefaultSetParams`. |
+| Unshift / priority write | Calls `enqueuePriorityDspOperation` so the operation drains before older queued writes. |
 | One-per-tick coalescing-sensitive write | Depends on `runDefaultSetParamDrain` shifting one queued item per tick. Often used because same-buffer or same-track writes can be dropped/coalesced by the host/DSP path. |
 | Delayed readback | Sets `pending*` counters or runs tick/poll reads via `host_module_get_param` after DSP has processed a write. |
 | Optimistic mirror update | Updates JS mirror state immediately before or while the DSP write is still pending. |
@@ -133,6 +139,33 @@ Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
 | `render/ui_perf_leds.mjs` | `perf_mods` | Direct perf-mod write from LED/perf update path. Sidecar restore may queue `perf_mods`. | immediate write or queued restore write, transport/performance path |
 | `tick/ui_tick_tasks.mjs` persistence/set tasks | `state_load`, `save`, `snap_save`, `prune_orphan_states`, `tN_tarp_latch` | Direct tick-context writes. `state_load` sets `pendingDspSync = 5`; save is intentionally last so exit/hide happens on a later tick. | immediate write from tick, delayed readback, transport/performance/persist path |
 
+## Intentional Direct Write Policy
+
+Direct DSP writes remain intentional when latency, host ownership, atomic DSP
+payloads, or poll/tick sequencing make queueing the wrong abstraction. Do not
+move these families into `pendingDefaultSetParams` without first adding focused
+tests that prove the timing can change safely.
+
+- Recording and live-note drains stay direct. They use separate one-family-per-
+  tick logic because note events, preroll gates/toggles, recording disarm, and
+  adaptive length writes are latency-sensitive and ordered.
+- Transport, mute/solo, metronome, undo/redo, count-in, and persistence writes
+  stay direct unless a semantic operation already documents a queued path.
+  Combined transport payloads such as `play_focus` and `restart_at` are
+  intentionally atomic.
+- Pad, aftertouch, looper, repeat pad/rate/velocity, and performance-mod user
+  writes stay direct for responsiveness. Queued repeat/latch writes are limited
+  to reset, stop, latch, and all-track sweep operations.
+- Step edit, loop gesture, clip launch/select, drum lane clear/reset/mute/solo,
+  and most bank/knob/jog edits stay direct when they update local mirrors and
+  schedule readback explicitly.
+- Restore and tick-context mirror writes, including state load/save/snapshot
+  commands and drum lane page re-pushes, stay direct where the tick task owns
+  sequencing and follow-up readback.
+- Preview-only writes, such as transpose preview, stay direct. Commit/cancel
+  operations may be queued when they need the one-per-tick compatibility
+  behavior.
+
 ## Readback Scheduling Sites
 
 | Flag / scheduler | Set by | Drained by | Readback behavior |
@@ -158,14 +191,13 @@ Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
 - Padmap recompute after leaving drum mode waits for the queue to empty because same-track `tN_*` writes can interfere.
 - Co-run paths are not pure DSP writes, but they share timing constraints with UI ownership, MIDI injection, LED cache, and host pass-through. They should remain characterized separately from normal DSP operation migration.
 
-## Remaining Raw Queue Classification
+## Post-Migration Queue Classification
 
-This section is an anti-mechanical-migration checkpoint. Not every remaining
-`pendingDefaultSetParams.push(...)` should be blindly wrapped. Some sites have
-documented coalescing timing and should preserve queue semantics; some are
-semantic UI operations that need a higher-level operation boundary first; some
-may be simplification candidates if direct writes or existing readback are
-proved sufficient.
+This section records the migrated deferred DSP operation families. The queue is
+now accessed through `ui_dsp_operation_queue.mjs`, semantic operation helpers,
+or shared operations such as `clearAutomationImpl`. Future DSP-write work
+should choose an operation boundary first; do not reintroduce raw
+`pendingDefaultSetParams` mutation at call sites.
 
 | Site / keys | Classification | Rationale / next move |
 | --- | --- | --- |
@@ -177,7 +209,7 @@ proved sufficient.
 | Selected `input/ui_jog_cc_workflow.mjs` automation clear/reset paths | Migrated compatibility queue family | Jog Delete/Shift+Delete automation clear branches now reuse `clearAutomationImpl`, preserving CC-before-AT order, local mirror wipes, popup/LED behavior, FX reset ordering, and neighboring playback reset writes. |
 | `input/ui_navigation_cc_workflow.mjs` CC lane TPS / loop / res TPS writes | Migrated compatibility queue family | Loop+Up/Down melodic-bank-6 lane geometry changes now route the ordered `cc_lane_tps`, `cc_loop_set`, and optional `cc_lane_res_tps` sequence through `enqueueDspOperation`, preserving FIFO append order and JS mirror updates. |
 | `input/ui_jog_cc_workflow.mjs` bake / bake_scene | Migrated semantic bake operations | Wrapped clip/drum bake and scene bake commits now route through explicit bake operation helpers that enqueue the DSP write while preserving modal close timing, undo marking, popup order, bank refresh, and delayed scene/clip readback. The melodic single-loop bake path remains a direct `setParam('bake', ...)` write. |
-| `input/ui_jog_cc_workflow.mjs` playback-dir / audio-reverse resets | Migrated compatibility queue family | The reset pairs remain coupled to the broader Delete/Shift+Delete reset gestures for FX reset, automation clear ordering, local mirrors, popup, and redraw behavior. Only the drum-lane and melodic-clip playback reset pair writes now route through `enqueueDspOperation`, preserving FIFO append order and any neighboring raw automation clears. |
+| `input/ui_jog_cc_workflow.mjs` playback-dir / audio-reverse resets | Migrated compatibility queue family | The reset pairs remain coupled to the broader Delete/Shift+Delete reset gestures for FX reset, automation clear ordering, local mirrors, popup, and redraw behavior. Only the drum-lane and melodic-clip playback reset pair writes now route through `enqueueDspOperation`, preserving FIFO append order and any neighboring automation-clear operations. |
 | `view/ui_session_view_workflow.mjs` `snap_delete`, `snap_load`, `launch_scene`, `launch_scene_quant`, `merge_place_row` | Migrated semantic session operations | These session/performance commands now route through explicit session operation helpers while preserving UI modal state, mute/solo mirrors, scene button flashes, and merge placement state. Structural clip/row copy paths remain delegated to structural edit operations. |
 | `sync/ui_polldsp_workflow.mjs` focused empty clip auto-launch: `tN_launch_clip` | Migrated semantic transport operation | Focused empty clip launch now routes through the explicit transport operation helper, preserving FIFO append, `trackQueuedClip` mirror update, Session View skip behavior, and the direct record-arm launch path. |
 | `sync/ui_clip_state_sync.mjs` sidecar restore: `perf_mods` | Migrated semantic restore operation | Post-restore performance-mod replay now routes through an explicit restore operation helper, backed by `pendingDefaultSetParams`, while direct drum lane page re-pushes remain direct restore writes. |
@@ -185,17 +217,18 @@ proved sufficient.
 | `drum/ui_drum_repeat_workflows.mjs` / `perform/ui_latch_workflows.mjs` / `input/ui_button_cc_workflow.mjs` repeat stop/latch and TARP latch sweeps | Migrated semantic performance operations | Repeat groove reset, repeat latched/stop, repeat2 stop/lane-off, and TARP latch writes now route through explicit performance operation helpers, backed by `pendingDefaultSetParams`. Low-latency direct repeat pad/rate writes remain direct. |
 | `perform/ui_transpose_workflow.mjs` `t0_xpose_apply` | Migrated semantic transpose operation | Transpose commit/cancel now route through an explicit transpose operation helper, preserving preview cleanup, FIFO append, padmap recompute, redraw, and direct preview writes. |
 
-## Remaining Migration Windows
+## Raw Queue Audit
 
 The raw `pendingDefaultSetParams.push/unshift` migration is complete. Current
 remaining occurrences are the compatibility queue helper itself plus comments
 that describe legacy drain behavior.
 
-## Remaining Family Migration Notes
+## Migrated Family Notes
 
-Use these notes as a pre-flight checklist before migrating any remaining raw
-queue family. Each migration should add focused tests before or alongside the
-queue-helper change, and should keep unrelated raw queue producers untouched.
+Use these notes as the post-migration policy checklist for future changes.
+New deferred DSP writes should reuse the relevant helper or add a semantic
+operation helper with focused tests covering direct-vs-queued behavior, FIFO
+order, mirror updates, and delayed readback behavior where applicable.
 
 ### Leaving drum mode
 
@@ -256,8 +289,8 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
   exact Dir-before-RvSt pair ordering, automation clear writes before melodic
   Shift+Delete reset pairs, local direction/reverse/follow mirrors, and
   unchanged CC-parameter automation clear behavior.
-- Out of scope: selected jog automation clear raw producers and adjacent
-  reset gesture state.
+- Out of scope: adjacent reset gesture state that does not produce deferred DSP
+  operations.
 
 ### Bake and bake scene
 
@@ -277,9 +310,9 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
   `pendingBankRefresh` and active-clip `pendingDrumResync`.
 - Tests pin: direct-write vs queued behavior, FIFO append order, popup-time
   state relative to modal/undo/readback flags, cancel-without-DSP behavior, and
-  unchanged nearby raw jog automation-clear producers.
-- Out of scope: selected jog automation clear reset branches, session bake
-  picker opening/cancel gestures, and broader session/performance commands.
+  unchanged nearby jog automation-clear operation ordering.
+- Out of scope: session bake picker opening/cancel gestures and broader
+  session/performance commands.
 
 ### Session, scene, snapshot, and merge placement
 
@@ -360,18 +393,3 @@ Recommended next order:
 
 1. Future DSP-write work should start from semantic behavior, not raw queue
    search results; raw `pendingDefaultSetParams` producers are now centralized.
-
-## Safest First Compatibility-Migration Candidate
-
-The safest first candidate is the existing `pendingDefaultSetParams` drain itself, scoped to the structural clip edit family in `sync/ui_clip_edit_ops.mjs`, especially `clearClipImpl` / `hardResetClipImpl`.
-
-Why this candidate is safest:
-
-- It already uses a queue-shaped contract: `{ key, val }` entries drained by `runDefaultSetParamDrain`.
-- It has explicit comments documenting coalescing behavior, `unshift` priority, and `clearDrainHold`.
-- It is DSP-affecting structural edit behavior, matching the approved first-wave scope.
-- It already centralizes undo marking, optimistic mirror updates, delayed melodic readback, and drum resync scheduling in a small set of functions.
-- It is not the live-note or recording path, so a compatibility migration can avoid the most latency-sensitive drains.
-- It is not co-run, route remap, pad dispatch, or transport start/stop, all of which have broader hardware ownership interactions.
-
-The migration compatibility requirement for this candidate is strict: preserve `push` versus `unshift`, one-per-tick drain order, `clearDrainHold`, suppression during `pendingSetLoad` / `pendingDspSync`, and the delayed readback flags exactly.
