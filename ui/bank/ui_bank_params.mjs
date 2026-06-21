@@ -414,7 +414,7 @@ export function applyBankParamImpl(S, deps, t, bankIdx, knobIdx, val) {
              * first one (see set-param-per-buffer-per-key memory). delay_retrig
              * + a clip pad press (launch_clip) in quick succession was losing
              * the retrig write. One-per-tick drain guarantees it lands alone. */
-            S.pendingDefaultSetParams.push({ key: 't' + t + '_' + pm.dspKey, val: strVal });
+            enqueueDspOperation(S, { key: 't' + t + '_' + pm.dspKey, val: strVal });
             return;
         }
         deps.setParam('t' + t + '_' + pm.dspKey, strVal);

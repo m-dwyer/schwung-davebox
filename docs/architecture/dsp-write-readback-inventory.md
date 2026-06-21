@@ -130,6 +130,40 @@ Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
 - Padmap recompute after leaving drum mode waits for the queue to empty because same-track `tN_*` writes can interfere.
 - Co-run paths are not pure DSP writes, but they share timing constraints with UI ownership, MIDI injection, LED cache, and host pass-through. They should remain characterized separately from normal DSP operation migration.
 
+## Remaining Raw Queue Classification
+
+This section is an anti-mechanical-migration checkpoint. Not every remaining
+`pendingDefaultSetParams.push(...)` should be blindly wrapped. Some sites have
+documented coalescing timing and should preserve queue semantics; some are
+semantic UI operations that need a higher-level operation boundary first; some
+may be simplification candidates if direct writes or existing readback are
+proved sufficient.
+
+| Site / keys | Classification | Rationale / next move |
+| --- | --- | --- |
+| `bank/ui_bank_params.mjs` CC assignment defaults: `tN_cc_type_assign` | Preserve queue timing, but low-risk compatibility migration | Runs after CC bank read when defaulting Schwung-routed tracks to Sch1-8. The comment explicitly cites one-per-tick coalescing avoidance. It is a compact family and could move through `enqueueDspOperation` without semantic redesign. |
+| `bank/ui_bank_params.mjs` leaving drum mode: `tN_active_drum_lane`, `tN_drum_perform_mode`, `pendingPadNoteMapRecompute` | Preserve queue timing; do not simplify casually | This has the strongest local timing comment: direct `tN_pad_mode=0` followed by same-callback `tN_*` pushes can drop `pad_mode`, and padmap recompute waits until the queue is empty. If migrated, include padmap timing tests; do not split from `pendingPadNoteMapRecompute`. |
+| `bank/ui_bank_params.mjs` deferred bank apply keys: `seq_arp_steps_mode`, `tarp_steps_mode`, `delay_retrig` | Preserve queue timing; good narrow next migration | Comment documents same-track same-buffer coalescing, especially `delay_retrig` followed by clip launch. This is a small writer family, but keep direct writes for the rest of `applyBankParamImpl`. |
+| `ui/ui.js` local `clearStep`: `tN_cC_step_X_clear` | Likely preserve queue timing; semantic-operation candidate | This is a structural step edit with optimistic mirror updates and active-note refresh, similar to migrated step copy. Prefer moving it out of `ui.js` into the clip edit operation module before or while routing through the queue helper. |
+| `ui/ui.js` local `doLaneDoubleFill`: `tN_cC_kL_cc_lane_double_fill` | Likely preserve queue timing; semantic-operation candidate | Structural CC-lane edit with mirror update and redraw. It should probably join the clip/bank structural edit family instead of staying as a local raw queue push. |
+| `menu/ui_clear_auto_workflow.mjs` and automation clears in input workflows: `tN_cc_auto_clear`, `tN_cC_at_clear`, CC lane reset keys | Preserve for now; semantic automation-clear operation first | Several callers update CC/AT mirrors and sometimes schedule readback. A shared `clearAutomation` / `resetCcLane` operation could remove duplication before queue migration. |
+| `input/ui_navigation_cc_workflow.mjs` CC lane TPS / loop / res TPS writes | Preserve queue timing; possible semantic CC-lane resize operation | These are ordered multi-write lane geometry changes (`cc_lane_tps`, `cc_loop_set`, optional `cc_lane_res_tps`) with JS mirror changes. Do not simplify to direct writes without proving same-buffer ordering is safe. |
+| `input/ui_jog_cc_workflow.mjs` bake / bake_scene | Semantic operation first | Bake writes have modal state transitions, undo marking, bank refresh, and delayed scene/clip readback. They should become explicit bake operations, not raw queue wrappers. |
+| `input/ui_jog_cc_workflow.mjs` playback-dir / audio-reverse resets | Simplification candidate after audit | These are reset side-effects around broader bank reset gestures. Some may not need queue timing if they are independent keys, but they often run next to reset FX and automation clears. Keep raw until grouped by reset gesture and tested. |
+| `view/ui_session_view_workflow.mjs` `snap_delete`, `snap_load`, `launch_scene`, `launch_scene_quant`, `merge_place_row` | Semantic operation first; avoid broad migration | These are session/performance commands coupled to UI modal state, mute/solo mirrors, scene buttons, and merge placement. They should be modeled as session operations before any queue migration. |
+| `sync/ui_polldsp_workflow.mjs` focused empty clip auto-launch: `tN_launch_clip` | Question before migrating | This is queued from a poll/transport transition to avoid clashing with start behavior, while record-arm auto-launch remains direct. Treat as transport timing, not a generic structural writer. |
+| `sync/ui_clip_state_sync.mjs` sidecar restore: `perf_mods` | Question before migrating | This is a post-restore performance-mod replay. It is not a normal user edit and may belong with restore sequencing or direct `sendPerfMods` semantics. |
+| `input/ui_transport_cc_workflow.mjs` merge arm/stop/cancel | Semantic operation first; transport/performance path | Merge commands intentionally reconcile through DSP poll state and LEDs. Keep separate from structural DSP queue migration. |
+| `drum/ui_drum_repeat_workflows.mjs` / `perform/ui_latch_workflows.mjs` repeat stop/latch and TARP latch sweeps | Preserve queue timing; performance path | All-track or multi-lane sweeps can emit many same-family writes. Queue timing is probably load-bearing, but these should be migrated only inside a repeat/latch operation boundary. |
+| `perform/ui_transpose_workflow.mjs` `t0_xpose_apply` | Semantic operation first | Commit/cancel both interact with padmap recompute and preview state. A transpose operation can own ordering; do not mechanically wrap first. |
+
+Recommended next order:
+
+1. Migrate `applyBankParamImpl` deferred keys through the compatibility queue helper, with FIFO tests.
+2. Either migrate CC assignment defaults, or pause to extract local `ui.js` structural ops (`clearStep`, `doLaneDoubleFill`) into proper operation modules.
+3. Before touching leaving-drum-mode, add tests around queue-empty padmap recompute and same-track ordering.
+4. Defer session, transport, live merge, repeat/latch, transpose, and bake paths until each has a semantic operation boundary.
+
 ## Safest First Compatibility-Migration Candidate
 
 The safest first candidate is the existing `pendingDefaultSetParams` drain itself, scoped to the structural clip edit family in `sync/ui_clip_edit_ops.mjs`, especially `clearClipImpl` / `hardResetClipImpl`.

@@ -491,14 +491,18 @@ describe("applyBankParam", () => {
     expect(cBlk.names()).toEqual([]);
   });
 
-  test("deferred keys (seq_arp_steps_mode / delay_retrig) queue instead of direct set", () => {
+  test("deferred keys append FIFO through the DSP operation queue", () => {
     const c = calls();
     const S = makeState();
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     applyBankParamImpl(S, makeDeps(c), 0, 4, 4, 2); // SEQ ARP Stps
+    applyBankParamImpl(S, makeDeps(c), 0, 5, 4, 1); // ARP IN Stps
     applyBankParamImpl(S, makeDeps(c), 0, 3, 6, 1); // DELAY Rtrg
     expect(c.names()).toEqual([]); // no direct setParam
     expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
       { key: "t0_seq_arp_steps_mode", val: "2" },
+      { key: "t0_tarp_steps_mode", val: "1" },
       { key: "t0_delay_retrig", val: "1" },
     ]);
   });
