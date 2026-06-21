@@ -10,6 +10,7 @@ import {
   handleUiNoteSessionButton,
   handleUiShiftButton,
 } from "@overture-ui/input/ui_button_cc_workflow.mjs";
+import { traceDspWrites } from "../helpers/dsp-queue-trace";
 
 const CAPTURE = 52;
 const COPY = 60;
@@ -277,7 +278,13 @@ describe("Button CC workflow - Delete button", () => {
 
   test("Loop+Delete on melodic AUTO bank resets the active automation lane and consumes the CC", () => {
     const c = calls();
-    const S = state({ loopHeld: true, activeBank: 6, activeTrack: 1, sessionView: false });
+    const S = state({
+      loopHeld: true,
+      activeBank: 6,
+      activeTrack: 1,
+      sessionView: false,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
 
     expect(handleUiDeleteButton(S, deps(c), DELETE, 127)).toBe(true);
 
@@ -289,7 +296,9 @@ describe("Button CC workflow - Delete button", () => {
     expect(S.undoAvailable).toBe(true);
     expect(S.redoAvailable).toBe(false);
     expect(S.undoSeqArpSnapshot).toBeNull();
-    expect(S.pendingDefaultSetParams).toEqual([
+    expect(traceDspWrites(S, c.log).directSetParams).toEqual([]);
+    expect(traceDspWrites(S, c.log).queuedOperations).toEqual([
+      { key: "older", val: "1" },
       { key: "t1_c1_k2_cc_lane_reset", val: "1" },
     ]);
     expect(c.log).toEqual([["popup", "LANE LOOP", "RESET"], ["redraw"], ["padmap"]]);
@@ -758,7 +767,12 @@ describe("Button CC workflow - Loop track view", () => {
 
   test("Delete+Loop on the auto bank resets the active lane (melodic)", () => {
     const c = calls();
-    const S = state({ activeTrack: 1, deleteHeld: true, activeBank: 6 });
+    const S = state({
+      activeTrack: 1,
+      deleteHeld: true,
+      activeBank: 6,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     // effectiveClip(1) => 1, ccActiveLane[1] => 2: target [1][1][2]
     expect(handleUiLoopTrackViewButton(S, deps(c), LOOP, 127)).toBe(true);
     expect(S.ccLaneLoopStart[1][1][2]).toBe(0);
@@ -768,10 +782,11 @@ describe("Button CC workflow - Loop track view", () => {
     expect(S.undoAvailable).toBe(true);
     expect(S.redoAvailable).toBe(false);
     expect(S.undoSeqArpSnapshot).toBe(null);
-    expect(S.pendingDefaultSetParams).toContainEqual({
-      key: "t1_c1_k2_cc_lane_reset",
-      val: "1",
-    });
+    expect(traceDspWrites(S, c.log).directSetParams).toEqual([]);
+    expect(traceDspWrites(S, c.log).queuedOperations).toEqual([
+      { key: "older", val: "1" },
+      { key: "t1_c1_k2_cc_lane_reset", val: "1" },
+    ]);
     expect(c.log).toEqual([
       ["padmap"],
       ["prepLoopPress", 1, false, 0],
@@ -793,14 +808,19 @@ describe("Button CC workflow - Loop track view", () => {
 
   test("TARP latch shortcut turns latch off when a pad is held and latch is on", () => {
     const c = calls();
-    const S = state({ activeTrack: 1, liveActiveNotes: new Set([60]) });
+    const S = state({
+      activeTrack: 1,
+      liveActiveNotes: new Set([60]),
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     S.bankParams[1][5][7] = 1; // latch currently on
     expect(handleUiLoopTrackViewButton(S, deps(c), LOOP, 127)).toBe(true);
     expect(S.bankParams[1][5][7]).toBe(0);
-    expect(S.pendingDefaultSetParams).toContainEqual({
-      key: "t1_tarp_latch",
-      val: "0",
-    });
+    expect(traceDspWrites(S, c.log).directSetParams).toEqual([]);
+    expect(traceDspWrites(S, c.log).queuedOperations).toEqual([
+      { key: "older", val: "1" },
+      { key: "t1_tarp_latch", val: "0" },
+    ]);
     expect(c.log).toEqual([
       ["padmap"],
       ["prepLoopPress", 1, false, 1],

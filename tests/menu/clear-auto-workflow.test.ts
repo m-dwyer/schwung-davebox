@@ -5,6 +5,7 @@ import {
   closeClearAutoMenuImpl,
   openClearAutoMenuImpl,
 } from "@overture-ui/menu/ui_clear_auto_workflow.mjs";
+import { traceDspWrites } from "../helpers/dsp-queue-trace";
 
 function calls() {
   const log: Array<[string, ...unknown[]]> = [];
@@ -163,12 +164,21 @@ describe("clear automation workflow - click", () => {
 
   test("CLEAR with both selected preserves CC-before-AT pending param order", () => {
     const c = calls();
-    const S = state({ clearAutoMenu: { sel: 3, at: true, cc: true } });
+    const S = state({
+      clearAutoMenu: { sel: 3, at: true, cc: true },
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     clearAutoMenuClickImpl(S, deps(c));
-    expect(S.pendingDefaultSetParams).toEqual([
+    expect(traceDspWrites(S, c.log).directSetParams).toEqual([]);
+    expect(traceDspWrites(S, c.log).queuedOperations).toEqual([
+      { key: "older", val: "1" },
       { key: "t1_cc_auto_clear", val: "1" },
       { key: "t1_c1_at_clear", val: "1" },
     ]);
+    expect(S.trackCCAutoBits[1][1]).toBe(0);
+    expect(S.trackCCLiveVal[1]).toEqual(new Array(8).fill(-1));
+    expect(S.clipCCVal[1][1]).toEqual(new Array(8).fill(-1));
+    expect(S.clipAtHas[1][1]).toBe(false);
     expect(c.log).toEqual([
       ["invalidateLEDCache"],
       ["showActionPopup", "CLEARED", "AT CC"],
