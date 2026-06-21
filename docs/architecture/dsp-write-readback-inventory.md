@@ -143,7 +143,7 @@ proved sufficient.
 | Site / keys | Classification | Rationale / next move |
 | --- | --- | --- |
 | `bank/ui_bank_params.mjs` CC assignment defaults: `tN_cc_type_assign` | Migrated compatibility queue family | Runs after CC bank read when defaulting Schwung-routed tracks to Sch1-8. It now routes through `enqueueDspOperation` while preserving FIFO append order on `pendingDefaultSetParams`. |
-| `bank/ui_bank_params.mjs` leaving drum mode: `tN_active_drum_lane`, `tN_drum_perform_mode`, `pendingPadNoteMapRecompute` | Preserve queue timing; do not simplify casually | This has the strongest local timing comment: direct `tN_pad_mode=0` followed by same-callback `tN_*` pushes can drop `pad_mode`, and padmap recompute waits until the queue is empty. If migrated, include padmap timing tests; do not split from `pendingPadNoteMapRecompute`. |
+| `bank/ui_bank_params.mjs` leaving drum mode: `tN_active_drum_lane`, `tN_drum_perform_mode`, `pendingPadNoteMapRecompute` | Migrated compatibility queue family | Direct `tN_pad_mode=0` remains immediate, while follow-up `tN_active_drum_lane` and `tN_drum_perform_mode` writes route through `enqueueDspOperation` with FIFO append order. Padmap recompute remains coupled to the active-track leave-drum operation and still waits for the queue and `clearDrainHold` to clear. |
 | `bank/ui_bank_params.mjs` deferred bank apply keys: `seq_arp_steps_mode`, `tarp_steps_mode`, `delay_retrig` | Preserve queue timing; good narrow next migration | Comment documents same-track same-buffer coalescing, especially `delay_retrig` followed by clip launch. This is a small writer family, but keep direct writes for the rest of `applyBankParamImpl`. |
 | `sync/ui_clip_edit_ops.mjs` `clearStepImpl` / `doLaneDoubleFillImpl`: `tN_cC_step_X_clear`, `tN_cC_kL_cc_lane_double_fill` | Migrated compatibility queue family | Structural step clear and CC-lane double-fill now route through `enqueueDspOperation` while preserving FIFO append order, optimistic mirrors, active-step note refresh, popup, and redraw behavior. |
 | `menu/ui_clear_auto_workflow.mjs` and automation clears in input workflows: `tN_cc_auto_clear`, `tN_cC_at_clear`, CC lane reset keys | Preserve for now; semantic automation-clear operation first | Several callers update CC/AT mirrors and sometimes schedule readback. A shared `clearAutomation` / `resetCcLane` operation could remove duplication before queue migration. |
@@ -166,12 +166,15 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
 ### Leaving drum mode
 
 - Owner: `bank/ui_bank_params.mjs` `applyTrackConfigImpl`.
-- Raw queued keys: `tN_active_drum_lane`, `tN_drum_perform_mode`.
+- Migrated queued keys: `tN_active_drum_lane`, `tN_drum_perform_mode`
+  now route through `enqueueDspOperation`, backed by
+  `S.pendingDefaultSetParams`.
 - Keep immediate: `tN_pad_mode=0` must remain a direct `setParam` write.
 - Preserve mirror/timing: `S.trackPadMode[t]`, drum-bank fallback state, and
   `S.pendingPadNoteMapRecompute` stay coupled to this operation.
-- Tests to pin: direct `tN_pad_mode` precedes queued follow-up writes; queued
-  follow-up writes append FIFO after existing queued work; padmap recompute does
+- Tests pin: direct `tN_pad_mode` precedes queued follow-up writes; queued
+  follow-up writes append FIFO after existing queued work; active-track
+  `S.pendingPadNoteMapRecompute` coupling is preserved; padmap recompute does
   not run while `pendingDefaultSetParams` is non-empty or `clearDrainHold > 0`.
 - Out of scope: broader route/padmap self-heal behavior and unrelated track
   config keys.

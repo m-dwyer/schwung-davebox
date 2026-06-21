@@ -368,8 +368,8 @@ export function applyTrackConfigImpl(S, deps, t, key, val) {
              * pending flag handled at the top of next tick. */
             S.drumVelZoneArmed[t] = false;
             S.drumLastVelZone[t]  = 0;
-            S.pendingDefaultSetParams.push({ key: 't' + t + '_active_drum_lane',  val: '0' });
-            S.pendingDefaultSetParams.push({ key: 't' + t + '_drum_perform_mode', val: '0' });
+            enqueueDspOperation(S, { key: 't' + t + '_active_drum_lane',  val: '0' });
+            enqueueDspOperation(S, { key: 't' + t + '_drum_perform_mode', val: '0' });
             if (t === S.activeTrack) { S.pendingPadNoteMapRecompute = true; deps.forceRedraw(); }
         }
         if (t === S.activeTrack && val === PAD_MODE_DRUM) { deps.computePadNoteMap(); deps.forceRedraw(); }

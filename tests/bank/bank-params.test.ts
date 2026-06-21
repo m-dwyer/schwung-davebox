@@ -405,14 +405,38 @@ describe("applyTrackConfig", () => {
   test("pad_mode→Keys defers lane resets + flags pad-map recompute", () => {
     const c = calls();
     const S = makeState({ trackPadMode: [DRUM, MELODIC], activeTrack: 0, activeBank: 7 });
+    S.pendingDefaultSetParams = [{ key: "older", val: "1" }];
     applyTrackConfigImpl(S, makeDeps(c), 0, "pad_mode", MELODIC);
     expect(S.activeBank).toBe(0); // bank 7 hidden on melodic
-    expect(S.pendingDefaultSetParams).toEqual([
-      { key: "t0_active_drum_lane", val: "0" },
-      { key: "t0_drum_perform_mode", val: "0" },
-    ]);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [{ key: "t0_pad_mode", val: "0" }],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "t0_active_drum_lane", val: "0" },
+        { key: "t0_drum_perform_mode", val: "0" },
+      ],
+    });
     expect(S.pendingPadNoteMapRecompute).toBe(true);
     expect(c.names()).toContain("forceRedraw");
+  });
+
+  test("pad_mode→Keys keeps pad-map recompute coupled to the active track only", () => {
+    const c = calls();
+    const S = makeState({ trackPadMode: [DRUM, DRUM], activeTrack: 0, activeBank: 0 });
+    applyTrackConfigImpl(S, makeDeps(c), 1, "pad_mode", MELODIC);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [{ key: "t1_pad_mode", val: "0" }],
+      queuedOperations: [
+        { key: "t1_active_drum_lane", val: "0" },
+        { key: "t1_drum_perform_mode", val: "0" },
+      ],
+    });
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "t1_active_drum_lane", val: "0" },
+      { key: "t1_drum_perform_mode", val: "0" },
+    ]);
+    expect(S.pendingPadNoteMapRecompute).toBe(false);
+    expect(c.names()).not.toContain("forceRedraw");
   });
 });
 
