@@ -18,6 +18,7 @@ import {
   handleUiJogStepIntervalToggle,
   handleUiJogTapTempo,
 } from "@overture-ui/input/ui_jog_cc_workflow.mjs";
+import { traceDspWrites } from "../helpers/dsp-queue-trace";
 
 const DRUM = 1;
 const MAIN_KNOB = 14; // MoveMainKnob (jog rotate)
@@ -657,6 +658,40 @@ describe("Jog CC workflow - shift+delete reset", () => {
     expect(c.log).toContainEqual(["popup", "LANE PARAMS", "RESET"]);
   });
 
+  test("drum track appends only the lane playback reset pair after older queued work", () => {
+    const c = calls();
+    const S = state({
+      shiftHeld: true,
+      deleteHeld: true,
+      activeTrack: 0,
+      activeDrumLane: [1, 0],
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+    S.drumLanePlaybackDir[0][1] = 1;
+    S.drumLanePlaybackAudioReverse[0][1] = 1;
+    S.clipSeqFollow[0][0] = false;
+
+    expect(handleUiJogShiftDeleteReset(S, deps(c), ...CLICK)).toBe(true);
+
+    expect(S.drumLanePlaybackDir[0][1]).toBe(0);
+    expect(S.drumLanePlaybackAudioReverse[0][1]).toBe(0);
+    expect(S.bankParams[0][0][6]).toBe(0);
+    expect(S.bankParams[0][0][7]).toBe(1);
+    expect(S.clipSeqFollow[0][0]).toBe(true);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "t0_l1_playback_dir", val: "0" },
+        { key: "t0_l1_playback_audio_reverse", val: "0" },
+      ],
+    });
+    expect(c.log).toEqual([
+      ["resetFxBanks", 0],
+      ["popup", "LANE PARAMS", "RESET"],
+    ]);
+  });
+
   test("melodic track resets clip params + automation", () => {
     const c = calls();
     const S = state({ shiftHeld: true, deleteHeld: true, activeTrack: 1 }); // track 1 = melodic
@@ -664,6 +699,49 @@ describe("Jog CC workflow - shift+delete reset", () => {
     expect(S.trackCCAutoBits[1][0]).toBe(0);
     expect(S.undoSeqArpSnapshot).toEqual({ track: 1, params: [0, 0, 0, 0, 0, 0, 0, 0] });
     expect(c.log).toContainEqual(["popup", "CLIP PARAMS", "RESET"]);
+  });
+
+  test("melodic track keeps automation clears before the clip playback reset pair", () => {
+    const c = calls();
+    const S = state({
+      shiftHeld: true,
+      deleteHeld: true,
+      activeTrack: 1,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+    S.trackCCAutoBits[1][0] = 0xff;
+    S.trackCCLiveVal[1] = [1, 2, 3, 4, 5, 6, 7, 8];
+    S.clipCCVal[1][0] = [8, 7, 6, 5, 4, 3, 2, 1];
+    S.clipAtHas[1][0] = true;
+    S.clipPlaybackDir[1][0] = 1;
+    S.clipPlaybackAudioReverse[1][0] = 1;
+    S.clipSeqFollow[1][0] = false;
+
+    expect(handleUiJogShiftDeleteReset(S, deps(c), ...CLICK)).toBe(true);
+
+    expect(S.trackCCAutoBits[1][0]).toBe(0);
+    expect(S.trackCCLiveVal[1]).toEqual([-1, -1, -1, -1, -1, -1, -1, -1]);
+    expect(S.clipCCVal[1][0]).toEqual([-1, -1, -1, -1, -1, -1, -1, -1]);
+    expect(S.clipAtHas[1][0]).toBe(false);
+    expect(S.clipPlaybackDir[1][0]).toBe(0);
+    expect(S.clipPlaybackAudioReverse[1][0]).toBe(0);
+    expect(S.bankParams[1][0][6]).toBe(0);
+    expect(S.bankParams[1][0][7]).toBe(1);
+    expect(S.clipSeqFollow[1][0]).toBe(true);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "t1_cc_auto_clear", val: "0" },
+        { key: "t1_c0_at_clear", val: "1" },
+        { key: "t1_clip_playback_dir", val: "0" },
+        { key: "t1_clip_playback_audio_reverse", val: "0" },
+      ],
+    });
+    expect(c.log).toEqual([
+      ["resetFxBanks", 1],
+      ["popup", "CLIP PARAMS", "RESET"],
+    ]);
   });
 });
 
@@ -683,6 +761,31 @@ describe("Jog CC workflow - delete reset", () => {
     expect(c.log).toContainEqual(["ledInvalidate"]);
   });
 
+  test("CC PARAM bank automation clear remains the unrelated raw queue producer", () => {
+    const c = calls();
+    const S = state({
+      deleteHeld: true,
+      activeBank: 6,
+      activeTrack: 1,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+
+    expect(handleUiJogDeleteReset(S, deps(c), ...CLICK)).toBe(true);
+
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "t1_cc_auto_clear", val: "0" },
+        { key: "t1_c0_at_clear", val: "1" },
+      ],
+    });
+    expect(c.log).toEqual([
+      ["popup", "AUTOMATION", "CLEAR"],
+      ["ledInvalidate"],
+    ]);
+  });
+
   test("drum Rpt mode resets the lane groove", () => {
     const c = calls();
     const S = state({ deleteHeld: true, activeTrack: 0, activeBank: 5, drumPerformMode: [2, 0] });
@@ -696,6 +799,37 @@ describe("Jog CC workflow - delete reset", () => {
     expect(handleUiJogDeleteReset(S, deps(c), ...CLICK)).toBe(true);
     expect(c.log).toContainEqual(["resetSingleFxBank", 0, 2]);
     expect(c.log).toContainEqual(["popup", "BANK RESET"]);
+  });
+
+  test("drum normal mode queues the lane playback reset pair after FX reset side effects", () => {
+    const c = calls();
+    const S = state({
+      deleteHeld: true,
+      activeTrack: 0,
+      activeBank: 2,
+      activeDrumLane: [1, 0],
+      drumPerformMode: [0, 0],
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+    S.drumLanePlaybackDir[0][1] = 1;
+    S.drumLanePlaybackAudioReverse[0][1] = 1;
+
+    expect(handleUiJogDeleteReset(S, deps(c), ...CLICK)).toBe(true);
+
+    expect(S.drumLanePlaybackDir[0][1]).toBe(0);
+    expect(S.drumLanePlaybackAudioReverse[0][1]).toBe(0);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "t0_l1_playback_dir", val: "0" },
+        { key: "t0_l1_playback_audio_reverse", val: "0" },
+      ],
+    });
+    expect(c.log).toEqual([
+      ["resetSingleFxBank", 0, 2],
+      ["popup", "BANK RESET"],
+    ]);
   });
 
   test("melodic ARP IN bank resets TARP", () => {
@@ -712,6 +846,40 @@ describe("Jog CC workflow - delete reset", () => {
     expect(handleUiJogDeleteReset(S, deps(c), ...CLICK)).toBe(true);
     expect(c.log).toContainEqual(["resetFxBanks", 1]);
     expect(S.undoSeqArpSnapshot).toBe(null);
+  });
+
+  test("melodic other bank queues only the clip playback reset pair after older queued work", () => {
+    const c = calls();
+    const S = state({
+      deleteHeld: true,
+      activeTrack: 1,
+      activeBank: 0,
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
+    S.clipPlaybackDir[1][0] = 1;
+    S.clipPlaybackAudioReverse[1][0] = 1;
+    S.clipSeqFollow[1][0] = false;
+
+    expect(handleUiJogDeleteReset(S, deps(c), ...CLICK)).toBe(true);
+
+    expect(S.clipPlaybackDir[1][0]).toBe(0);
+    expect(S.clipPlaybackAudioReverse[1][0]).toBe(0);
+    expect(S.bankParams[1][0][6]).toBe(0);
+    expect(S.bankParams[1][0][7]).toBe(1);
+    expect(S.clipSeqFollow[1][0]).toBe(true);
+    expect(S.undoSeqArpSnapshot).toBe(null);
+    expect(traceDspWrites(S, c.log)).toEqual({
+      directSetParams: [],
+      queuedOperations: [
+        { key: "older", val: "1" },
+        { key: "t1_clip_playback_dir", val: "0" },
+        { key: "t1_clip_playback_audio_reverse", val: "0" },
+      ],
+    });
+    expect(c.log).toEqual([
+      ["resetFxBanks", 1],
+      ["popup", "BANK RESET"],
+    ]);
   });
 });
 

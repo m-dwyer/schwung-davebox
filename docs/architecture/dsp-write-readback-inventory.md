@@ -156,10 +156,10 @@ proved sufficient.
 | `bank/ui_bank_params.mjs` deferred bank apply keys: `seq_arp_steps_mode`, `tarp_steps_mode`, `delay_retrig` | Migrated compatibility queue family | Comment documents same-track same-buffer coalescing, especially `delay_retrig` followed by clip launch. These three keys now route through `enqueueDspOperation` while preserving FIFO append order on `pendingDefaultSetParams`; direct writes remain for unrelated `applyBankParamImpl` track keys. |
 | `sync/ui_clip_edit_ops.mjs` `clearStepImpl` / `doLaneDoubleFillImpl`: `tN_cC_step_X_clear`, `tN_cC_kL_cc_lane_double_fill` | Migrated compatibility queue family | Structural step clear and CC-lane double-fill now route through `enqueueDspOperation` while preserving FIFO append order, optimistic mirrors, active-step note refresh, popup, and redraw behavior. |
 | `menu/ui_clear_auto_workflow.mjs` and `input/ui_button_cc_workflow.mjs`: `tN_cc_auto_clear`, `tN_cC_at_clear`, `tN_cC_kL_cc_lane_reset` | Migrated compatibility queue family | Menu clear and Delete+Loop CC-lane reset now route through shared `clearAutomationImpl` / `resetCcLaneImpl` operation boundaries, preserving FIFO append order, CC-before-AT DSP order, JS mirror wipes/resets, popup text, undo flags, and nearby TARP latch behavior. |
-| Selected `input/ui_jog_cc_workflow.mjs` automation clear/reset paths | Preserve for reset-gesture audit | Jog reset branches still mix automation clears with FX reset, bake-adjacent state, playback direction/audio-reverse reset side effects, and delayed readbacks. Keep raw until the surrounding reset gestures are characterized. |
+| Selected `input/ui_jog_cc_workflow.mjs` automation clear/reset paths | Preserve for reset-gesture audit | Jog reset branches still mix automation clears with FX reset, bake-adjacent state, and delayed readbacks. Keep raw until the surrounding reset gestures are characterized. |
 | `input/ui_navigation_cc_workflow.mjs` CC lane TPS / loop / res TPS writes | Migrated compatibility queue family | Loop+Up/Down melodic-bank-6 lane geometry changes now route the ordered `cc_lane_tps`, `cc_loop_set`, and optional `cc_lane_res_tps` sequence through `enqueueDspOperation`, preserving FIFO append order and JS mirror updates. |
 | `input/ui_jog_cc_workflow.mjs` bake / bake_scene | Semantic operation first | Bake writes have modal state transitions, undo marking, bank refresh, and delayed scene/clip readback. They should become explicit bake operations, not raw queue wrappers. |
-| `input/ui_jog_cc_workflow.mjs` playback-dir / audio-reverse resets | Simplification candidate after audit | These are reset side-effects around broader bank reset gestures. Some may not need queue timing if they are independent keys, but they often run next to reset FX and automation clears. Keep raw until grouped by reset gesture and tested. |
+| `input/ui_jog_cc_workflow.mjs` playback-dir / audio-reverse resets | Migrated compatibility queue family | The reset pairs remain coupled to the broader Delete/Shift+Delete reset gestures for FX reset, automation clear ordering, local mirrors, popup, and redraw behavior. Only the drum-lane and melodic-clip playback reset pair writes now route through `enqueueDspOperation`, preserving FIFO append order and any neighboring raw automation clears. |
 | `view/ui_session_view_workflow.mjs` `snap_delete`, `snap_load`, `launch_scene`, `launch_scene_quant`, `merge_place_row` | Semantic operation first; avoid broad migration | These are session/performance commands coupled to UI modal state, mute/solo mirrors, scene buttons, and merge placement. They should be modeled as session operations before any queue migration. |
 | `sync/ui_polldsp_workflow.mjs` focused empty clip auto-launch: `tN_launch_clip` | Question before migrating | This is queued from a poll/transport transition to avoid clashing with start behavior, while record-arm auto-launch remains direct. Treat as transport timing, not a generic structural writer. |
 | `sync/ui_clip_state_sync.mjs` sidecar restore: `perf_mods` | Question before migrating | This is a post-restore performance-mod replay. It is not a normal user edit and may belong with restore sequencing or direct `sendPerfMods` semantics. |
@@ -175,23 +175,20 @@ operations, FIFO order, mirror updates, and delayed readback behavior as
 applicable. Keep migrating one window at a time; do not mechanically wrap
 unrelated raw queue producers.
 
-1. Playback direction and audio reverse reset side effects:
-   audit the broader reset gestures first, then migrate only the reset-pair
-   families for drum lanes and melodic clips.
-2. Bake and bake scene:
+1. Bake and bake scene:
    model explicit bake operations that own modal state, undo marking, bank
    refresh, and delayed scene/clip readback before queue migration.
-3. Session view scene, snapshot, and merge commands:
+2. Session view scene, snapshot, and merge commands:
    model session operations for `snap_delete`, `snap_load`, `launch_scene`,
    `launch_scene_quant`, and `merge_place_row`; treat these as
    session/performance commands, not structural edit writes.
-4. Merge arm, stop, and cancel transport path:
+3. Merge arm, stop, and cancel transport path:
    keep separate from session view because poll/LED reconciliation and
    transport state are part of the behavior.
-5. Repeat, latch, and TARP latch sweeps:
+4. Repeat, latch, and TARP latch sweeps:
    add repeat/latch operation boundaries before migrating multi-track or
    multi-lane queued sweeps.
-6. Transpose, sidecar restore, and focused empty clip auto-launch:
+5. Transpose, sidecar restore, and focused empty clip auto-launch:
    clean up the remaining small but semantically odd producers after the
    common operation patterns are established.
 
@@ -231,8 +228,7 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
   CC-before-AT DSP operation order, mirror wipe/reset before DSP readback, and
   unchanged nearby TARP latch queue behavior.
 - Still raw/out of scope: selected `input/ui_jog_cc_workflow.mjs`
-  automation-clear reset branches, bake, playback direction resets, and
-  repeat/latch TARP sweeps.
+  automation-clear reset branches, bake, and repeat/latch TARP sweeps.
 
 ### CC lane geometry
 
@@ -251,14 +247,18 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
 ### Playback direction and audio reverse resets
 
 - Owner: selected reset branches in `input/ui_jog_cc_workflow.mjs`.
-- Raw queued keys: drum-lane `playback_dir` / `playback_audio_reverse` and
-  melodic clip `clip_playback_dir` / `clip_playback_audio_reverse`.
+- Migrated queued keys: drum-lane `playback_dir` /
+  `playback_audio_reverse` and melodic clip `clip_playback_dir` /
+  `clip_playback_audio_reverse` now route through `enqueueDspOperation`,
+  backed by `S.pendingDefaultSetParams`.
 - Preserve mirror/timing: associated bank params, reset gesture popup/redraw,
   and any neighboring reset or clear writes in the same gesture.
-- Tests to pin: whether queue timing is required when these writes are adjacent
-  to FX reset, automation clear, or clip/lane reset operations.
-- Out of scope: do not migrate as standalone writes until the surrounding reset
-  gesture is characterized.
+- Tests pin: no direct `setParam`, FIFO append after existing queued work,
+  exact Dir-before-RvSt pair ordering, automation clear writes before melodic
+  Shift+Delete reset pairs, local direction/reverse/follow mirrors, and
+  unchanged CC-parameter automation clear behavior.
+- Out of scope: selected jog automation clear raw producers and bake-adjacent
+  reset gesture state.
 
 ### Session, scene, snapshot, and merge placement
 

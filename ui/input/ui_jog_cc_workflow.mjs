@@ -1,3 +1,5 @@
+import { enqueueDspOperation } from '../sync/ui_dsp_operation_queue.mjs';
+
 /* Jog-wheel CC handlers split out of _onCC_jog.
  *
  * The jog wheel emits two CCs: a physical CLICK (MoveMainButton = CC 3, fired
@@ -580,8 +582,8 @@ export function handleUiJogShiftDeleteReset(S, deps, d1, d2) {
         S.bankParams[_dt][0][6] = 0;
         S.clipSeqFollow[_dt][_dac] = true;
         S.bankParams[_dt][0][7] = 1;
-        S.pendingDefaultSetParams.push({ key: 't' + _dt + '_l' + _dl + '_playback_dir', val: '0' });
-        S.pendingDefaultSetParams.push({ key: 't' + _dt + '_l' + _dl + '_playback_audio_reverse', val: '0' });
+        enqueueDspOperation(S, { key: 't' + _dt + '_l' + _dl + '_playback_dir', val: '0' });
+        enqueueDspOperation(S, { key: 't' + _dt + '_l' + _dl + '_playback_audio_reverse', val: '0' });
         deps.showActionPopup('LANE PARAMS', 'RESET');
     } else {
         /* Melodic: full reset — NOTE FX, HARMZ, MIDI DLY, + SEQ ARP */
@@ -609,8 +611,8 @@ export function handleUiJogShiftDeleteReset(S, deps, d1, d2) {
         S.bankParams[_arpTrack][0][6] = 0;
         S.clipSeqFollow[_arpTrack][_mac] = true;
         S.bankParams[_arpTrack][0][7] = 1;
-        S.pendingDefaultSetParams.push({ key: 't' + _arpTrack + '_clip_playback_dir', val: '0' });
-        S.pendingDefaultSetParams.push({ key: 't' + _arpTrack + '_clip_playback_audio_reverse', val: '0' });
+        enqueueDspOperation(S, { key: 't' + _arpTrack + '_clip_playback_dir', val: '0' });
+        enqueueDspOperation(S, { key: 't' + _arpTrack + '_clip_playback_audio_reverse', val: '0' });
         deps.showActionPopup('CLIP PARAMS', 'RESET');
     }
     return true;
@@ -662,8 +664,8 @@ export function handleUiJogDeleteReset(S, deps, d1, d2) {
             S.bankParams[_bt][0][6] = 0;
             S.clipSeqFollow[_bt][_bac] = true;
             S.bankParams[_bt][0][7] = 1;
-            S.pendingDefaultSetParams.push({ key: 't' + _bt + '_l' + _bl + '_playback_dir', val: '0' });
-            S.pendingDefaultSetParams.push({ key: 't' + _bt + '_l' + _bl + '_playback_audio_reverse', val: '0' });
+            enqueueDspOperation(S, { key: 't' + _bt + '_l' + _bl + '_playback_dir', val: '0' });
+            enqueueDspOperation(S, { key: 't' + _bt + '_l' + _bl + '_playback_audio_reverse', val: '0' });
             deps.showActionPopup('BANK RESET');
         }
     } else if (S.activeBank === 5) {
@@ -682,8 +684,8 @@ export function handleUiJogDeleteReset(S, deps, d1, d2) {
         S.bankParams[_mt][0][6] = 0;
         S.clipSeqFollow[_mt][_mac2] = true;
         S.bankParams[_mt][0][7] = 1;
-        S.pendingDefaultSetParams.push({ key: 't' + _mt + '_clip_playback_dir', val: '0' });
-        S.pendingDefaultSetParams.push({ key: 't' + _mt + '_clip_playback_audio_reverse', val: '0' });
+        enqueueDspOperation(S, { key: 't' + _mt + '_clip_playback_dir', val: '0' });
+        enqueueDspOperation(S, { key: 't' + _mt + '_clip_playback_audio_reverse', val: '0' });
         deps.showActionPopup('BANK RESET');
     }
     return true;
