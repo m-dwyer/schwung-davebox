@@ -157,6 +157,40 @@ proved sufficient.
 | `drum/ui_drum_repeat_workflows.mjs` / `perform/ui_latch_workflows.mjs` repeat stop/latch and TARP latch sweeps | Preserve queue timing; performance path | All-track or multi-lane sweeps can emit many same-family writes. Queue timing is probably load-bearing, but these should be migrated only inside a repeat/latch operation boundary. |
 | `perform/ui_transpose_workflow.mjs` `t0_xpose_apply` | Semantic operation first | Commit/cancel both interact with padmap recompute and preview state. A transpose operation can own ordering; do not mechanically wrap first. |
 
+## Remaining Migration Windows
+
+These windows group the remaining raw queue sites by behavior and risk. Each
+window should add focused tests that prove direct DSP writes, queued DSP
+operations, FIFO order, mirror updates, and delayed readback behavior as
+applicable. Keep migrating one window at a time; do not mechanically wrap
+unrelated raw queue producers.
+
+1. Automation clears and CC lane resets:
+   introduce shared `clearAutomation` / `resetCcLane` operation boundaries,
+   then migrate `cc_auto_clear`, `at_clear`, and `cc_lane_reset` callers.
+2. CC lane resize:
+   migrate the ordered `cc_lane_tps`, `cc_loop_set`, and optional
+   `cc_lane_res_tps` sequence with tests for FIFO order and JS mirrors.
+3. Playback direction and audio reverse reset side effects:
+   audit the broader reset gestures first, then migrate only the reset-pair
+   families for drum lanes and melodic clips.
+4. Bake and bake scene:
+   model explicit bake operations that own modal state, undo marking, bank
+   refresh, and delayed scene/clip readback before queue migration.
+5. Session view scene, snapshot, and merge commands:
+   model session operations for `snap_delete`, `snap_load`, `launch_scene`,
+   `launch_scene_quant`, and `merge_place_row`; treat these as
+   session/performance commands, not structural edit writes.
+6. Merge arm, stop, and cancel transport path:
+   keep separate from session view because poll/LED reconciliation and
+   transport state are part of the behavior.
+7. Repeat, latch, and TARP latch sweeps:
+   add repeat/latch operation boundaries before migrating multi-track or
+   multi-lane queued sweeps.
+8. Transpose, sidecar restore, and focused empty clip auto-launch:
+   clean up the remaining small but semantically odd producers after the
+   common operation patterns are established.
+
 ## Remaining Family Migration Notes
 
 Use these notes as a pre-flight checklist before migrating any remaining raw
