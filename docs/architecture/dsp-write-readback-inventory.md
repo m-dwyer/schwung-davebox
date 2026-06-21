@@ -53,6 +53,12 @@ Migrated in `input/ui_jog_cc_workflow.mjs`:
 - wrapped clip bake / drum lane bake / drum clip bake queued commits
 - scene bake queued commits
 
+Migrated through `sync/ui_session_dsp_operations.mjs`:
+
+- session view snapshot delete/load commands
+- session view scene launch / quantized scene launch commands
+- session view merge row placement commands
+
 Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
 
 ## Timing Classes
@@ -93,7 +99,7 @@ Still intentionally raw in `sync/ui_clip_edit_ops.mjs`: none.
 | `bank/ui_bank_params.mjs` leaving drum mode | `tN_active_drum_lane`, `tN_drum_perform_mode` | After direct `tN_pad_mode`, queues downstream mirror writes and defers padmap recompute until queue is empty to avoid same-track interference. | immediate write plus queued write, one-per-tick coalescing-sensitive write, delayed padmap write, bank/drum/route path |
 | `input/ui_button_cc_workflow.mjs` and `menu/ui_clear_auto_workflow.mjs` | CC lane reset, CC auto clear, aftertouch clear, TARP latch | Queues automation and latch clear operations from button/menu handlers. | queued write, bank/clip path |
 | `input/ui_jog_cc_workflow.mjs` and `input/ui_navigation_cc_workflow.mjs` | bake, clip playback dir/reverse reset, CC lane loop/resolution/TPS writes, automation clear | Mixes queued structural/automation writes with direct action writes. CC lane geometry resize from navigation now routes through the compatibility DSP operation queue; several other sites schedule `pendingStepsReread` or `pendingDrumResync`. | queued write, immediate write, delayed readback, bank/loop/clip/drum path |
-| `view/ui_session_view_workflow.mjs` | `snap_delete`, `snap_load`, `launch_scene`, `merge_place_row` | Queues session/performance operations from step/pad/row gestures. Clip/row copy paths delegate to structural edit ops above. | queued write, transport/performance path, clip path |
+| `view/ui_session_view_workflow.mjs` | `snap_delete`, `snap_load`, `launch_scene`, `launch_scene_quant`, `merge_place_row` | Routes explicit session/performance operations through `sync/ui_session_dsp_operations.mjs`. Clip/row copy paths delegate to structural edit ops above. | queued write, transport/performance path, clip path |
 | `input/ui_transport_cc_workflow.mjs` sample/live merge | `merge_stop`, `merge_arm` | Queues merge arm/stop so placement/finalization can reconcile through poll state. | queued write, transport/performance path |
 | `perform/ui_latch_workflows.mjs` and drum repeat stop/latch queues | `tN_drum_repeat_stop`, `tN_drum_repeat2_lane_off`, `tN_tarp_latch`, queued repeat latch/stop variants | Queues unlatch/stop operations where all-track sweeps would otherwise emit multiple same-buffer writes. | queued write, one-per-tick coalescing-sensitive write, transport/performance path, drum path |
 | `perform/ui_transpose_workflow.mjs` | `t0_xpose_apply` | Queues transpose apply/cancel operations after preview. | queued write, bank/performance path |
@@ -165,7 +171,7 @@ proved sufficient.
 | `input/ui_navigation_cc_workflow.mjs` CC lane TPS / loop / res TPS writes | Migrated compatibility queue family | Loop+Up/Down melodic-bank-6 lane geometry changes now route the ordered `cc_lane_tps`, `cc_loop_set`, and optional `cc_lane_res_tps` sequence through `enqueueDspOperation`, preserving FIFO append order and JS mirror updates. |
 | `input/ui_jog_cc_workflow.mjs` bake / bake_scene | Migrated semantic bake operations | Wrapped clip/drum bake and scene bake commits now route through explicit bake operation helpers that enqueue the DSP write while preserving modal close timing, undo marking, popup order, bank refresh, and delayed scene/clip readback. The melodic single-loop bake path remains a direct `setParam('bake', ...)` write. |
 | `input/ui_jog_cc_workflow.mjs` playback-dir / audio-reverse resets | Migrated compatibility queue family | The reset pairs remain coupled to the broader Delete/Shift+Delete reset gestures for FX reset, automation clear ordering, local mirrors, popup, and redraw behavior. Only the drum-lane and melodic-clip playback reset pair writes now route through `enqueueDspOperation`, preserving FIFO append order and any neighboring raw automation clears. |
-| `view/ui_session_view_workflow.mjs` `snap_delete`, `snap_load`, `launch_scene`, `launch_scene_quant`, `merge_place_row` | Semantic operation first; avoid broad migration | These are session/performance commands coupled to UI modal state, mute/solo mirrors, scene buttons, and merge placement. They should be modeled as session operations before any queue migration. |
+| `view/ui_session_view_workflow.mjs` `snap_delete`, `snap_load`, `launch_scene`, `launch_scene_quant`, `merge_place_row` | Migrated semantic session operations | These session/performance commands now route through explicit session operation helpers while preserving UI modal state, mute/solo mirrors, scene button flashes, and merge placement state. Structural clip/row copy paths remain delegated to structural edit operations. |
 | `sync/ui_polldsp_workflow.mjs` focused empty clip auto-launch: `tN_launch_clip` | Question before migrating | This is queued from a poll/transport transition to avoid clashing with start behavior, while record-arm auto-launch remains direct. Treat as transport timing, not a generic structural writer. |
 | `sync/ui_clip_state_sync.mjs` sidecar restore: `perf_mods` | Question before migrating | This is a post-restore performance-mod replay. It is not a normal user edit and may belong with restore sequencing or direct `sendPerfMods` semantics. |
 | `input/ui_transport_cc_workflow.mjs` merge arm/stop/cancel | Semantic operation first; transport/performance path | Merge commands intentionally reconcile through DSP poll state and LEDs. Keep separate from structural DSP queue migration. |
@@ -180,17 +186,13 @@ operations, FIFO order, mirror updates, and delayed readback behavior as
 applicable. Keep migrating one window at a time; do not mechanically wrap
 unrelated raw queue producers.
 
-1. Session view scene, snapshot, and merge commands:
-   model session operations for `snap_delete`, `snap_load`, `launch_scene`,
-   `launch_scene_quant`, and `merge_place_row`; treat these as
-   session/performance commands, not structural edit writes.
-2. Merge arm, stop, and cancel transport path:
+1. Merge arm, stop, and cancel transport path:
    keep separate from session view because poll/LED reconciliation and
    transport state are part of the behavior.
-3. Repeat, latch, and TARP latch sweeps:
+2. Repeat, latch, and TARP latch sweeps:
    add repeat/latch operation boundaries before migrating multi-track or
    multi-lane queued sweeps.
-4. Transpose, sidecar restore, and focused empty clip auto-launch:
+3. Transpose, sidecar restore, and focused empty clip auto-launch:
    clean up the remaining small but semantically odd producers after the
    common operation patterns are established.
 
@@ -287,15 +289,18 @@ queue-helper change, and should keep unrelated raw queue producers untouched.
 ### Session, scene, snapshot, and merge placement
 
 - Owner: `view/ui_session_view_workflow.mjs`.
-- Raw queued keys: `snap_delete`, `snap_load`, `launch_scene`,
-  `launch_scene_quant`, `merge_place_row`.
-- Preserve mirror/timing: modal/session state, selected scene/clip indices,
-  mute/solo or merge mirrors, launch quantization behavior, LEDs, and poll-DSP
-  reconciliation.
-- Tests to pin: modal state transitions, queued command order, and merge state
-  reconciliation through poll state.
-- Out of scope: structural clip/row copy paths already delegated to structural
-  edit operations. Model these as session operations before queue migration.
+- Migrated queued keys: `snap_delete`, `snap_load`, `launch_scene`,
+  `launch_scene_quant`, and `merge_place_row` now route through explicit
+  session operation helpers, backed by `S.pendingDefaultSetParams`.
+- Preserve mirror/timing: snapshot mirror clear/load, modal/session state,
+  selected scene/clip indices, scene button flashes, merge placement state,
+  launch quantization behavior, and poll-DSP reconciliation.
+- Tests pin: no direct `setParam`, FIFO append after existing queued work,
+  snapshot mute/solo mirror restore before `snap_load`, scene button flash
+  state for quantized launch, merge placement close plus exact row payloads,
+  and structural clip/row copy delegation without local queue writes.
+- Out of scope: merge arm/stop/cancel transport path and broader DSP poll merge
+  reconciliation beyond the existing poll state tests.
 
 ### Transport and focused empty clip auto-launch
 
