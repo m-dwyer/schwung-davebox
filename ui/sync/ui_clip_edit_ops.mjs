@@ -140,7 +140,7 @@ export function copyClipImpl(S, deps, srcT, srcC, dstT, dstC) {
     if (srcT === dstT && srcC === dstC) return;
     if (!deps.setParam) return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'clip_copy', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
+    enqueueDspOperation(S, { key: 'clip_copy', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
     S.clipSteps[dstT][dstC] = S.clipSteps[srcT][srcC].slice();
     S.clipLength[dstT][dstC] = S.clipLength[srcT][srcC];
     S.clipLoopStart[dstT][dstC] = S.clipLoopStart[srcT][srcC];
@@ -162,7 +162,7 @@ export function cutClipImpl(S, deps, srcT, srcC, dstT, dstC) {
     if (srcT === dstT && srcC === dstC) return;
     if (!deps.setParam) return;
     S.undoAvailable = true; S.redoAvailable = false; S.undoSeqArpSnapshot = null;
-    S.pendingDefaultSetParams.push({ key: 'clip_cut', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
+    enqueueDspOperation(S, { key: 'clip_cut', val: `${srcT} ${srcC} ${dstT} ${dstC}` });
     S.clipSteps[dstT][dstC] = S.clipSteps[srcT][srcC].slice();
     S.clipLength[dstT][dstC] = S.clipLength[srcT][srcC];
     S.clipLoopStart[dstT][dstC] = S.clipLoopStart[srcT][srcC];

@@ -203,11 +203,16 @@ describe("hardResetClip", () => {
 describe("copyClip / cutClip", () => {
   test("copyClip mirrors src→dst + pushes clip_copy", () => {
     const c = calls();
-    const S = makeState();
+    const S = makeState({
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     (S.clipSteps as any)[0][0][0] = 7;
     (S.clipLength as any)[0][0] = 32;
     copyClipImpl(S, makeDeps(c), 0, 0, 1, 1);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "clip_copy", val: "0 0 1 1" }]);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "clip_copy", val: "0 0 1 1" },
+    ]);
     expect((S.clipSteps as any)[1][1][0]).toBe(7);
     expect((S.clipLength as any)[1][1]).toBe(32);
     // slice() → independent copy
@@ -224,17 +229,36 @@ describe("copyClip / cutClip", () => {
 
   test("cutClip mirrors dst then resets src", () => {
     const c = calls();
-    const S = makeState();
+    const S = makeState({
+      pendingDefaultSetParams: [{ key: "older", val: "1" }],
+    });
     (S.clipSteps as any)[0][0][0] = 7;
     (S.clipLength as any)[0][0] = 32;
     cutClipImpl(S, makeDeps(c), 0, 0, 1, 1);
-    expect(S.pendingDefaultSetParams).toEqual([{ key: "clip_cut", val: "0 0 1 1" }]);
+    expect(S.pendingDefaultSetParams).toEqual([
+      { key: "older", val: "1" },
+      { key: "clip_cut", val: "0 0 1 1" },
+    ]);
     expect((S.clipSteps as any)[1][1][0]).toBe(7);
     expect((S.clipLength as any)[1][1]).toBe(32);
     // src reset
     expect((S.clipSteps as any)[0][0][0]).toBe(0);
     expect((S.clipLength as any)[0][0]).toBe(16);
     expect((S.clipNonEmpty as any)[0][0]).toBe(false);
+  });
+
+  test("copyClip / cutClip no setParam → no-op", () => {
+    const c = calls();
+    const copyState = makeState();
+    const cutState = makeState();
+
+    copyClipImpl(copyState, makeDeps(c, { noSet: true }), 0, 0, 1, 1);
+    cutClipImpl(cutState, makeDeps(c, { noSet: true }), 0, 0, 1, 1);
+
+    expect(copyState.pendingDefaultSetParams).toEqual([]);
+    expect(copyState.undoAvailable).toBe(false);
+    expect(cutState.pendingDefaultSetParams).toEqual([]);
+    expect(cutState.undoAvailable).toBe(false);
   });
 });
 
