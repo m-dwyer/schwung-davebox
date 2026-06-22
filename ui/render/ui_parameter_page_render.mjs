@@ -1,10 +1,9 @@
-import { S } from '../core/ui_state.mjs';
+import { S, effectiveClip } from '../core/ui_state.mjs';
 import {
     BANKS,
     PAD_MODE_DRUM,
     TPS_VALUES,
 } from '../core/ui_constants.mjs';
-import { effectiveClip } from './ui_leds.mjs';
 import { motionOverviewModel } from '../core/ui_motion.mjs';
 import {
     allLanesParameterPageGridModel,
