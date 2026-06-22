@@ -18,7 +18,7 @@ const FOLDER = {
     'ui_sound_edit.mjs': 'core', 'ui_note_edit_helpers.mjs': 'core',
     // render — anything whose job is drawing the OLED / LEDs
     'ui_render_surface.mjs': 'render', 'ui_leds.mjs': 'render', 'ui_perf_leds.mjs': 'render',
-    'ui_led_init_workflow.mjs': 'render', 'ui_bank_render.mjs': 'render',
+    'ui_led_init_workflow.mjs': 'render',
     'ui_bank_chrome_render.mjs': 'render', 'ui_track_chrome_render.mjs': 'render',
     'ui_idle_render.mjs': 'render', 'ui_session_overview_render.mjs': 'render',
     'ui_perf_render.mjs': 'render', 'ui_popup_render.mjs': 'render',

@@ -218,11 +218,11 @@ alias remains while older callers migrate. Specialized Parameter Page overviews
 use explicit presentation models where they need sparse slots, so physical
 encoder positions stay stable when a page has empty cells.
 
-`ui/render/ui_bank_render.mjs` is a legacy compatibility adapter. It re-exports
-the Parameter Page render names from `ui_parameter_page_render.mjs` so older
-imports keep working while render ownership moves toward Page-oriented modules.
-Do not remove or rename those compatibility exports until the Parameter Page
-refactor is complete and at least one release/merge cycle has passed.
+The old `ui/render/ui_bank_render.mjs` compatibility adapter was removed after
+an import audit found no in-repo runtime callers. Parameter Page renderers now
+live at `ui/render/ui_parameter_page_render.mjs`; legacy function names such as
+`renderGenericBankOverview()` remain exported there where they are still useful
+for callers that have not migrated to Page-oriented names.
 
 ## Open Decisions
 

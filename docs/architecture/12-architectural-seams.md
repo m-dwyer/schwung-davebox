@@ -699,7 +699,7 @@ Most OLED screens already have separate render modules and adjacent tests.
 - `ui/render/ui_idle_render.mjs`
 - `ui/render/ui_session_overview_render.mjs`
 - `ui/render/ui_perf_render.mjs`
-- `ui/render/ui_bank_render.mjs`
+- `ui/render/ui_parameter_page_render.mjs`
 - `ui/render/ui_step_edit_render.mjs`
 - `ui/render/ui_modal_render.mjs`
 - `ui/render/ui_prompt_render.mjs`
@@ -1020,7 +1020,7 @@ Parameter Page Seam
 - `ui/bank/ui_bank_params.mjs`
 - `ui/bank/ui_bank_state.mjs`
 - `ui/input/ui_knob_cc_workflow.mjs`
-- `ui/render/ui_bank_render.mjs`
+- `ui/render/ui_parameter_page_render.mjs`
 - `ui/render/ui_bank_chrome_render.mjs`
 - `tests/bank/*`
 - `tests/input/knob-cc-workflow.test.ts`

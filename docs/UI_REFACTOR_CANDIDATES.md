@@ -60,7 +60,7 @@ Good test seams for larger moves:
 
 - `ui/ui.js`: `_onCC_knobs()`, `readBankParams()`, `applyBankParam()`,
   `bankHasAltParams()`, `altIndicatorActive()`, related reset helpers
-- `ui/ui_bank_render.mjs`
+- `ui/render/ui_parameter_page_render.mjs`
 - `ui/ui_bank_chrome_render.mjs`
 - `ui/ui_constants.mjs`
 - `tests/render/parameter-page-render.test.ts`
