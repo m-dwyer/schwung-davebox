@@ -20,7 +20,7 @@ import {
 } from "@overture-ui/core/ui_sound_edit.mjs";
 import { renderSchwungSoundPage } from "@overture-ui/render/ui_sound_edit_render.mjs";
 import { PARAM_PEEK_DETAIL_TICKS, autoLaneLabel, motionIdleModel, motionOverviewModel, paramPeekInfo } from "@overture-ui/core/ui_motion.mjs";
-import { allLanesParameterPageGridModel, drumLaneParameterPageGridModel, drumMidiDelayParameterPageGridModel, drumNoteFxParameterPageModel, genericParameterPageGridModel, labelValueParameterPageGridModel, melodicNoteFxParameterPageGridModel } from "@overture-ui/core/ui_parameter_page_model.mjs";
+import { allLanesParameterPageGridModel, drumLaneParameterPageGridModel, drumMidiDelayParameterPageGridModel, drumNoteFxParameterPageModel, drumRepeatGrooveParameterPageModel, genericParameterPageGridModel, labelValueParameterPageGridModel, melodicNoteFxParameterPageGridModel } from "@overture-ui/core/ui_parameter_page_model.mjs";
 import { loadSchwungSoundPreset, saveSchwungSoundPreset } from "@overture-ui/core/ui_sound_preset_manager.mjs";
 import { fmtArpRate } from "@overture-ui/core/ui_constants.mjs";
 
@@ -1024,5 +1024,36 @@ describe("UI descriptor seams", () => {
     expect(model.cells[5]).toMatchObject({ label: ">Gate", value: "V9  ", highlighted: false });
     expect(model.cells[6]).toBeNull();
     expect(model.cells[7]).toMatchObject({ label: "Algo", value: "Walk", highlighted: true });
+  });
+
+  test("drum repeat groove Parameter Page model preserves gates, inactive steps, and alt nudge text", () => {
+    const normal = drumRepeatGrooveParameterPageModel({
+      altMode: false,
+      gateBits: 0b00000101,
+      gateLength: 4,
+      velocityScale: [80, 90, 100, 110, 120, 130, 140, 150],
+      nudge: [-2, 0, 3, 4, 5, 6, 7, 8],
+      knobTouched: 1,
+    });
+
+    expect(normal.steps).toHaveLength(8);
+    expect(normal.steps[0]).toEqual({ active: true, gateOn: true, value: "80% ", highlighted: false });
+    expect(normal.steps[1]).toEqual({ active: true, gateOn: false, value: "90% ", highlighted: true });
+    expect(normal.steps[2]).toEqual({ active: true, gateOn: true, value: "100%", highlighted: false });
+    expect(normal.steps[4]).toEqual({ active: false, gateOn: false, value: "", highlighted: false });
+
+    const alt = drumRepeatGrooveParameterPageModel({
+      altMode: true,
+      gateBits: 0b00000101,
+      gateLength: 4,
+      velocityScale: [80, 90, 100, 110, 120, 130, 140, 150],
+      nudge: [-2, 0, 3, 4, 5, 6, 7, 8],
+      knobTouched: 3,
+    });
+
+    expect(alt.steps[0]).toMatchObject({ active: true, gateOn: true, value: "-2% ", highlighted: false });
+    expect(alt.steps[1]).toMatchObject({ active: true, gateOn: false, value: " 0% ", highlighted: false });
+    expect(alt.steps[2]).toMatchObject({ active: true, gateOn: true, value: "+3% ", highlighted: false });
+    expect(alt.steps[3]).toMatchObject({ active: true, gateOn: false, value: "+4% ", highlighted: true });
   });
 });

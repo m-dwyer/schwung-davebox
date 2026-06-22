@@ -15,7 +15,8 @@ import {
     genericParameterPageGridModel,
     drumMidiDelayParameterPageGridModel,
     labelValueParameterPageGridModel,
-    melodicNoteFxParameterPageGridModel
+    melodicNoteFxParameterPageGridModel,
+    drumRepeatGrooveParameterPageModel
 } from '../core/ui_parameter_page_model.mjs';
 import { renderEncoderValueGrid } from './ui_oled_layout.mjs';
 
@@ -127,15 +128,22 @@ export function renderDrumRepeatGrooveBankOverview(deps) {
     if (!S.sessionView && deps.bankHasAltParams(S.activeTrack, S.activeBank)) {
         deps.drawAltArrow(98, false, deps.altIndicatorActive(S.activeTrack, S.activeBank));
     }
-    const gLen = S.drumRepeatGateLen[t][lane];
+    const model = drumRepeatGrooveParameterPageModel({
+        altMode: S.altMode,
+        gateBits: S.drumRepeatGate[t][lane],
+        gateLength: S.drumRepeatGateLen[t][lane],
+        velocityScale: S.drumRepeatVelScale[t][lane],
+        nudge: S.drumRepeatNudge[t][lane],
+        knobTouched: S.knobTouched
+    });
     for (let k = 0; k < 8; k++) {
+        const step = model.steps[k];
         const colX = 4 + (k % 4) * 30;
         const rowY = k < 4 ? 12 : 36;
-        const hi   = (S.knobTouched === k);
+        const hi   = step.highlighted;
         if (hi) deps.fill_rect(colX, rowY, 24, 24, 1);
-        if (k >= gLen) continue;
-        const gateOn = !!(S.drumRepeatGate[t][lane] & (1 << k));
-        if (gateOn) {
+        if (!step.active) continue;
+        if (step.gateOn) {
             deps.fill_rect(colX, rowY + 1, 24, 4, hi ? 0 : 1);
         } else {
             const bc = hi ? 0 : 1;
@@ -144,12 +152,7 @@ export function renderDrumRepeatGrooveBankOverview(deps) {
             deps.fill_rect(colX, rowY + 1, 1, 4, bc);
             deps.fill_rect(colX + 23, rowY + 1, 1, 4, bc);
         }
-        const vs   = S.drumRepeatVelScale[t][lane][k];
-        const ndg  = S.drumRepeatNudge[t][lane][k];
-        const disp = S.altMode
-            ? (ndg === 0 ? ' 0%' : (ndg > 0 ? '+' : '') + ndg + '%')
-            : vs + '%';
-        deps.print(colX, rowY + 12, col4(disp), hi ? 0 : 1);
+        deps.print(colX, rowY + 12, step.value, hi ? 0 : 1);
     }
 }
 

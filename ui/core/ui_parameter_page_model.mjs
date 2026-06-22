@@ -84,6 +84,16 @@ import { col4, fmtArpRate, fmtBool, fmtGateMod, fmtLen, fmtPct, fmtPlayDir, fmtR
  */
 
 /**
+ * @typedef {Object} DrumRepeatGrooveParameterPageInput
+ * @property {boolean} altMode
+ * @property {number} gateBits
+ * @property {number} gateLength
+ * @property {number[]} velocityScale
+ * @property {number[]} nudge
+ * @property {number} knobTouched
+ */
+
+/**
  * @typedef {Object} DrumNoteFxNoteBlockModel
  * @property {string} octaveLabel
  * @property {string} noteLabel
@@ -95,6 +105,19 @@ import { col4, fmtArpRate, fmtBool, fmtGateMod, fmtLen, fmtPct, fmtPlayDir, fmtR
  * @typedef {Object} DrumNoteFxParameterPageModel
  * @property {DrumNoteFxNoteBlockModel} noteBlock
  * @property {import('../types').ParameterPageCellSlot[]} cells
+ */
+
+/**
+ * @typedef {Object} DrumRepeatGrooveStepModel
+ * @property {boolean} active
+ * @property {boolean} gateOn
+ * @property {string} value
+ * @property {boolean} highlighted
+ */
+
+/**
+ * @typedef {Object} DrumRepeatGrooveParameterPageModel
+ * @property {DrumRepeatGrooveStepModel[]} steps
  */
 
 const RND_ALG_NAMES = ['Pure', 'Gaus', 'Walk'];
@@ -180,6 +203,35 @@ export function drumNoteFxParameterPageModel(input) {
  */
 export function melodicNoteFxParameterPageGridModel(input) {
     return parameterPageGridModel(melodicNoteFxParameterPageCells(input));
+}
+
+/**
+ * @param {DrumRepeatGrooveParameterPageInput} input
+ * @returns {DrumRepeatGrooveParameterPageModel}
+ */
+export function drumRepeatGrooveParameterPageModel(input) {
+    /** @type {DrumRepeatGrooveStepModel[]} */
+    const steps = [];
+    for (let k = 0; k < 8; k++) {
+        const active = k < input.gateLength;
+        const nudge = input.nudge[k];
+        steps.push({
+            active: active,
+            gateOn: active && !!(input.gateBits & (1 << k)),
+            value: active ? col4(input.altMode ? repeatGrooveNudgeLabel(nudge) : input.velocityScale[k] + '%') : '',
+            highlighted: input.knobTouched === k
+        });
+    }
+    return { steps: steps };
+}
+
+/**
+ * @param {number} nudge
+ * @returns {string}
+ */
+function repeatGrooveNudgeLabel(nudge) {
+    if (nudge === 0) return ' 0%';
+    return (nudge > 0 ? '+' : '') + nudge + '%';
 }
 
 /**
