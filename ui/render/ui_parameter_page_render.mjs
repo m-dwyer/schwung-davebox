@@ -5,15 +5,13 @@ import {
     TPS_VALUES,
     col4,
     fmtBool,
-    fmtLen,
-    fmtPct,
-    fmtSign,
 } from '../core/ui_constants.mjs';
 import { effectiveClip } from './ui_leds.mjs';
 import { motionOverviewModel } from '../core/ui_motion.mjs';
 import {
     allLanesParameterPageGridModel,
     drumLaneParameterPageGridModel,
+    drumNoteFxParameterPageModel,
     genericParameterPageGridModel,
     drumMidiDelayParameterPageGridModel,
     labelValueParameterPageGridModel
@@ -77,12 +75,21 @@ export function renderAllLanesBankOverview(deps) {
 export function renderDrumNoteFxBankOverview(deps) {
     const t    = S.activeTrack;
     const vals = S.bankParams[t][1];
+    const lane = S.activeDrumLane[t];
+    const dlNote = S.drumLaneNote[t][lane];
+    const model = drumNoteFxParameterPageModel({
+        noteName: deps.midiNoteName(dlNote),
+        noteNumber: dlNote,
+        velocity: vals[1],
+        quantize: vals[2],
+        lengthMode: S.drumLaneLenMode[t][lane] | 0,
+        gate: vals[0],
+        knobTouched: S.knobTouched
+    });
     deps.drawBankHeading('NOTE FX');
     {
-        const lane     = S.activeDrumLane[t];
-        const dlNote   = S.drumLaneNote[t][lane];
-        const noteStr  = deps.midiNoteName(dlNote) + ' ' + dlNote;
-        const hiLane   = (S.knobTouched === 0 || S.knobTouched === 1);
+        const noteBlock = model.noteBlock;
+        const hiLane   = noteBlock.highlighted;
         const LX = 4, LY = 12, LW = 54, LH = 24;
         if (hiLane) {
             deps.fill_rect(LX, LY, LW, LH, 1);
@@ -90,25 +97,21 @@ export function renderDrumNoteFxBankOverview(deps) {
             deps.fill_rect(LX, LY + 9, LW, 1, 1);
         }
         const lc = hiLane ? 0 : 1;
-        deps.print(LX + Math.floor((LW/2 - 18) / 2),                    LY + 1,  'Oct',  lc);
-        deps.print(LX + Math.floor(LW/2) + Math.floor((LW/2 - 24) / 2), LY + 1,  'Note', lc);
-        deps.print(LX + Math.floor((LW - noteStr.length * 6) / 2),      LY + 13, noteStr, lc);
+        deps.print(LX + Math.floor((LW/2 - 18) / 2),                    LY + 1,  noteBlock.octaveLabel, lc);
+        deps.print(LX + Math.floor(LW/2) + Math.floor((LW/2 - 24) / 2), LY + 1,  noteBlock.noteLabel,   lc);
+        deps.print(LX + Math.floor((LW - noteBlock.noteText.length * 6) / 2), LY + 13, noteBlock.noteText, lc);
     }
     {
-        const lane = S.activeDrumLane[t];
-        const nfxLabels = [null, null, 'Vel', 'Qnt', 'Len>', '>Gate', null, null];
-        const nfxVals   = [null, null, fmtSign(vals[1]), fmtPct(vals[2]),
-                           fmtLen(S.drumLaneLenMode[t][lane] | 0), fmtPct(vals[0]),
-                           null, null];
         for (let k = 2; k < 6; k++) {
+            const cell = model.cells[k];
+            if (!cell) continue;
             const colX = 4 + (k % 4) * 30;
             const rowY = k < 4 ? 12 : 36;
-            const hi   = (S.knobTouched === k);
+            const hi   = cell.highlighted;
             const cellW = (k === 5) ? 30 : 24;
             if (hi) deps.fill_rect(colX, rowY, cellW, 24, 1);
-            const lbl = nfxLabels[k];
-            deps.print(colX, rowY,      lbl.length > 4 ? lbl : col4(lbl), hi ? 0 : 1);
-            deps.print(colX, rowY + 12, col4(nfxVals[k]),                 hi ? 0 : 1);
+            deps.print(colX, rowY,      cell.label, hi ? 0 : 1);
+            deps.print(colX, rowY + 12, cell.value, hi ? 0 : 1);
         }
     }
 }

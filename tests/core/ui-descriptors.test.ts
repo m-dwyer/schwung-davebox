@@ -20,7 +20,7 @@ import {
 } from "@overture-ui/core/ui_sound_edit.mjs";
 import { renderSchwungSoundPage } from "@overture-ui/render/ui_sound_edit_render.mjs";
 import { PARAM_PEEK_DETAIL_TICKS, autoLaneLabel, motionIdleModel, motionOverviewModel, paramPeekInfo } from "@overture-ui/core/ui_motion.mjs";
-import { allLanesParameterPageGridModel, drumLaneParameterPageGridModel, drumMidiDelayParameterPageGridModel, genericParameterPageGridModel, labelValueParameterPageGridModel } from "@overture-ui/core/ui_parameter_page_model.mjs";
+import { allLanesParameterPageGridModel, drumLaneParameterPageGridModel, drumMidiDelayParameterPageGridModel, drumNoteFxParameterPageModel, genericParameterPageGridModel, labelValueParameterPageGridModel } from "@overture-ui/core/ui_parameter_page_model.mjs";
 import { loadSchwungSoundPreset, saveSchwungSoundPreset } from "@overture-ui/core/ui_sound_preset_manager.mjs";
 import { fmtArpRate } from "@overture-ui/core/ui_constants.mjs";
 
@@ -911,6 +911,34 @@ describe("UI descriptor seams", () => {
     expect(model.cells[4]).toMatchObject({ label: "Gate", value: "1/8T", highlighted: false });
     expect(model.cells[5]).toMatchObject({ label: "Clk ", value: "-6  ", highlighted: true });
     expect(model.cells[6]).toMatchObject({ label: "Retr", value: "ON  ", highlighted: false });
+    expect(model.cells[7]).toBeNull();
+  });
+
+  test("drum NOTE FX Parameter Page model preserves note block and sparse cells", () => {
+    const model = drumNoteFxParameterPageModel({
+      noteName: "C2",
+      noteNumber: 48,
+      velocity: -4,
+      quantize: 55,
+      lengthMode: 5,
+      gate: 87,
+      knobTouched: 1,
+    });
+
+    expect(model.noteBlock).toEqual({
+      octaveLabel: "Oct",
+      noteLabel: "Note",
+      noteText: "C2 48",
+      highlighted: true,
+    });
+    expect(model.cells).toHaveLength(8);
+    expect(model.cells[0]).toBeNull();
+    expect(model.cells[1]).toBeNull();
+    expect(model.cells[2]).toMatchObject({ label: "Vel ", value: "-4  ", highlighted: false });
+    expect(model.cells[3]).toMatchObject({ label: "Qnt ", value: "55% ", highlighted: false });
+    expect(model.cells[4]).toMatchObject({ label: "Len>", value: "2   ", highlighted: false });
+    expect(model.cells[5]).toMatchObject({ label: ">Gate", value: "87% ", highlighted: false });
+    expect(model.cells[6]).toBeNull();
     expect(model.cells[7]).toBeNull();
   });
 

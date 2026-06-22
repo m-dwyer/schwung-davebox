@@ -1,4 +1,4 @@
-import { col4, fmtArpRate, fmtBool, fmtGateMod, fmtPct, fmtPlayDir, fmtRes, fmtRevStyle, fmtSign, fmtStretch, fmtVelOverride } from './ui_constants.mjs';
+import { col4, fmtArpRate, fmtBool, fmtGateMod, fmtLen, fmtPct, fmtPlayDir, fmtRes, fmtRevStyle, fmtSign, fmtStretch, fmtVelOverride } from './ui_constants.mjs';
 
 /**
  * @typedef {Object} ParameterPageKnob
@@ -63,6 +63,31 @@ import { col4, fmtArpRate, fmtBool, fmtGateMod, fmtPct, fmtPlayDir, fmtRes, fmtR
  * @property {number} knobTouched
  */
 
+/**
+ * @typedef {Object} DrumNoteFxParameterPageInput
+ * @property {string} noteName
+ * @property {number} noteNumber
+ * @property {number} velocity
+ * @property {number} quantize
+ * @property {number} lengthMode
+ * @property {number} gate
+ * @property {number} knobTouched
+ */
+
+/**
+ * @typedef {Object} DrumNoteFxNoteBlockModel
+ * @property {string} octaveLabel
+ * @property {string} noteLabel
+ * @property {string} noteText
+ * @property {boolean} highlighted
+ */
+
+/**
+ * @typedef {Object} DrumNoteFxParameterPageModel
+ * @property {DrumNoteFxNoteBlockModel} noteBlock
+ * @property {import('../types').ParameterPageCellSlot[]} cells
+ */
+
 const RND_ALG_NAMES = ['Pure', 'Gaus', 'Walk'];
 
 /** @type {import('../types').ParameterPageGridOptions} */
@@ -122,6 +147,22 @@ export function drumLaneParameterPageGridModel(input) {
  */
 export function allLanesParameterPageGridModel(input) {
     return parameterPageGridModel(allLanesParameterPageCells(input));
+}
+
+/**
+ * @param {DrumNoteFxParameterPageInput} input
+ * @returns {DrumNoteFxParameterPageModel}
+ */
+export function drumNoteFxParameterPageModel(input) {
+    return {
+        noteBlock: {
+            octaveLabel: 'Oct',
+            noteLabel: 'Note',
+            noteText: input.noteName + ' ' + input.noteNumber,
+            highlighted: input.knobTouched === 0 || input.knobTouched === 1
+        },
+        cells: drumNoteFxParameterPageCells(input)
+    };
 }
 
 /**
@@ -208,6 +249,28 @@ export function drumMidiDelayParameterPageCells(input) {
     return labelValueParameterPageCells({
         labels: labels,
         values: values,
+        knobTouched: input.knobTouched
+    });
+}
+
+/**
+ * @param {DrumNoteFxParameterPageInput} input
+ * @returns {import('../types').ParameterPageCellSlot[]}
+ */
+export function drumNoteFxParameterPageCells(input) {
+    return labelValueParameterPageCells({
+        labels: [null, null, 'Vel', 'Qnt', 'Len>', '>Gate', null, null],
+        values: [
+            null,
+            null,
+            fmtSign(input.velocity),
+            fmtPct(input.quantize),
+            fmtLen(input.lengthMode),
+            fmtPct(input.gate),
+            null,
+            null
+        ],
+        wideLabels: true,
         knobTouched: input.knobTouched
     });
 }
