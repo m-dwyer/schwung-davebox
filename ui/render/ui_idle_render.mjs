@@ -1,4 +1,4 @@
-import { S } from '../core/ui_state.mjs';
+import { S, effectiveClip } from '../core/ui_state.mjs';
 import {
     BANKS,
     NOTE_KEYS,
@@ -7,7 +7,6 @@ import {
     SCALE_DISPLAY,
     SCENE_LETTERS
 } from '../core/ui_constants.mjs';
-import { effectiveClip } from './ui_leds.mjs';
 import { motionIdleModel } from '../core/ui_motion.mjs';
 import { renderTrackRow } from './ui_track_chrome_render.mjs';
 import {
