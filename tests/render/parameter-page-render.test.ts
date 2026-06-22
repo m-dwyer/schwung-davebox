@@ -11,7 +11,7 @@ import {
   renderMelodicNoteFxBankOverview,
   renderMotionBankOverview,
   renderTrackBankOverview,
-} from "@overture-ui/render/ui_bank_render.mjs";
+} from "@overture-ui/render/ui_parameter_page_render.mjs";
 
 type DrawCall = [string, ...unknown[]];
 
