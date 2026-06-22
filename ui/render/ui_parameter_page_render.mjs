@@ -14,7 +14,8 @@ import {
     drumMidiDelayParameterPageGridModel,
     labelValueParameterPageGridModel,
     melodicNoteFxParameterPageGridModel,
-    drumRepeatGrooveParameterPageModel
+    drumRepeatGrooveParameterPageModel,
+    trackBankOverviewRoute
 } from '../core/ui_parameter_page_model.mjs';
 import { renderEncoderValueGrid } from './ui_oled_layout.mjs';
 
@@ -227,23 +228,37 @@ export function renderMelodicNoteFxBankOverview(deps) {
 
 export function renderTrackBankOverview(deps, bank) {
     const isDrum = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM;
-    if (isDrum && bank === 0) {
+    const route = trackBankOverviewRoute({
+        isDrum: isDrum,
+        bank: bank,
+        allLanesConfirmed: S.allLanesConfirmed
+    });
+    switch (route) {
+    case 'drumLane':
         renderDrumLaneBankOverview(deps);
-    } else if (isDrum && bank === 7 && !S.allLanesConfirmed) {
+        break;
+    case 'allLanesConfirm':
         renderAllLanesConfirm(deps);
-    } else if (isDrum && bank === 7) {
+        break;
+    case 'allLanes':
         renderAllLanesBankOverview(deps);
-    } else if (isDrum && bank === 1) {
+        break;
+    case 'drumNoteFx':
         renderDrumNoteFxBankOverview(deps);
-    } else if (isDrum && bank === 5) {
+        break;
+    case 'drumRepeatGroove':
         renderDrumRepeatGrooveBankOverview(deps);
-    } else if (bank === 6) {
+        break;
+    case 'motion':
         renderMotionBankOverview(deps);
-    } else if (!isDrum && bank === 1) {
+        break;
+    case 'melodicNoteFx':
         renderMelodicNoteFxBankOverview(deps);
-    } else if (isDrum && bank === 3) {
+        break;
+    case 'drumMidiDelay':
         renderDrumMidiDelayBankOverview(deps);
-    } else {
+        break;
+    default:
         renderGenericParameterPageOverview(deps, bank);
     }
 }

@@ -120,6 +120,17 @@ import { col4, fmtArpRate, fmtBool, fmtGateMod, fmtLen, fmtPct, fmtPlayDir, fmtR
  * @property {DrumRepeatGrooveStepModel[]} steps
  */
 
+/**
+ * @typedef {Object} TrackBankOverviewRouteInput
+ * @property {boolean} isDrum
+ * @property {number} bank
+ * @property {boolean} allLanesConfirmed
+ */
+
+/**
+ * @typedef {'drumLane' | 'allLanesConfirm' | 'allLanes' | 'drumNoteFx' | 'drumRepeatGroove' | 'motion' | 'melodicNoteFx' | 'drumMidiDelay' | 'generic'} TrackBankOverviewRoute
+ */
+
 const RND_ALG_NAMES = ['Pure', 'Gaus', 'Walk'];
 
 /** @type {import('../types').ParameterPageGridOptions} */
@@ -232,6 +243,24 @@ export function drumRepeatGrooveParameterPageModel(input) {
 function repeatGrooveNudgeLabel(nudge) {
     if (nudge === 0) return ' 0%';
     return (nudge > 0 ? '+' : '') + nudge + '%';
+}
+
+/**
+ * @param {TrackBankOverviewRouteInput} input
+ * @returns {TrackBankOverviewRoute}
+ */
+export function trackBankOverviewRoute(input) {
+    const bank = input.bank;
+    const isDrum = input.isDrum;
+    if (isDrum && bank === 0) return 'drumLane';
+    if (isDrum && bank === 7 && !input.allLanesConfirmed) return 'allLanesConfirm';
+    if (isDrum && bank === 7) return 'allLanes';
+    if (isDrum && bank === 1) return 'drumNoteFx';
+    if (isDrum && bank === 5) return 'drumRepeatGroove';
+    if (bank === 6) return 'motion';
+    if (!isDrum && bank === 1) return 'melodicNoteFx';
+    if (isDrum && bank === 3) return 'drumMidiDelay';
+    return 'generic';
 }
 
 /**

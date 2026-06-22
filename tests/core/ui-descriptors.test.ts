@@ -20,7 +20,7 @@ import {
 } from "@overture-ui/core/ui_sound_edit.mjs";
 import { renderSchwungSoundPage } from "@overture-ui/render/ui_sound_edit_render.mjs";
 import { PARAM_PEEK_DETAIL_TICKS, autoLaneLabel, motionIdleModel, motionOverviewModel, paramPeekInfo } from "@overture-ui/core/ui_motion.mjs";
-import { allLanesParameterPageGridModel, drumLaneParameterPageGridModel, drumMidiDelayParameterPageGridModel, drumNoteFxParameterPageModel, drumRepeatGrooveParameterPageModel, genericParameterPageGridModel, labelValueParameterPageGridModel, melodicNoteFxParameterPageGridModel } from "@overture-ui/core/ui_parameter_page_model.mjs";
+import { allLanesParameterPageGridModel, drumLaneParameterPageGridModel, drumMidiDelayParameterPageGridModel, drumNoteFxParameterPageModel, drumRepeatGrooveParameterPageModel, genericParameterPageGridModel, labelValueParameterPageGridModel, melodicNoteFxParameterPageGridModel, trackBankOverviewRoute } from "@overture-ui/core/ui_parameter_page_model.mjs";
 import { loadSchwungSoundPreset, saveSchwungSoundPreset } from "@overture-ui/core/ui_sound_preset_manager.mjs";
 import { fmtArpRate } from "@overture-ui/core/ui_constants.mjs";
 
@@ -1055,5 +1055,18 @@ describe("UI descriptor seams", () => {
     expect(alt.steps[1]).toMatchObject({ active: true, gateOn: false, value: " 0% ", highlighted: false });
     expect(alt.steps[2]).toMatchObject({ active: true, gateOn: true, value: "+3% ", highlighted: false });
     expect(alt.steps[3]).toMatchObject({ active: true, gateOn: false, value: "+4% ", highlighted: true });
+  });
+
+  test("track bank overview route preserves specialized renderer selection", () => {
+    expect(trackBankOverviewRoute({ isDrum: true, bank: 0, allLanesConfirmed: true })).toBe("drumLane");
+    expect(trackBankOverviewRoute({ isDrum: true, bank: 7, allLanesConfirmed: false })).toBe("allLanesConfirm");
+    expect(trackBankOverviewRoute({ isDrum: true, bank: 7, allLanesConfirmed: true })).toBe("allLanes");
+    expect(trackBankOverviewRoute({ isDrum: true, bank: 1, allLanesConfirmed: true })).toBe("drumNoteFx");
+    expect(trackBankOverviewRoute({ isDrum: true, bank: 5, allLanesConfirmed: true })).toBe("drumRepeatGroove");
+    expect(trackBankOverviewRoute({ isDrum: true, bank: 6, allLanesConfirmed: true })).toBe("motion");
+    expect(trackBankOverviewRoute({ isDrum: false, bank: 6, allLanesConfirmed: true })).toBe("motion");
+    expect(trackBankOverviewRoute({ isDrum: false, bank: 1, allLanesConfirmed: true })).toBe("melodicNoteFx");
+    expect(trackBankOverviewRoute({ isDrum: true, bank: 3, allLanesConfirmed: true })).toBe("drumMidiDelay");
+    expect(trackBankOverviewRoute({ isDrum: false, bank: 3, allLanesConfirmed: true })).toBe("generic");
   });
 });
