@@ -1,6 +1,7 @@
 import { readMelodicClipFromDsp } from '../sync/ui_clip_track_sync.mjs';
 import { drainNextDspOperation } from '../sync/ui_dsp_operation_queue.mjs';
 import { drainRecordingQueues, isActivelyRecording } from '../perform/ui_recording_workflow.mjs';
+import { beginAutoRoute } from '../core/ui_auto_route.mjs';
 
 function resyncMelodicClipReadback(S, deps, track, clip) {
     readMelodicClipFromDsp(S, deps, track, clip, {
@@ -98,13 +99,43 @@ export function runDefaultSetParamDrain(S, deps) {
     drainNextDspOperation(S, deps);
 }
 
+/**
+ * Mirror DSP state back into the UI after a set load / hot-reload. On the
+ * set-load-complete path (`opts.restoreSidecar`) it also arms the auto-route
+ * gesture macro for the freshly-loaded set; `beginAutoRoute` guards itself
+ * once-per-uuid, so re-settles with the same set are no-ops.
+ *
+ * @param {import('../types').State} S
+ * @param {{
+ *   pollDSP: () => void,
+ *   syncClipsFromDsp: () => void,
+ *   syncMuteSoloFromDsp: () => void,
+ *   restoreUiSidecar: (applyDefaultsNow: boolean) => void,
+ *   computePadNoteMap: () => void,
+ *   invalidateLEDCache: () => void,
+ *   forceRedraw: () => void,
+ *   host_module_get_param?: (key: string) => (string | null),
+ *   move_midi_inject_to_move?: (packet: number[]) => void,
+ *   shadowSetParam?: (slot: number, key: string, val: string) => void
+ * }} deps
+ * @param {{ restoreSidecar: boolean, clearStateLoading: boolean }} opts
+ * @returns {void}
+ */
 function refreshDspMirrorFromDsp(S, deps, opts) {
     deps.pollDSP();
     for (let t = 0; t < S.trackCurrentPage.length; t++)
         S.trackCurrentPage[t] = Math.max(0, Math.floor(S.trackCurrentStep[t] / 16));
     deps.syncClipsFromDsp();
     deps.syncMuteSoloFromDsp();
-    if (opts.restoreSidecar) deps.restoreUiSidecar(true);
+    if (opts.restoreSidecar) {
+        deps.restoreUiSidecar(true);
+        /* Set-load complete: arm the canonical MIDI-channel auto-route for this
+         * set. Read the uuid the same way the resume-edge does (lines ~828-829);
+         * beginAutoRoute's once-per-uuid guard handles re-fire. */
+        const uuid = deps.host_module_get_param
+            ? (deps.host_module_get_param('state_uuid') || '') : '';
+        beginAutoRoute(S, deps, uuid);
+    }
     deps.computePadNoteMap();
     if (opts.clearStateLoading) S.stateLoading = false;
     deps.invalidateLEDCache();

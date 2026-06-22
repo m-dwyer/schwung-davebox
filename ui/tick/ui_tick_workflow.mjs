@@ -40,6 +40,7 @@ import {
     handleTrackViewChordFirstStepTick,
     handleTrackViewStepHoldThreshold
 } from '../view/ui_track_view_step_workflow.mjs';
+import { runAutoRouteTickTasks } from '../core/ui_auto_route.mjs';
 
 export function runTickWorkflow(S, deps) {
     S.tickCount++;
@@ -172,10 +173,20 @@ export function runTickWorkflow(S, deps) {
         restoreUiSidecar: deps.restoreUiSidecar,
         computePadNoteMap: deps.computePadNoteMap,
         invalidateLEDCache: deps.invalidateLEDCache,
-        forceRedraw: deps.forceRedraw
+        forceRedraw: deps.forceRedraw,
+        move_midi_inject_to_move: deps.move_midi_inject_to_move,
+        shadowSetParam: deps.shadowSetParam
     });
 
     runMoveCoRunTickTasks(S, {
+        move_midi_inject_to_move: deps.move_midi_inject_to_move
+    });
+
+    /* Auto-route gesture drain: blind front-panel macro that sets Move tracks to
+     * MIDI ch 1-4 on a new/changed set. Armed by beginAutoRoute() on the
+     * set-load-complete path (runDspMirrorResyncTasks above). No reordering of the
+     * existing tick calls. */
+    runAutoRouteTickTasks(S, {
         move_midi_inject_to_move: deps.move_midi_inject_to_move
     });
 
