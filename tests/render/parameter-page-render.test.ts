@@ -7,11 +7,17 @@ import {
   renderDrumMidiDelayBankOverview,
   renderDrumNoteFxBankOverview,
   renderDrumRepeatGrooveBankOverview,
+  renderGenericBankOverview,
   renderGenericParameterPageOverview,
   renderMelodicNoteFxBankOverview,
   renderMotionBankOverview,
   renderTrackBankOverview,
 } from "@overture-ui/render/ui_parameter_page_render.mjs";
+import {
+  renderDrumMidiDelayBankOverview as legacyRenderDrumMidiDelayBankOverview,
+  renderGenericBankOverview as legacyRenderGenericBankOverview,
+  renderTrackBankOverview as legacyRenderTrackBankOverview,
+} from "@overture-ui/render/ui_bank_render.mjs";
 
 type DrawCall = [string, ...unknown[]];
 
@@ -84,6 +90,12 @@ describe("Parameter Page render presentation", () => {
     S.drumRepeatVelScale = [[[], [], [80, 90, 100, 110, 120, 130, 140, 150]]];
     S.drumRepeatNudge = [[[], [], [-2, 0, 3, 4, 5, 6, 7, 8]]];
     S.allLanesConfirmed = true;
+  });
+
+  test("legacy bank render adapter preserves compatibility exports", () => {
+    expect(legacyRenderDrumMidiDelayBankOverview).toBe(renderDrumMidiDelayBankOverview);
+    expect(legacyRenderGenericBankOverview).toBe(renderGenericBankOverview);
+    expect(legacyRenderTrackBankOverview).toBe(renderTrackBankOverview);
   });
 
   test("renders DRUM LANE overview labels and lane-level values", () => {

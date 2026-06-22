@@ -5,7 +5,6 @@ import {
     TPS_VALUES,
     col4,
     fmtBool,
-    fmtGateMod,
     fmtLen,
     fmtPct,
     fmtPlayDir,
@@ -19,6 +18,7 @@ import { effectiveClip } from './ui_leds.mjs';
 import { motionOverviewModel } from '../core/ui_motion.mjs';
 import {
     genericParameterPageGridModel,
+    drumMidiDelayParameterPageGridModel,
     labelValueParameterPageGridModel
 } from '../core/ui_parameter_page_model.mjs';
 import { renderEncoderValueGrid } from './ui_oled_layout.mjs';
@@ -160,18 +160,13 @@ export function renderDrumMidiDelayBankOverview(deps) {
     const t     = S.activeTrack;
     const vals  = S.bankParams[t][3];
     const knobs = BANKS[3].knobs;
-    const drumDlyLabels = [knobs[0].abbrev, knobs[1].abbrev, knobs[2].abbrev, knobs[3].abbrev, 'Gate', 'Clk', 'Retrg', null];
-    const drumDlyFmt    = [knobs[0].fmt, knobs[1].fmt, knobs[2].fmt, knobs[3].fmt, fmtGateMod, fmtSign, fmtBool, null];
     deps.drawBankHeading(BANKS[3].name);
-    for (let k = 0; k < 8; k++) {
-        if (!drumDlyLabels[k]) continue;
-        const colX = 4 + (k % 4) * 30;
-        const rowY = k < 4 ? 12 : 36;
-        const hi   = (S.knobTouched === k);
-        if (hi) deps.fill_rect(colX, rowY, 24, 24, 1);
-        deps.print(colX, rowY,      col4(drumDlyLabels[k]), hi ? 0 : 1);
-        deps.print(colX, rowY + 12, col4(drumDlyFmt[k](vals[k])), hi ? 0 : 1);
-    }
+    const model = drumMidiDelayParameterPageGridModel({
+        knobs: knobs,
+        vals: vals,
+        knobTouched: S.knobTouched
+    });
+    renderEncoderValueGrid(deps, model.cells, model.grid);
 }
 
 export function renderMotionBankOverview(deps) {

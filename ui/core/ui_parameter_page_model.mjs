@@ -1,4 +1,4 @@
-import { col4, fmtArpRate, fmtRevStyle, fmtSign } from './ui_constants.mjs';
+import { col4, fmtArpRate, fmtBool, fmtGateMod, fmtRevStyle, fmtSign } from './ui_constants.mjs';
 
 const RND_ALG_NAMES = ['Pure', 'Gaus', 'Walk'];
 
@@ -19,6 +19,13 @@ export function genericParameterPageGridModel(input) {
 export function labelValueParameterPageGridModel(input) {
     return {
         cells: labelValueParameterPageCells(input),
+        grid: GENERIC_PARAMETER_PAGE_GRID_OPTIONS
+    };
+}
+
+export function drumMidiDelayParameterPageGridModel(input) {
+    return {
+        cells: drumMidiDelayParameterPageCells(input),
         grid: GENERIC_PARAMETER_PAGE_GRID_OPTIONS
     };
 }
@@ -74,4 +81,25 @@ export function labelValueParameterPageCells(input) {
         });
     }
     return cells;
+}
+
+export function drumMidiDelayParameterPageCells(input) {
+    const knobs = input.knobs;
+    const vals = input.vals;
+    const labels = [knobs[0].abbrev, knobs[1].abbrev, knobs[2].abbrev, knobs[3].abbrev, 'Gate', 'Clk', 'Retrg', null];
+    const values = [
+        knobs[0].fmt(vals[0]),
+        knobs[1].fmt(vals[1]),
+        knobs[2].fmt(vals[2]),
+        knobs[3].fmt(vals[3]),
+        fmtGateMod(vals[4]),
+        fmtSign(vals[5]),
+        fmtBool(vals[6]),
+        null
+    ];
+    return labelValueParameterPageCells({
+        labels: labels,
+        values: values,
+        knobTouched: input.knobTouched
+    });
 }

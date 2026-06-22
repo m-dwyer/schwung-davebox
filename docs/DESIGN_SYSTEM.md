@@ -209,6 +209,12 @@ alias remains while older callers migrate. The legacy `renderBankCells()` helper
 also delegates to the shared grid with slot preservation, so physical encoder
 positions stay stable when a page has empty cells.
 
+`ui/render/ui_bank_render.mjs` is a legacy compatibility adapter. It re-exports
+the Parameter Page render names from `ui_parameter_page_render.mjs` so older
+imports keep working while render ownership moves toward Page-oriented modules.
+Do not remove or rename those compatibility exports until the Parameter Page
+refactor is complete and at least one release/merge cycle has passed.
+
 ## Open Decisions
 
 - Which existing top-level legacy bank should be the first migrated Parameter
