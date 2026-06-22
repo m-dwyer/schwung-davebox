@@ -29,9 +29,9 @@ function createDeps(calls: DrawCall[], values: Record<string, string | null> = {
   };
 }
 
-function pixelTexts(calls: DrawCall[]) {
+function printTexts(calls: DrawCall[]) {
   return calls
-    .filter((call) => call[0] === "pixel")
+    .filter((call) => call[0] === "print")
     .map((call) => String(call[3]));
 }
 
@@ -139,9 +139,9 @@ describe("Idle presentation", () => {
     expect(calls).toContainEqual(["metro"]);
     expect(calls).toContainEqual(["print", 5, 34, "1", 1]);
     expect(calls).toContainEqual(["fill", 3, 32, 10, 1, 1]);
-    expect(pixelTexts(calls)).toEqual(expect.arrayContaining(["B", "C"]));
-    expect(calls).toContainEqual(["fill", 4, 45, 9, 7, 1]);
-    expect(calls).toContainEqual(["fill", 20, 45, 9, 7, 1]);
+    expect(printTexts(calls)).toEqual(expect.arrayContaining(["B", "C"]));
+    expect(calls).toContainEqual(["fill", 4, 45, 9, 9, 1]);
+    expect(calls).toContainEqual(["fill", 20, 45, 9, 9, 1]);
   });
 
   test("renders melodic idle heading, arp/scale status, active clips, and position bar", () => {
@@ -155,15 +155,15 @@ describe("Idle presentation", () => {
     renderMelodicTrackIdleView(createDeps(calls));
 
     expect(calls[0]).toEqual(["headingInv", "ARP IN REC", false]);
-    expect(pixelTexts(calls)).toEqual(expect.arrayContaining(["Oct:+1", "Arp", "C Major", "B", "C"]));
-    expect(calls).toContainEqual(["fill", 51, 9, 19, 7, 1]);
+    expect(printTexts(calls)).toEqual(expect.arrayContaining(["Oct:+1", "Arp", "C Major", "B", "C"]));
+    expect(calls).toContainEqual(["fill", 51, 9, 19, 9, 1]);
     expect(calls).toContainEqual(["fill", 82, 15, 42, 1, 1]);
     expect(calls).toContainEqual(["metro"]);
     expect(calls).toContainEqual(["print", 5, 34, "1", 1]);
     expect(calls).toContainEqual(["fill", 3, 32, 10, 1, 1]);
     expect(calls).toContainEqual(["positionBar", 0]);
-    expect(calls).toContainEqual(["fill", 4, 45, 9, 7, 1]);
-    expect(calls).toContainEqual(["fill", 20, 45, 9, 7, 1]);
+    expect(calls).toContainEqual(["fill", 4, 45, 9, 9, 1]);
+    expect(calls).toContainEqual(["fill", 20, 45, 9, 9, 1]);
   });
 
   test("renders drum idle lane status, active clips, and drum position bar", () => {
@@ -176,7 +176,7 @@ describe("Idle presentation", () => {
     renderDrumTrackIdleView(createDeps(calls));
 
     expect(calls[0]).toEqual(["headingInv", "AUTO", false]);
-    expect(pixelTexts(calls)).toEqual(expect.arrayContaining(["Bank: B  Pad: C2 (48)", "SOLOED", "B", "C"]));
+    expect(printTexts(calls)).toEqual(expect.arrayContaining(["Bank: B  Pad: C2 (48)", "SOLOED", "B", "C"]));
     expect(calls).toContainEqual(["metro"]);
     expect(calls).toContainEqual(["print", 5, 34, "1", 1]);
     expect(calls).toContainEqual(["fill", 3, 32, 10, 1, 1]);
@@ -184,8 +184,8 @@ describe("Idle presentation", () => {
     expect(calls).toContainEqual(["fill", 64, 61, 59, 1, 1]);
     expect(calls).toContainEqual(["fill", 2, 58, 1, 3, 1]);
     expect(calls).toContainEqual(["fill", 124, 58, 1, 3, 1]);
-    expect(calls).toContainEqual(["fill", 4, 45, 9, 7, 1]);
-    expect(calls).toContainEqual(["fill", 20, 45, 9, 7, 1]);
+    expect(calls).toContainEqual(["fill", 4, 45, 9, 9, 1]);
+    expect(calls).toContainEqual(["fill", 20, 45, 9, 9, 1]);
   });
 
   test("renders drum position bar pages, playhead, and extent markers", () => {
@@ -227,16 +227,16 @@ describe("Idle presentation", () => {
     renderMetroIndicator(createDeps(calls));
 
     expect(calls).toContainEqual(["fill", 4, 22, 2, 2, 1]);
-    expect(calls).toContainEqual(["pixel", 8, 21, "Count", 1]);
+    expect(calls).toContainEqual(["print", 8, 21, "Count", 1]);
     expect(calls).toContainEqual(["fill", 40, 22, 2, 2, 1]);
-    expect(calls).toContainEqual(["pixel", 67, 21, "127", 1]);
-    expect(calls).toContainEqual(["pixel", 103, 21, "Adap", 1]);
+    expect(calls).toContainEqual(["print", 67, 21, "127", 1]);
+    expect(calls).toContainEqual(["print", 103, 21, "Adap", 1]);
 
     S.sessionView = true;
     S.metronomeOn = 2;
     const recCalls: DrawCall[] = [];
     renderMetroIndicator(createDeps(recCalls));
-    expect(recCalls).toContainEqual(["pixel", 8, 21, "Rec", 1]);
+    expect(recCalls).toContainEqual(["print", 8, 21, "Rec", 1]);
 
     S.metronomeOn = 0;
     const offCalls: DrawCall[] = [];
@@ -251,8 +251,8 @@ describe("Idle presentation", () => {
     S.clipLengthManuallySet[0][2] = true;
     const melodicCalls: DrawCall[] = [];
     renderMetroIndicator(createDeps(melodicCalls));
-    expect(melodicCalls).not.toContainEqual(["pixel", 103, 21, "Adap", 1]);
-    expect(melodicCalls).toContainEqual(["pixel", 109, 21, "Fix", 1]);
+    expect(melodicCalls).not.toContainEqual(["print", 103, 21, "Adap", 1]);
+    expect(melodicCalls).toContainEqual(["print", 109, 21, "Fix", 1]);
 
     S.activeTrack = 1;
     S.trackPadMode[1] = 1;
@@ -260,7 +260,7 @@ describe("Idle presentation", () => {
     S.drumClipNonEmpty[1][2] = true;
     const drumCalls: DrawCall[] = [];
     renderMetroIndicator(createDeps(drumCalls));
-    expect(drumCalls).toContainEqual(["pixel", 109, 21, "Fix", 1]);
+    expect(drumCalls).toContainEqual(["print", 109, 21, "Fix", 1]);
   });
 
   test("suppresses Track View metro status in Session View", () => {
@@ -269,10 +269,10 @@ describe("Idle presentation", () => {
     const calls: DrawCall[] = [];
     renderMetroIndicator(createDeps(calls));
 
-    expect(calls).toContainEqual(["pixel", 8, 21, "Rec/Ply", 1]);
-    expect(calls).not.toContainEqual(["pixel", 67, 21, "96  ", 1]);
-    expect(calls).not.toContainEqual(["pixel", 103, 21, "Adap", 1]);
-    expect(calls).not.toContainEqual(["pixel", 109, 21, "Fix", 1]);
+    expect(calls).toContainEqual(["print", 8, 21, "Rec/Ply", 1]);
+    expect(calls).not.toContainEqual(["print", 67, 21, "96  ", 1]);
+    expect(calls).not.toContainEqual(["print", 103, 21, "Adap", 1]);
+    expect(calls).not.toContainEqual(["print", 109, 21, "Fix", 1]);
   });
 
   test("renders AUTO idle lane info, badges, graph, and current page", () => {

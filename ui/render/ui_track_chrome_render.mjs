@@ -12,7 +12,7 @@ export function renderMetroIndicator(deps) {
         const tx = 8;
         const tw = label.length * 6;
         deps.fill_rect(4, 22, 2, 2, 1);
-        deps.pixelPrint(tx, 21, label, 1);
+        deps.print(tx, 21, label, 1);
         deps.fill_rect(tx + tw + 2, 22, 2, 2, 1);
     }
 
@@ -22,8 +22,8 @@ export function renderMetroIndicator(deps) {
         const isDrum = S.trackPadMode[t] === PAD_MODE_DRUM;
         const isEmpty = isDrum ? !S.drumClipNonEmpty[t][ac] : !S.clipNonEmpty[t][ac];
         const manualLength = isDrum ? S.drumLaneLengthManuallySet[t] : S.clipLengthManuallySet[t][ac];
-        deps.pixelPrint(67, 21, fmtVelOverride(S.trackVelOverride[t]), 1);
-        deps.pixelPrint(isEmpty && !manualLength ? 103 : 109, 21, isEmpty && !manualLength ? 'Adap' : 'Fix', 1);
+        deps.print(67, 21, fmtVelOverride(S.trackVelOverride[t]), 1);
+        deps.print(isEmpty && !manualLength ? 103 : 109, 21, isEmpty && !manualLength ? 'Adap' : 'Fix', 1);
     }
 }
 
