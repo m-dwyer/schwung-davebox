@@ -18,6 +18,21 @@ import {
 } from '../core/ui_parameter_page_model.mjs';
 import { renderEncoderValueGrid } from './ui_oled_layout.mjs';
 
+/**
+ * @typedef {Object} ParameterPageRenderDeps
+ * @property {(x: number, y: number, text: string, color: number) => void} print
+ * @property {(x: number, y: number, w: number, h: number, color: number) => void} fill_rect
+ * @property {(name: string, showTrack?: boolean) => void} drawBankHeading
+ * @property {(name: string, showTrack?: boolean) => void} drawBankHeadingInverted
+ * @property {(x: number, hdrBgWhite: boolean, on: boolean) => void} drawAltArrow
+ * @property {(track: number, bank: number) => boolean} altIndicatorActive
+ * @property {(track: number, bank: number) => boolean} bankHasAltParams
+ * @property {(note: number) => string} midiNoteName
+ */
+
+/**
+ * @param {ParameterPageRenderDeps} deps
+ */
 export function renderDrumLaneBankOverview(deps) {
     const t    = S.activeTrack;
     const ac   = effectiveClip(t);
@@ -41,6 +56,9 @@ export function renderDrumLaneBankOverview(deps) {
     renderEncoderValueGrid(deps, model.cells, model.grid);
 }
 
+/**
+ * @param {ParameterPageRenderDeps} deps
+ */
 export function renderAllLanesConfirm(deps) {
     deps.fill_rect(0, 0, 128, 9, 1);
     deps.print(4, 1, 'ALL LANES', 0);
@@ -51,6 +69,9 @@ export function renderAllLanesConfirm(deps) {
     deps.print(52, 48, 'OK', 0);
 }
 
+/**
+ * @param {ParameterPageRenderDeps} deps
+ */
 export function renderAllLanesBankOverview(deps) {
     const t = S.activeTrack;
     deps.fill_rect(0, 0, 128, 9, 1);
@@ -72,6 +93,9 @@ export function renderAllLanesBankOverview(deps) {
     renderEncoderValueGrid(deps, model.cells, model.grid);
 }
 
+/**
+ * @param {ParameterPageRenderDeps} deps
+ */
 export function renderDrumNoteFxBankOverview(deps) {
     const t    = S.activeTrack;
     const vals = S.bankParams[t][1];
@@ -116,6 +140,9 @@ export function renderDrumNoteFxBankOverview(deps) {
     }
 }
 
+/**
+ * @param {ParameterPageRenderDeps} deps
+ */
 export function renderDrumRepeatGrooveBankOverview(deps) {
     const t    = S.activeTrack;
     const lane = S.activeDrumLane[t];
@@ -154,6 +181,9 @@ export function renderDrumRepeatGrooveBankOverview(deps) {
     }
 }
 
+/**
+ * @param {ParameterPageRenderDeps} deps
+ */
 export function renderDrumMidiDelayBankOverview(deps) {
     const t     = S.activeTrack;
     const vals  = S.bankParams[t][3];
@@ -167,6 +197,9 @@ export function renderDrumMidiDelayBankOverview(deps) {
     renderEncoderValueGrid(deps, model.cells, model.grid);
 }
 
+/**
+ * @param {ParameterPageRenderDeps} deps
+ */
 export function renderMotionBankOverview(deps) {
     const t  = S.activeTrack;
     const ac = effectiveClip(t);
@@ -198,6 +231,9 @@ export function renderMotionBankOverview(deps) {
     if (motionModel.footer) deps.print(0, 56, motionModel.footer, 1);
 }
 
+/**
+ * @param {ParameterPageRenderDeps} deps
+ */
 export function renderMelodicNoteFxBankOverview(deps) {
     const t     = S.activeTrack;
     const knobs = BANKS[1].knobs;
@@ -225,6 +261,10 @@ export function renderMelodicNoteFxBankOverview(deps) {
     }
 }
 
+/**
+ * @param {ParameterPageRenderDeps} deps
+ * @param {number} bank
+ */
 export function renderTrackBankOverview(deps, bank) {
     const isDrum = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM;
     const route = trackBankOverviewRoute({
@@ -262,6 +302,10 @@ export function renderTrackBankOverview(deps, bank) {
     }
 }
 
+/**
+ * @param {ParameterPageRenderDeps} deps
+ * @param {number} bank
+ */
 export function renderGenericParameterPageOverview(deps, bank) {
     const knobs = BANKS[bank].knobs;
     const t = S.activeTrack;
@@ -284,6 +328,10 @@ export function renderGenericParameterPageOverview(deps, bank) {
     renderEncoderValueGrid(deps, model.cells, model.grid);
 }
 
+/**
+ * @param {ParameterPageRenderDeps} deps
+ * @param {number} bank
+ */
 export function renderGenericBankOverview(deps, bank) {
     return renderGenericParameterPageOverview(deps, bank);
 }
