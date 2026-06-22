@@ -29,6 +29,7 @@
     "ui/core/ui_constants.mjs",
     "ui/core/ui_debug_log.mjs",
     "ui/core/ui_parameter_page_model.mjs",
+    "ui/render/ui_parameter_page_render.mjs",
     "ui/view/ui_session_view_workflow.mjs",
     "ui/perform/ui_recording_workflow.mjs",
     "ui/perform/ui_live_note_workflow.mjs",

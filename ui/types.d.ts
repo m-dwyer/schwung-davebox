@@ -354,10 +354,14 @@ export interface SessionViewState {
 export interface CoRunState {
   schwungCoRunSlot: number;
   _coRunChanSlots: number;
+  _coRunTrackLedsLit: boolean;
   pendingEditSoundEntry: any; // TODO: { track, route, slot, delay }
+  schwungSoundPage: any; // TODO: Schwung quick Sound page model
+  schwungSoundMemory: any[];
   moveCoRunTrack: number;
   moveCoRunDrumHeld: number;
   _moveCoRunTrackLedsActive: boolean;
+  _forceKnobReemit: boolean;
   pendingEditEntryTrack: number;
 }
 
