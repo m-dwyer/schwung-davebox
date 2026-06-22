@@ -192,6 +192,15 @@ Avoid writing the same LED from multiple paths in one tick.
 Current code still uses `bank` heavily. Do not churn names mechanically. Migrate
 language when touching behavior for product or architectural reasons.
 
+Refactors should preserve the shared type-checking path. `ui/types.d.ts` is the
+ambient contract for the runtime `S` state bag and module `deps` shapes, and
+`tsconfig.json` enables `allowJs`/`checkJs` for the modules listed in `include`.
+When a Parameter Page refactor moves ownership of state, descriptors, or callback
+bags, update that shared type surface or add the newly typed module to
+`tsconfig.json` deliberately. Do not treat `.mjs` extraction as type-neutral:
+the goal is for each small migration to leave the checked contract at least as
+accurate as before.
+
 Near-term convergence path:
 
 1. Treat `ui_oled_layout.mjs` as the start of shared OLED primitives.
