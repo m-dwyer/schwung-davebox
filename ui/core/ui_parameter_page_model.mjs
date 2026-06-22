@@ -1,4 +1,4 @@
-import { col4, fmtArpRate, fmtBool, fmtGateMod, fmtPlayDir, fmtRes, fmtRevStyle, fmtSign, fmtStretch } from './ui_constants.mjs';
+import { col4, fmtArpRate, fmtBool, fmtGateMod, fmtPct, fmtPlayDir, fmtRes, fmtRevStyle, fmtSign, fmtStretch, fmtVelOverride } from './ui_constants.mjs';
 
 const RND_ALG_NAMES = ['Pure', 'Gaus', 'Walk'];
 
@@ -33,6 +33,13 @@ export function drumMidiDelayParameterPageGridModel(input) {
 export function drumLaneParameterPageGridModel(input) {
     return {
         cells: drumLaneParameterPageCells(input),
+        grid: GENERIC_PARAMETER_PAGE_GRID_OPTIONS
+    };
+}
+
+export function allLanesParameterPageGridModel(input) {
+    return {
+        cells: allLanesParameterPageCells(input),
         grid: GENERIC_PARAMETER_PAGE_GRID_OPTIONS
     };
 }
@@ -135,6 +142,36 @@ export function drumLaneParameterPageCells(input) {
     return labelValueParameterPageCells({
         labels: labels,
         values: values,
+        knobTouched: input.knobTouched
+    });
+}
+
+export function allLanesParameterPageCells(input) {
+    const DIQ_LABELS = ['Off','1/64','1/32','1/16','1/16T','1/8','1/8T','1/4','1/4T'];
+    const labels = [
+        'Res',
+        'Stch',
+        input.altMode ? 'Nudg' : 'Shft',
+        'Qnt',
+        'VelIn',
+        'InQ',
+        input.altMode ? 'Rvrs' : 'Dir',
+        'SyncRpt'
+    ];
+    const values = [
+        input.resolution < 0 ? '--' : fmtRes(input.resolution),
+        fmtStretch(input.stretch),
+        fmtSign(input.shift),
+        input.quantize <= 0 ? '--' : fmtPct(input.quantize),
+        fmtVelOverride(input.velocityOverride),
+        DIQ_LABELS[input.inputQuantize] || 'Off',
+        input.playbackDir < 0 ? '--' : (input.altMode ? fmtRevStyle(input.playbackDir) : fmtPlayDir(input.playbackDir)),
+        fmtBool(input.syncRepeat)
+    ];
+    return labelValueParameterPageCells({
+        labels: labels,
+        values: values,
+        wideLabels: true,
         knobTouched: input.knobTouched
     });
 }

@@ -20,7 +20,7 @@ import {
 } from "@overture-ui/core/ui_sound_edit.mjs";
 import { renderSchwungSoundPage } from "@overture-ui/render/ui_sound_edit_render.mjs";
 import { PARAM_PEEK_DETAIL_TICKS, autoLaneLabel, motionIdleModel, motionOverviewModel, paramPeekInfo } from "@overture-ui/core/ui_motion.mjs";
-import { drumLaneParameterPageGridModel, drumMidiDelayParameterPageGridModel, genericParameterPageGridModel, labelValueParameterPageGridModel } from "@overture-ui/core/ui_parameter_page_model.mjs";
+import { allLanesParameterPageGridModel, drumLaneParameterPageGridModel, drumMidiDelayParameterPageGridModel, genericParameterPageGridModel, labelValueParameterPageGridModel } from "@overture-ui/core/ui_parameter_page_model.mjs";
 import { loadSchwungSoundPreset, saveSchwungSoundPreset } from "@overture-ui/core/ui_sound_preset_manager.mjs";
 import { fmtArpRate } from "@overture-ui/core/ui_constants.mjs";
 
@@ -939,5 +939,34 @@ describe("UI descriptor seams", () => {
     expect(model.cells[4]).toMatchObject({ label: "Eucl", value: "12  ", highlighted: false });
     expect(model.cells[6]).toMatchObject({ label: "Rvrs", value: "Audi", highlighted: true });
     expect(model.cells[7]).toMatchObject({ label: "SqFl", value: "ON  ", highlighted: false });
+  });
+
+  test("all lanes Parameter Page model preserves wide labels and unavailable values", () => {
+    const model = allLanesParameterPageGridModel({
+      altMode: true,
+      resolution: -1,
+      stretch: 1,
+      shift: -2,
+      quantize: 0,
+      velocityOverride: 96,
+      inputQuantize: 3,
+      playbackDir: -1,
+      syncRepeat: 1,
+      knobTouched: 7,
+    });
+
+    expect(model.grid).toMatchObject({
+      preformatted: true,
+      preserveSlots: true,
+      startY: 12,
+      valueYOffset: 12,
+    });
+    expect(model.cells[0]).toMatchObject({ label: "Res ", value: "--  ", highlighted: false });
+    expect(model.cells[2]).toMatchObject({ label: "Nudg", value: "-2  ", highlighted: false });
+    expect(model.cells[3]).toMatchObject({ label: "Qnt ", value: "--  ", highlighted: false });
+    expect(model.cells[4]).toMatchObject({ label: "VelIn", value: "96  ", highlighted: false });
+    expect(model.cells[5]).toMatchObject({ label: "InQ ", value: "1/16", highlighted: false });
+    expect(model.cells[6]).toMatchObject({ label: "Rvrs", value: "--  ", highlighted: false });
+    expect(model.cells[7]).toMatchObject({ label: "SyncRpt", value: "ON  ", highlighted: true });
   });
 });

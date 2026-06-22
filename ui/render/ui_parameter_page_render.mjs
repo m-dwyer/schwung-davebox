@@ -7,16 +7,12 @@ import {
     fmtBool,
     fmtLen,
     fmtPct,
-    fmtPlayDir,
-    fmtRes,
-    fmtRevStyle,
     fmtSign,
-    fmtStretch,
-    fmtVelOverride
 } from '../core/ui_constants.mjs';
 import { effectiveClip } from './ui_leds.mjs';
 import { motionOverviewModel } from '../core/ui_motion.mjs';
 import {
+    allLanesParameterPageGridModel,
     drumLaneParameterPageGridModel,
     genericParameterPageGridModel,
     drumMidiDelayParameterPageGridModel,
@@ -59,26 +55,23 @@ export function renderAllLanesConfirm(deps) {
 
 export function renderAllLanesBankOverview(deps) {
     const t = S.activeTrack;
-    const rv = S.bankParams[t][7][0];
-    const qv = S.bankParams[t][7][3];
-    const dv = S.bankParams[t][7][6];
-    const DIQ_LABELS = ['Off','1/64','1/32','1/16','1/16T','1/8','1/8T','1/4','1/4T'];
-    const allLabels = ['Res', 'Stch', S.altMode ? 'Nudg' : 'Shft', 'Qnt', 'VelIn', 'InQ', S.altMode ? 'Rvrs' : 'Dir', 'SyncRpt'];
-    const allVals = [
-        rv < 0 ? '--' : fmtRes(rv),
-        fmtStretch(S.bankParams[t][7][1]),
-        fmtSign(S.bankParams[t][7][2]),
-        qv <= 0 ? '--' : fmtPct(qv),
-        fmtVelOverride(S.trackVelOverride[t]),
-        DIQ_LABELS[S.drumInpQuant[t]] || 'Off',
-        dv < 0 ? '--' : (S.altMode ? fmtRevStyle(dv) : fmtPlayDir(dv)),
-        fmtBool(S.bankParams[t][7][7]),
-    ];
     deps.fill_rect(0, 0, 128, 9, 1);
     deps.print(4, 1, (Math.floor(S.tickCount / 24) % 2 === 0 ? 'ALL' : '   ') + ' LANES', 0);
     deps.print(106, 1, 'Tr' + (S.activeTrack + 1), 0);
     deps.drawAltArrow(98, true, deps.altIndicatorActive(S.activeTrack, S.activeBank));
-    renderBankCells(deps, allLabels, allVals, { wideLabels: true });
+    const model = allLanesParameterPageGridModel({
+        altMode: S.altMode,
+        resolution: S.bankParams[t][7][0],
+        stretch: S.bankParams[t][7][1],
+        shift: S.bankParams[t][7][2],
+        quantize: S.bankParams[t][7][3],
+        velocityOverride: S.trackVelOverride[t],
+        inputQuantize: S.drumInpQuant[t],
+        playbackDir: S.bankParams[t][7][6],
+        syncRepeat: S.bankParams[t][7][7],
+        knobTouched: S.knobTouched
+    });
+    renderEncoderValueGrid(deps, model.cells, model.grid);
 }
 
 export function renderDrumNoteFxBankOverview(deps) {
