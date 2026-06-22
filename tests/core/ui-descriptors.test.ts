@@ -20,7 +20,7 @@ import {
 } from "@overture-ui/core/ui_sound_edit.mjs";
 import { renderSchwungSoundPage } from "@overture-ui/render/ui_sound_edit_render.mjs";
 import { PARAM_PEEK_DETAIL_TICKS, autoLaneLabel, motionIdleModel, motionOverviewModel, paramPeekInfo } from "@overture-ui/core/ui_motion.mjs";
-import { genericParameterPageGridModel } from "@overture-ui/core/ui_parameter_page_model.mjs";
+import { genericParameterPageGridModel, labelValueParameterPageGridModel } from "@overture-ui/core/ui_parameter_page_model.mjs";
 import { loadSchwungSoundPreset, saveSchwungSoundPreset } from "@overture-ui/core/ui_sound_preset_manager.mjs";
 import { fmtArpRate } from "@overture-ui/core/ui_constants.mjs";
 
@@ -865,5 +865,28 @@ describe("UI descriptor seams", () => {
     expect(model.cells[1]).toMatchObject({ label: "Rate", value: "1/16t", highlighted: false });
     expect(model.cells[6]).toMatchObject({ label: "Rvrs", value: "Audi", highlighted: true });
     expect(model.cells[7]).toMatchObject({ label: "Algo", value: "Gaus", highlighted: false });
+  });
+
+  test("label/value Parameter Page model preserves sparse slots and wide labels", () => {
+    const model = labelValueParameterPageGridModel({
+      labels: ["Res", "LongLabel", null, "Gate", "", "Dir", "SyncRpt", "-"],
+      values: ["1/8", "96", "skip", 87, "skip", "Fwd", "ON", null],
+      wideLabels: true,
+      knobTouched: 6,
+    });
+
+    expect(model.grid).toMatchObject({
+      preformatted: true,
+      preserveSlots: true,
+      startY: 12,
+      valueYOffset: 12,
+    });
+    expect(model.cells).toHaveLength(8);
+    expect(model.cells[0]).toMatchObject({ label: "Res ", value: "1/8 ", highlighted: false });
+    expect(model.cells[1]).toMatchObject({ label: "LongLabel", value: "96  ", highlighted: false });
+    expect(model.cells[2]).toBeNull();
+    expect(model.cells[4]).toBeNull();
+    expect(model.cells[6]).toMatchObject({ label: "SyncRpt", value: "ON  ", highlighted: true });
+    expect(model.cells[7]).toMatchObject({ label: "-   ", value: "-   ", highlighted: false });
   });
 });

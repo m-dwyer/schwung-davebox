@@ -16,6 +16,13 @@ export function genericParameterPageGridModel(input) {
     };
 }
 
+export function labelValueParameterPageGridModel(input) {
+    return {
+        cells: labelValueParameterPageCells(input),
+        grid: GENERIC_PARAMETER_PAGE_GRID_OPTIONS
+    };
+}
+
 export function genericParameterPageCells(input) {
     const cells = [];
     const knobs = input.knobs;
@@ -44,6 +51,25 @@ export function genericParameterPageCells(input) {
         cells.push({
             label: lbl,
             value: txt,
+            highlighted: input.knobTouched === k
+        });
+    }
+    return cells;
+}
+
+export function labelValueParameterPageCells(input) {
+    const cells = [];
+    const labels = input.labels;
+    const values = input.values;
+    for (let k = 0; k < 8; k++) {
+        if (!labels[k]) {
+            cells.push(null);
+            continue;
+        }
+        const lbl = labels[k];
+        cells.push({
+            label: input.wideLabels && lbl.length > 4 ? lbl : col4(lbl),
+            value: col4(values[k]),
             highlighted: input.knobTouched === k
         });
     }

@@ -17,7 +17,10 @@ import {
 } from '../core/ui_constants.mjs';
 import { effectiveClip } from './ui_leds.mjs';
 import { motionOverviewModel } from '../core/ui_motion.mjs';
-import { genericParameterPageGridModel } from '../core/ui_parameter_page_model.mjs';
+import {
+    genericParameterPageGridModel,
+    labelValueParameterPageGridModel
+} from '../core/ui_parameter_page_model.mjs';
 import { renderEncoderValueGrid } from './ui_oled_layout.mjs';
 
 export function renderDrumLaneBankOverview(deps) {
@@ -281,24 +284,11 @@ export function renderGenericBankOverview(deps, bank) {
 }
 
 function renderBankCells(deps, labels, values, opts) {
-    const wideLabels = opts && opts.wideLabels;
-    const cells = [];
-    for (let k = 0; k < 8; k++) {
-        if (!labels[k]) {
-            cells.push(null);
-            continue;
-        }
-        const lbl = labels[k];
-        cells.push({
-            label: wideLabels && lbl.length > 4 ? lbl : col4(lbl),
-            value: col4(values[k]),
-            highlighted: S.knobTouched === k
-        });
-    }
-    renderEncoderValueGrid(deps, cells, {
-        preformatted: true,
-        preserveSlots: true,
-        startY: 12,
-        valueYOffset: 12
+    const model = labelValueParameterPageGridModel({
+        labels: labels,
+        values: values,
+        wideLabels: opts && opts.wideLabels,
+        knobTouched: S.knobTouched
     });
+    renderEncoderValueGrid(deps, model.cells, model.grid);
 }
