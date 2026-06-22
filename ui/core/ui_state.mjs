@@ -459,6 +459,7 @@ export function createInitialState() {
     currentSetUuid: '',
     currentSetName: '',
     lastDspInstanceId: '',
+    lastSongIndex: -1,                        /* Move Settings.json currentSongIndex; resume/init set-change signal */
     stepOpTick: -99,
     pendingSetLoad: false,
     pendingDspSync: 0,

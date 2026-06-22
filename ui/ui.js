@@ -1816,6 +1816,7 @@ function createInitWorkflowDeps() {
         readActiveSet,
         maybeShowInheritPicker,
         fileExists: optionalHostFileExists(),
+        host_read_file: optionalHostReadFile(),
         syncClipsFromDsp,
         syncMuteSoloFromDsp,
         extHeldNotes,

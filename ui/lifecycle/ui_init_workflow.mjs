@@ -1,6 +1,7 @@
 import {
     NUM_TRACKS
 } from '../core/ui_constants.mjs';
+import { readCurrentSongIndex } from '../core/ui_auto_route.mjs';
 
 export function runInitWorkflowImpl(S, deps) {
     deps.installConsoleOverride('SEQ8');
@@ -34,6 +35,11 @@ export function runInitWorkflowImpl(S, deps) {
         S.currentSetUuid = _as.uuid;
         S.currentSetName = _as.name;
     }
+    /* Record Move's currentSongIndex now (RECORD ONLY). The uuid/pendingSetLoad
+     * path above/below handles the first-load auto-route; capturing the baseline
+     * here prevents a spurious auto-route fire on the first later resume edge
+     * (runSuspendDetection compares against S.lastSongIndex). */
+    S.lastSongIndex = readCurrentSongIndex(deps);
     /* Inherit-picker decision tree for a freshly-pasted Move duplicate.
      * 'auto'   -- single family candidate, silently inherited; force pendingSetLoad.
      * 'picker' -- multiple candidates; dialog open, state_load is deferred.

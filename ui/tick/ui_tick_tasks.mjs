@@ -1,7 +1,7 @@
 import { readMelodicClipFromDsp } from '../sync/ui_clip_track_sync.mjs';
 import { drainNextDspOperation } from '../sync/ui_dsp_operation_queue.mjs';
 import { drainRecordingQueues, isActivelyRecording } from '../perform/ui_recording_workflow.mjs';
-import { beginAutoRoute } from '../core/ui_auto_route.mjs';
+import { beginAutoRoute, readCurrentSongIndex } from '../core/ui_auto_route.mjs';
 
 function resyncMelodicClipReadback(S, deps, track, clip) {
     readMelodicClipFromDsp(S, deps, track, clip, {
@@ -859,6 +859,7 @@ export function runSuspendDetection(S, deps) {
         const _as = deps.readActiveSet();
         const _dspUuid = deps.host_module_get_param
             ? (deps.host_module_get_param('state_uuid') || '') : '';
+        let armedByUuid = false;
         if (_as.uuid && _dspUuid !== _as.uuid) {
             S.currentSetUuid = _as.uuid;
             S.currentSetName = _as.name;
@@ -866,7 +867,20 @@ export function runSuspendDetection(S, deps) {
              * deferred. Otherwise pendingSetLoad is fine to set immediately
              * since the auto-inherit branch (or blank branch) is already done. */
             const _r = deps.maybeShowInheritPicker(_as.uuid, _as.name);
-            if (_r !== 'picker') S.pendingSetLoad = true;
+            if (_r !== 'picker') { S.pendingSetLoad = true; armedByUuid = true; }
+        }
+        /* Move's currentSongIndex changes on EVERY set transition — including the
+         * unsaved/blank case the uuid path can't see (no Sets/<uuid>/ folder, so
+         * active_set.txt keeps a stale uuid → no SET_CHANGED, no state_uuid diff).
+         * Checked only on this resume edge (a set change can only happen while
+         * suspended) — no continuous polling. */
+        const _idx = readCurrentSongIndex(deps);
+        if (_idx >= 0 && _idx !== S.lastSongIndex) {
+            S.lastSongIndex = _idx;
+            /* Saved sets are auto-routed by the uuid path's downstream state_load
+             * (refreshDspMirrorFromDsp -> beginAutoRoute). Only fire here for the
+             * unsaved/blank case the uuid path can't see. */
+            if (!armedByUuid) beginAutoRoute(S, deps, _as.uuid || '', { force: true });
         }
         S.ledInitComplete = false;
         deps.invalidateLEDCache();

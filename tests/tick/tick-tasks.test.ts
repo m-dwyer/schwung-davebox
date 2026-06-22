@@ -1473,7 +1473,14 @@ describe("suspend + end-of-tick steps (batch A5, D)", () => {
   const ORIG = () => {};
   const NOOP = () => {};
 
-  function suspendDeps(c: ReturnType<typeof calls>, dspUuid = "old", picker = false) {
+  function suspendDeps(
+    c: ReturnType<typeof calls>,
+    dspUuid = "old",
+    picker = false,
+    opts: { songIndex?: number | null; activeUuid?: string } = {},
+  ) {
+    const songIndex = opts.songIndex === undefined ? null : opts.songIndex;
+    const activeUuid = opts.activeUuid === undefined ? "new" : opts.activeUuid;
     return {
       clearScreen: ORIG,
       saveState: c.fn("saveState"),
@@ -1481,7 +1488,7 @@ describe("suspend + end-of-tick steps (batch A5, D)", () => {
       host_ext_midi_remap_enable: c.fn("remapEnable"),
       installFlagsWrap: c.fn("installFlags"),
       applyExtMidiRemap: c.fn("remap"),
-      readActiveSet: () => ({ uuid: "new", name: "Set B" }),
+      readActiveSet: () => ({ uuid: activeUuid, name: "Set B" }),
       host_module_get_param: () => dspUuid,
       maybeShowInheritPicker: (...a: unknown[]) => {
         c.log.push(["picker", ...a]);
@@ -1490,6 +1497,15 @@ describe("suspend + end-of-tick steps (batch A5, D)", () => {
       invalidateLEDCache: c.fn("invalidate"),
       buildLedInitQueue: () => ["q"],
       forceRedraw: c.fn("redraw"),
+      /* Settings.json reader for readCurrentSongIndex. songIndex=null -> no file
+       * (reader absent), reader returns -1, no auto-route fire. */
+      host_read_file:
+        songIndex === null
+          ? undefined
+          : () => JSON.stringify({ currentSongIndex: songIndex }),
+      /* Auto-route deps so beginAutoRoute can seed canonical channels. */
+      shadowSetParam: c.fn("shadowSetParam"),
+      move_midi_inject_to_move: c.fn("inject"),
     };
   }
 
@@ -1551,6 +1567,67 @@ describe("suspend + end-of-tick steps (batch A5, D)", () => {
     const result = runSuspendDetection(S, deps);
     expect(result).toBeTruthy();
     expect(c.log).toEqual([]); // no edge -> nothing fires
+  });
+
+  test("resume with a changed currentSongIndex + blank active uuid fires auto-route once", () => {
+    const c = calls();
+    // No uuid change (dspUuid === active uuid "") so the uuid path stays quiet;
+    // the blank/unsaved case the uuid path can't see.
+    const deps = suspendDeps(c, "", false, { songIndex: 4, activeUuid: "" });
+    deps.clearScreen = ORIG; // resume edge
+    const S: any = {
+      _origClearScreen: ORIG,
+      _wasSuspended: true,
+      lastSongIndex: 2,
+      pendingSetLoad: false,
+      trackRoute: new Array(8).fill(0),
+      trackChannel: new Array(8).fill(1),
+    };
+    runSuspendDetection(S, deps);
+    expect(S.lastSongIndex).toBe(4); // index recorded
+    expect(S.pendingSetLoad).toBe(false); // uuid path did NOT arm
+    // beginAutoRoute(force) seeded canonical channels + queued the macro.
+    expect(S.autoRouteQueue).not.toBe(null);
+    expect(S.autoRouteActive).toBe(true);
+    expect(S.trackChannel).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+
+  test("resume with an unchanged currentSongIndex does NOT fire auto-route", () => {
+    const c = calls();
+    const deps = suspendDeps(c, "", false, { songIndex: 3, activeUuid: "" });
+    deps.clearScreen = ORIG;
+    const S: any = {
+      _origClearScreen: ORIG,
+      _wasSuspended: true,
+      lastSongIndex: 3, // same -> no fire
+      pendingSetLoad: false,
+      trackRoute: new Array(8).fill(0),
+      trackChannel: new Array(8).fill(1),
+    };
+    runSuspendDetection(S, deps);
+    expect(S.lastSongIndex).toBe(3);
+    expect(S.autoRouteQueue == null).toBe(true); // no macro queued
+  });
+
+  test("resume with a changed uuid (saved set) records the index but does NOT double-fire here", () => {
+    const c = calls();
+    // dspUuid "old" != active "new" -> uuid path arms pendingSetLoad. The index
+    // also changed, but armedByUuid suppresses a second fire (the state_load
+    // downstream path runs beginAutoRoute).
+    const deps = suspendDeps(c, "old", false, { songIndex: 9, activeUuid: "new" });
+    deps.clearScreen = ORIG;
+    const S: any = {
+      _origClearScreen: ORIG,
+      _wasSuspended: true,
+      lastSongIndex: 1,
+      pendingSetLoad: false,
+      trackRoute: new Array(8).fill(0),
+      trackChannel: new Array(8).fill(1),
+    };
+    runSuspendDetection(S, deps);
+    expect(S.pendingSetLoad).toBe(true); // uuid path armed the load
+    expect(S.lastSongIndex).toBe(9); // index still recorded
+    expect(S.autoRouteQueue == null).toBe(true); // NOT armed here (no double-route)
   });
 
   test("runOrphanPrune sends the prune command and drops stale index entries", () => {

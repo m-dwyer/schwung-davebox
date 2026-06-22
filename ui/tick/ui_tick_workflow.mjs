@@ -95,7 +95,14 @@ export function runTickWorkflow(S, deps) {
         maybeShowInheritPicker: deps.maybeShowInheritPicker,
         invalidateLEDCache: deps.invalidateLEDCache,
         buildLedInitQueue: deps.buildLedInitQueue,
-        forceRedraw: deps.forceRedraw
+        forceRedraw: deps.forceRedraw,
+        /* Set-change signal + auto-route deps for the unsaved/blank resume case:
+         * readCurrentSongIndex reads Settings.json; beginAutoRoute needs the
+         * Schwung-slot setters + Move inject to seed canonical channels. */
+        host_read_file: deps.host_read_file,
+        shadowSetParam: deps.shadowSetParam,
+        shadowSetParamTimeout: deps.shadowSetParamTimeout,
+        move_midi_inject_to_move: deps.move_midi_inject_to_move
     });
 
     runMetroNoteOffTask(S, {

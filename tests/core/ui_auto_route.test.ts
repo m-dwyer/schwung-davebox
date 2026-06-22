@@ -9,6 +9,7 @@ import {
   beginAutoRoute,
   runAutoRouteTickTasks,
   runAutoRouteRequest,
+  readCurrentSongIndex,
 } from "@overture-ui/core/ui_auto_route.mjs";
 
 const JOG_CC = 14;
@@ -347,5 +348,40 @@ describe("runAutoRouteTickTasks", () => {
 
     expect(S.autoRouteActive).toBe(false);
     expect(S.autoRouteQueue).toBe(null);
+  });
+});
+
+describe("readCurrentSongIndex", () => {
+  const read = (raw: string | null) =>
+    readCurrentSongIndex({ host_read_file: () => raw } as never);
+
+  test("parses currentSongIndex from a valid JSON string", () => {
+    expect(read(JSON.stringify({ currentSongIndex: 7, other: "x" }))).toBe(7);
+    expect(read('{"currentSongIndex":0}')).toBe(0);
+  });
+
+  test("truncates a non-integer numeric index to an int", () => {
+    expect(read('{"currentSongIndex":3.9}')).toBe(3);
+  });
+
+  test("returns -1 on malformed JSON", () => {
+    expect(read("{ not json")).toBe(-1);
+  });
+
+  test("returns -1 when currentSongIndex key is missing", () => {
+    expect(read(JSON.stringify({ somethingElse: 1 }))).toBe(-1);
+  });
+
+  test("returns -1 when the key is present but non-numeric", () => {
+    expect(read('{"currentSongIndex":"5"}')).toBe(-1);
+  });
+
+  test("returns -1 when the file is missing/empty", () => {
+    expect(read(null)).toBe(-1);
+    expect(read("")).toBe(-1);
+  });
+
+  test("returns -1 when no host_read_file is available", () => {
+    expect(readCurrentSongIndex({} as never)).toBe(-1);
   });
 });

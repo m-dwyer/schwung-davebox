@@ -485,6 +485,7 @@ export interface PersistenceLifecycleState {
   currentSetUuid: string;
   currentSetName: string;
   lastDspInstanceId: string;
+  lastSongIndex: number;
   hasInitedOnce: boolean;
   _wasSuspended: boolean;
   pendingSetLoad: boolean;

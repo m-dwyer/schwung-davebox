@@ -123,7 +123,36 @@ export { midiInMacro };
  *   Safe cable-0 CC inject into Move's MIDI_IN. The macro drain aborts if absent.
  * @property {(key: string) => (string | null)} [host_module_get_param]
  *   Host get_param. Used by `runAutoRouteRequest` to read the set uuid in tick.
+ * @property {(path: string) => (string | null)} [host_read_file]
+ *   Host file reader. Used by `readCurrentSongIndex` to read Move's Settings.json.
  */
+
+/* Move's per-set transition counter lives in the device settings file. It
+ * changes on EVERY set transition (saved or unsaved/blank), unlike active_set.txt
+ * (stale on unmaterialized sets) — making it a robust set-change signal on the
+ * resume/init edges. */
+const SETTINGS_PATH = '/data/UserData/settings/Settings.json';
+
+/**
+ * Read Move's `currentSongIndex` from Settings.json. Returns the integer index,
+ * or -1 on any failure (missing reader, missing file, parse error, missing key).
+ *
+ * @param {AutoRouteDeps} deps
+ * @returns {number}
+ */
+export function readCurrentSongIndex(deps) {
+    try {
+        if (typeof deps.host_read_file !== 'function') return -1;
+        const raw = deps.host_read_file(SETTINGS_PATH);
+        if (!raw) return -1;
+        const obj = JSON.parse(raw);
+        const idx = obj && obj.currentSongIndex;
+        if (typeof idx !== 'number' || !isFinite(idx)) return -1;
+        return idx | 0;
+    } catch (_e) {
+        return -1;
+    }
+}
 
 /**
  * Begin auto-route for the current set: seed canonical routing, re-seed Schwung
