@@ -1,5 +1,5 @@
 import { S, effectiveClip } from './ui_state.mjs';
-import { BANKS, PAD_MODE_DRUM, SCENE_LETTERS, fmtLen, fmtPct, fmtSign } from './ui_constants.mjs';
+import { BANKS, PAD_MODE_DRUM, SCENE_LETTERS, col4, fmtLen, fmtPct, fmtSign } from './ui_constants.mjs';
 import { routeScopeShortLabel } from './ui_routes.mjs';
 
 export const PARAM_PEEK_DETAIL_TICKS = 47;               /* ~500ms at 94Hz */
@@ -86,10 +86,14 @@ export function motionOverviewModel(t, ac) {
     const lanes = [];
     for (let k = 0; k < 8; k++) {
         const touched = (S.knobTouched === k) || (S.ccActiveLane[t] === k);
+        const label = autoLaneLabel(t, k, false);
+        const value = motionLaneValue(t, ac, k);
         lanes.push({
             lane: k,
-            label: autoLaneLabel(t, k, false),
-            value: motionLaneValue(t, ac, k),
+            label: label,
+            value: value,
+            labelText: col4(label),
+            valueText: col4(value),
             touched: touched,
             labelInverted: S.altMode ? true : touched,
             valueInverted: touched

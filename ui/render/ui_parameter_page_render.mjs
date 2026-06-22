@@ -3,8 +3,6 @@ import {
     BANKS,
     PAD_MODE_DRUM,
     TPS_VALUES,
-    col4,
-    fmtBool,
 } from '../core/ui_constants.mjs';
 import { effectiveClip } from './ui_leds.mjs';
 import { motionOverviewModel } from '../core/ui_motion.mjs';
@@ -189,12 +187,12 @@ export function renderMotionBankOverview(deps) {
         if (S.altMode) {
             deps.fill_rect(colX, rowY, 24, 12, 1);
             if (lane.valueInverted) deps.fill_rect(colX, rowY + 12, 24, 12, 1);
-            deps.print(colX, rowY,      col4(lane.label), 0);
-            deps.print(colX, rowY + 12, col4(lane.value), lane.valueInverted ? 0 : 1);
+            deps.print(colX, rowY,      lane.labelText, 0);
+            deps.print(colX, rowY + 12, lane.valueText, lane.valueInverted ? 0 : 1);
         } else {
             if (lane.touched) deps.fill_rect(colX, rowY, 24, 24, 1);
-            deps.print(colX, rowY,      col4(lane.label), lane.touched ? 0 : 1);
-            deps.print(colX, rowY + 12, col4(lane.value), lane.touched ? 0 : 1);
+            deps.print(colX, rowY,      lane.labelText, lane.touched ? 0 : 1);
+            deps.print(colX, rowY + 12, lane.valueText, lane.touched ? 0 : 1);
         }
     }
     if (motionModel.footer) deps.print(0, 56, motionModel.footer, 1);

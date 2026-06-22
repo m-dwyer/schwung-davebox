@@ -788,10 +788,10 @@ describe("UI descriptor seams", () => {
       footer: "",
     });
     expect(motionOverviewModel(0, 0).lanes.slice(0, 4)).toEqual([
-      { lane: 0, label: "AT", value: "--", touched: false, labelInverted: false, valueInverted: false },
-      { lane: 1, label: "CC74", value: "64", touched: true, labelInverted: true, valueInverted: true },
-      { lane: 2, label: "Sch5", value: "99", touched: false, labelInverted: false, valueInverted: false },
-      { lane: 3, label: "--", value: "--", touched: false, labelInverted: false, valueInverted: false },
+      { lane: 0, label: "AT", value: "--", labelText: "AT  ", valueText: "--  ", touched: false, labelInverted: false, valueInverted: false },
+      { lane: 1, label: "CC74", value: "64", labelText: "CC74", valueText: "64  ", touched: true, labelInverted: true, valueInverted: true },
+      { lane: 2, label: "Sch5", value: "99", labelText: "Sch5", valueText: "99  ", touched: false, labelInverted: false, valueInverted: false },
+      { lane: 3, label: "--", value: "--", labelText: "--  ", valueText: "--  ", touched: false, labelInverted: false, valueInverted: false },
     ]);
     S.knobTouched = 2;
     expect(motionOverviewModel(0, 0).footer).toBe("Cutoff");
