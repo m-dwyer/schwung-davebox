@@ -116,7 +116,8 @@ export function runDefaultSetParamDrain(S, deps) {
  *   forceRedraw: () => void,
  *   host_module_get_param?: (key: string) => (string | null),
  *   move_midi_inject_to_move?: (packet: number[]) => void,
- *   shadowSetParam?: (slot: number, key: string, val: string) => void
+ *   shadowSetParam?: (slot: number, key: string, val: string) => void,
+ *   shadowSetParamTimeout?: (slot: number, key: string, val: string, timeoutMs: number) => boolean
  * }} deps
  * @param {{ restoreSidecar: boolean, clearStateLoading: boolean }} opts
  * @returns {void}

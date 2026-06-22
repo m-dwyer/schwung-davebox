@@ -38,6 +38,10 @@ export function optionalShadowSetParam() {
     return typeof shadow_set_param === 'function' ? shadow_set_param : null;
 }
 
+export function optionalShadowSetParamTimeout() {
+    return typeof shadow_set_param_timeout === 'function' ? shadow_set_param_timeout : null;
+}
+
 export function optionalHostExitModule() {
     return typeof host_exit_module === 'function' ? host_exit_module : null;
 }

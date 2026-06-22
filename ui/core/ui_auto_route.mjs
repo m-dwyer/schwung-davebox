@@ -114,8 +114,15 @@ export { midiInMacro };
  * @property {(slot: number, key: string, val: string) => void} [shadowSetParam]
  *   Live Schwung per-slot param setter (writes Schwung's own chain config).
  *   `globalThis.shadow_set_param` on device. Optional — re-seed is skipped if absent.
+ * @property {(slot: number, key: string, val: string, timeoutMs: number) => boolean} [shadowSetParamTimeout]
+ *   BLOCKING per-slot param setter (`globalThis.shadow_set_param_timeout`). Unlike
+ *   the fire-and-forget `shadowSetParam`, it round-trips per call so four
+ *   back-to-back slot writes in one tick don't get dropped by set_param coalescing
+ *   (only the LAST set_param per buffer reaches DSP). Preferred when present.
  * @property {(packet: number[]) => void} [move_midi_inject_to_move]
  *   Safe cable-0 CC inject into Move's MIDI_IN. The macro drain aborts if absent.
+ * @property {(key: string) => (string | null)} [host_module_get_param]
+ *   Host get_param. Used by `runAutoRouteRequest` to read the set uuid in tick.
  */
 
 /**
@@ -126,10 +133,15 @@ export { midiInMacro };
  * @param {import('../types').State} S
  * @param {AutoRouteDeps} deps
  * @param {string} [uuid]  set UUID; second call with same uuid is a no-op
+ * @param {{ force?: boolean }} [opts]  force=true bypasses the once-per-uuid
+ *   guard (manual re-trigger from Route Check)
  * @returns {void}
  */
-export function beginAutoRoute(S, deps, uuid) {
-    if (uuid && S.autoRouteAppliedUuid === uuid) return;                  // once per set
+export function beginAutoRoute(S, deps, uuid, opts) {
+    if (S.autoRouteQueue) return;                                         // a run is already in flight
+    if (!(opts && opts.force)) {
+        if (uuid && S.autoRouteAppliedUuid === uuid) return;             // once per set
+    }
     if (uuid) S.autoRouteAppliedUuid = uuid;
 
     // (a) Overture's own routing state -> canonical.
@@ -139,7 +151,15 @@ export function beginAutoRoute(S, deps, uuid) {
         S.trackChannel[t] = c.channel;
     }
     // (b) Schwung slots -> ch 5..8 (live, self-persisting, no fork).
-    if (typeof deps.shadowSetParam === 'function')
+    // Prefer the BLOCKING setter: four back-to-back fire-and-forget set_params in
+    // one tick coalesce to only the LAST reaching DSP (on device this left just
+    // slot 4 / ch8 set). shadow_set_param_timeout round-trips per call so all four
+    // land. Fall back to the non-blocking setter only when the timeout variant is
+    // absent (older host / stock Schwung).
+    if (typeof deps.shadowSetParamTimeout === 'function')
+        for (let i = 0; i < 4; i++)
+            deps.shadowSetParamTimeout(i, 'slot:receive_channel', String(canonicalSlotChannel(i)), 500);
+    else if (typeof deps.shadowSetParam === 'function')
         for (let i = 0; i < 4; i++)
             deps.shadowSetParam(i, 'slot:receive_channel', String(canonicalSlotChannel(i)));
 
@@ -148,6 +168,24 @@ export function beginAutoRoute(S, deps, uuid) {
     S.autoRouteGap      = 0;
     S.autoRouteActive   = true;       // drives "Configuring…" overlay + input lockout
     S.autoRouteWatchdog = 1200;       // ~13s @ ~94Hz hard abort
+}
+
+/**
+ * Drain a pending manual auto-route request (queued from the Route Check view's
+ * jog-click). Runs in tick context — where get_param works and set_param doesn't
+ * coalesce — so it can read the set uuid and force a fresh `beginAutoRoute`.
+ * No-op unless `S.pendingAutoRouteRequest` is set; clears the flag on fire.
+ *
+ * @param {import('../types').State} S
+ * @param {AutoRouteDeps & { host_module_get_param?: (key: string) => (string | null) }} deps
+ * @returns {void}
+ */
+export function runAutoRouteRequest(S, deps) {
+    if (!S.pendingAutoRouteRequest) return;
+    S.pendingAutoRouteRequest = false;
+    const uuid = deps.host_module_get_param
+        ? (deps.host_module_get_param('state_uuid') || '') : '';
+    beginAutoRoute(S, deps, uuid, { force: true });
 }
 
 /* Finish (or abort) the macro: clear the queue + overlay/watchdog flags.

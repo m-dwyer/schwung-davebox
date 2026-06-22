@@ -8,6 +8,7 @@ import {
   midiInMacro,
   beginAutoRoute,
   runAutoRouteTickTasks,
+  runAutoRouteRequest,
 } from "@overture-ui/core/ui_auto_route.mjs";
 
 const JOG_CC = 14;
@@ -28,6 +29,7 @@ function autoRouteState(overrides: Record<string, unknown> = {}) {
     autoRouteActive: false,
     autoRouteWatchdog: 0,
     autoRouteAppliedUuid: "",
+    pendingAutoRouteRequest: false,
     ...overrides,
   };
 }
@@ -112,23 +114,31 @@ describe("gesture builder", () => {
 });
 
 describe("beginAutoRoute", () => {
-  test("re-seeds Schwung slots ch5-8 and populates the macro queue", () => {
-    const calls: Array<[number, string, string]> = [];
+  test("re-seeds Schwung slots ch5-8 via the BLOCKING setter and populates the macro queue", () => {
+    // The blocking setter (shadow_set_param_timeout) round-trips per call, so all
+    // four slot writes land — the non-blocking variant would coalesce to ch8 only.
+    const calls: Array<[number, string, string, number]> = [];
+    const nonBlocking: unknown[] = [];
     const deps = {
-      shadowSetParam: (slot: number, key: string, val: string) =>
-        calls.push([slot, key, val]),
+      shadowSetParamTimeout: (slot: number, key: string, val: string, ms: number) => {
+        calls.push([slot, key, val, ms]);
+        return true;
+      },
+      shadowSetParam: () => nonBlocking.push(1),
     };
     const S = autoRouteState();
 
     beginAutoRoute(S as never, deps as never, "uuid-A");
 
-    // 4 calls, slots 0-3, slot:receive_channel "5".."8".
+    // 4 blocking calls, slots 0-3, slot:receive_channel "5".."8", with a timeout.
     expect(calls).toEqual([
-      [0, "slot:receive_channel", "5"],
-      [1, "slot:receive_channel", "6"],
-      [2, "slot:receive_channel", "7"],
-      [3, "slot:receive_channel", "8"],
+      [0, "slot:receive_channel", "5", 500],
+      [1, "slot:receive_channel", "6", 500],
+      [2, "slot:receive_channel", "7", 500],
+      [3, "slot:receive_channel", "8", 500],
     ]);
+    // When the blocking setter is present, the non-blocking one is NOT used.
+    expect(nonBlocking.length).toBe(0);
 
     // Canonical Overture routing applied: T1-4 Move ch1-4, T5-8 Schwung ch5-8.
     expect(S.trackRoute).toEqual([
@@ -143,6 +153,26 @@ describe("beginAutoRoute", () => {
     expect(S.autoRouteActive).toBe(true);
     expect(S.autoRouteWatchdog).toBeGreaterThan(0);
     expect(S.autoRouteAppliedUuid).toBe("uuid-A");
+  });
+
+  test("falls back to the non-blocking setter when the timeout variant is absent", () => {
+    // Older host / stock Schwung: only shadow_set_param exists. The re-seed must
+    // still fire all four slot writes through the fire-and-forget setter.
+    const calls: Array<[number, string, string]> = [];
+    const deps = {
+      shadowSetParam: (slot: number, key: string, val: string) =>
+        calls.push([slot, key, val]),
+    };
+    const S = autoRouteState();
+
+    beginAutoRoute(S as never, deps as never, "uuid-fallback");
+
+    expect(calls).toEqual([
+      [0, "slot:receive_channel", "5"],
+      [1, "slot:receive_channel", "6"],
+      [2, "slot:receive_channel", "7"],
+      [3, "slot:receive_channel", "8"],
+    ]);
   });
 
   test("is a no-op on the second call with the same uuid", () => {
@@ -166,6 +196,73 @@ describe("beginAutoRoute", () => {
     beginAutoRoute(S as never, {} as never, "uuid-B");
     expect(Array.isArray(S.autoRouteQueue)).toBe(true);
     expect(S.autoRouteActive).toBe(true);
+  });
+
+  test("force=true bypasses the once-per-uuid guard", () => {
+    const calls: unknown[] = [];
+    const deps = { shadowSetParam: () => calls.push(1) };
+    // The auto-guard would normally short-circuit: same uuid already applied.
+    const S = autoRouteState({ autoRouteAppliedUuid: "uuid-A" });
+
+    beginAutoRoute(S as never, deps as never, "uuid-A", { force: true });
+
+    expect(calls.length).toBe(4); // fired despite the matching applied uuid
+    expect(Array.isArray(S.autoRouteQueue)).toBe(true);
+    expect(S.autoRouteActive).toBe(true);
+  });
+
+  test("re-entry guard: a run already in flight makes any call a no-op", () => {
+    const calls: unknown[] = [];
+    const deps = { shadowSetParam: () => calls.push(1) };
+    // autoRouteQueue already set → a macro is mid-drain.
+    const S = autoRouteState({ autoRouteQueue: [] as Step[] });
+
+    beginAutoRoute(S as never, deps as never, "uuid-Z");
+    expect(calls.length).toBe(0);
+
+    // Even forced, the re-entry guard wins.
+    beginAutoRoute(S as never, deps as never, "uuid-Z", { force: true });
+    expect(calls.length).toBe(0);
+  });
+});
+
+describe("runAutoRouteRequest", () => {
+  test("fires once when pending, clears the flag, then is a no-op", () => {
+    const calls: Array<[number, string, string]> = [];
+    const injected: number[][] = [];
+    const deps = {
+      shadowSetParam: (slot: number, key: string, val: string) =>
+        calls.push([slot, key, val]),
+      host_module_get_param: (key: string) => (key === "state_uuid" ? "u" : ""),
+      move_midi_inject_to_move: (packet: number[]) => injected.push(packet),
+    };
+    const S = autoRouteState({ pendingAutoRouteRequest: true });
+
+    runAutoRouteRequest(S as never, deps as never);
+
+    // Flag cleared, the route was applied (forced begin) once.
+    expect(S.pendingAutoRouteRequest).toBe(false);
+    expect(calls.length).toBe(4);
+    expect(Array.isArray(S.autoRouteQueue)).toBe(true);
+    expect(S.autoRouteAppliedUuid).toBe("u");
+
+    // Second call with the flag now false: no further begin.
+    S.autoRouteQueue = null;
+    runAutoRouteRequest(S as never, deps as never);
+    expect(calls.length).toBe(4);
+    expect(S.autoRouteQueue).toBe(null);
+  });
+
+  test("is a no-op when no request is pending", () => {
+    const calls: unknown[] = [];
+    const deps = {
+      shadowSetParam: () => calls.push(1),
+      host_module_get_param: () => "u",
+    };
+    const S = autoRouteState({ pendingAutoRouteRequest: false });
+    runAutoRouteRequest(S as never, deps as never);
+    expect(calls.length).toBe(0);
+    expect(S.autoRouteQueue).toBe(null);
   });
 });
 
