@@ -20,7 +20,9 @@ import {
 } from "@overture-ui/core/ui_sound_edit.mjs";
 import { renderSchwungSoundPage } from "@overture-ui/render/ui_sound_edit_render.mjs";
 import { PARAM_PEEK_DETAIL_TICKS, autoLaneLabel, motionIdleModel, motionOverviewModel, paramPeekInfo } from "@overture-ui/core/ui_motion.mjs";
+import { genericParameterPageGridModel } from "@overture-ui/core/ui_parameter_page_model.mjs";
 import { loadSchwungSoundPreset, saveSchwungSoundPreset } from "@overture-ui/core/ui_sound_preset_manager.mjs";
+import { fmtArpRate } from "@overture-ui/core/ui_constants.mjs";
 
 describe("UI descriptor seams", () => {
   beforeEach(() => {
@@ -828,5 +830,40 @@ describe("UI descriptor seams", () => {
       param: "Cutoff",
       paramText: "Cutoff",
     });
+  });
+
+  test("generic Parameter Page model preserves cell formatting and slot assumptions", () => {
+    const knobs = Array.from({ length: 8 }, (_, k) => ({
+      abbrev: "K" + k,
+      dspKey: "",
+      fmt: (v: number) => "V" + v,
+    }));
+    knobs[1] = { abbrev: "Rate", dspKey: "", fmt: fmtArpRate };
+    knobs[6] = { abbrev: "Dir", dspKey: "clip_playback_dir", fmt: (v: number) => "D" + v };
+    knobs[7] = { abbrev: "Rnd", dspKey: "", fmt: (v: number) => "R" + v };
+
+    const model = genericParameterPageGridModel({
+      bank: 3,
+      knobs,
+      vals: [0, 2, 3, 4, 5, 6, 7, 8],
+      altMode: true,
+      isDrum: false,
+      knobTouched: 6,
+      midiDlyRandomMode: 1,
+      noteFXRandomMode: 2,
+      delayClockFb: -6,
+      clipPlaybackAudioReverse: 1,
+    });
+
+    expect(model.grid).toMatchObject({
+      preformatted: true,
+      preserveSlots: true,
+      startY: 12,
+      valueYOffset: 12,
+    });
+    expect(model.cells[0]).toMatchObject({ label: "ClkF", value: "-6  ", highlighted: false });
+    expect(model.cells[1]).toMatchObject({ label: "Rate", value: "1/16t", highlighted: false });
+    expect(model.cells[6]).toMatchObject({ label: "Rvrs", value: "Audi", highlighted: true });
+    expect(model.cells[7]).toMatchObject({ label: "Algo", value: "Gaus", highlighted: false });
   });
 });

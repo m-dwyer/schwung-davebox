@@ -4,7 +4,6 @@ import {
     PAD_MODE_DRUM,
     TPS_VALUES,
     col4,
-    fmtArpRate,
     fmtBool,
     fmtGateMod,
     fmtLen,
@@ -18,6 +17,7 @@ import {
 } from '../core/ui_constants.mjs';
 import { effectiveClip } from './ui_leds.mjs';
 import { motionOverviewModel } from '../core/ui_motion.mjs';
+import { genericParameterPageGridModel } from '../core/ui_parameter_page_model.mjs';
 import { renderEncoderValueGrid } from './ui_oled_layout.mjs';
 
 export function renderDrumLaneBankOverview(deps) {
@@ -256,43 +256,24 @@ export function renderTrackBankOverview(deps, bank) {
 
 export function renderGenericParameterPageOverview(deps, bank) {
     const knobs = BANKS[bank].knobs;
-    const vals  = S.bankParams[S.activeTrack][bank];
+    const t = S.activeTrack;
+    const ac = effectiveClip(t);
+    const vals  = S.bankParams[t][bank];
     const isDrum = S.trackPadMode[S.activeTrack] === PAD_MODE_DRUM;
     (bank === 5 ? deps.drawBankHeadingInverted : deps.drawBankHeading)(BANKS[bank].name);
-    const cells = [];
-    for (let k = 0; k < 8; k++) {
-        let lbl = knobs[k].abbrev || '-';
-        const delayShiftClkF = S.altMode && !isDrum && bank === 3 && k === 0;
-        const clipDirAlt     = S.altMode && !isDrum && knobs[k].dspKey === 'clip_playback_dir';
-        const rndAltAlgo     = S.altMode && !isDrum && (bank === 1 || bank === 3) && k === 7;
-        const RND_ALG_NAMES  = ['Pure', 'Gaus', 'Walk'];
-        if (S.altMode) {
-            if      (knobs[k].dspKey === 'clock_shift')      lbl = 'Nudg';
-            else if (knobs[k].dspKey === 'clip_resolution')  lbl = 'Zoom';
-            else if (knobs[k].dspKey === 'clip_playback_dir') lbl = 'Rvrs';
-            else if (delayShiftClkF)                         lbl = 'ClkF';
-            else if (rndAltAlgo)                             lbl = 'Algo';
-        }
-        const rawVal = rndAltAlgo
-            ? RND_ALG_NAMES[bank === 3 ? (S.midiDlyRandomMode[S.activeTrack] || 0) : (S.noteFXRandomMode[S.activeTrack] || 0)]
-            : delayShiftClkF
-                ? fmtSign(S.delayClockFb[S.activeTrack])
-                : clipDirAlt
-                    ? fmtRevStyle(S.clipPlaybackAudioReverse[S.activeTrack][effectiveClip(S.activeTrack)] | 0)
-                    : (knobs[k].abbrev ? knobs[k].fmt(vals[k]) : null);
-        const txt = (knobs[k].fmt === fmtArpRate && !delayShiftClkF) ? (rawVal || '-') : col4(rawVal);
-        cells.push({
-            label: lbl,
-            value: txt,
-            highlighted: S.knobTouched === k
-        });
-    }
-    renderEncoderValueGrid(deps, cells, {
-        preformatted: true,
-        preserveSlots: true,
-        startY: 12,
-        valueYOffset: 12
+    const model = genericParameterPageGridModel({
+        bank: bank,
+        knobs: knobs,
+        vals: vals,
+        altMode: S.altMode,
+        isDrum: isDrum,
+        knobTouched: S.knobTouched,
+        midiDlyRandomMode: S.midiDlyRandomMode[t] || 0,
+        noteFXRandomMode: S.noteFXRandomMode[t] || 0,
+        delayClockFb: S.delayClockFb[t],
+        clipPlaybackAudioReverse: S.clipPlaybackAudioReverse[t][ac] | 0
     });
+    renderEncoderValueGrid(deps, model.cells, model.grid);
 }
 
 export function renderGenericBankOverview(deps, bank) {

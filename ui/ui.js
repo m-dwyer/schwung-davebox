@@ -120,7 +120,7 @@ import {
 } from './core/ui_motion.mjs';
 import {
     renderTrackBankOverview
-} from './render/ui_bank_render.mjs';
+} from './render/ui_parameter_page_render.mjs';
 import {
     drawAltArrow as renderDrawAltArrow,
     drawBankHeaderRight as renderDrawBankHeaderRight,
