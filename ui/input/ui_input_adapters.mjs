@@ -34,6 +34,10 @@ export function optionalShadowSendMidiToDsp() {
     return typeof shadow_send_midi_to_dsp === 'function' ? shadow_send_midi_to_dsp : null;
 }
 
+export function optionalShadowSetParam() {
+    return typeof shadow_set_param === 'function' ? shadow_set_param : null;
+}
+
 export function optionalHostExitModule() {
     return typeof host_exit_module === 'function' ? host_exit_module : null;
 }
