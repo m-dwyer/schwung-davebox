@@ -42,6 +42,9 @@ echo "Compiling DSP..."
     -lm
 
 cp module.json           "dist/${MODULE_ID}/"
+# Ship the MIT LICENSE with the module — the notice must travel with every
+# distributed copy (covers both the dAVEBOx upstream and Overture fork copyrights).
+cp LICENSE               "dist/${MODULE_ID}/"
 # JS bundle (dist/${MODULE_ID}/ui.js) was produced on the host by bundle_ui.sh
 # before this Docker pass — see the OVERTURE_IN_DOCKER guard near the top.
 # Ship the Ableton-export packager + JSON templates alongside the module (read at

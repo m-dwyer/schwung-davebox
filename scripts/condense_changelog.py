@@ -27,7 +27,7 @@ import sys
 
 
 CHANGELOG_URL = (
-    "https://github.com/legsmechanical/schwung-davebox/blob/main/CHANGELOG.md"
+    "https://github.com/m-dwyer/overture/blob/main/CHANGELOG.md"
 )
 
 

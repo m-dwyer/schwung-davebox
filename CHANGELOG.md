@@ -1,6 +1,12 @@
 # Changelog
 
-All notable changes to dAVEBOx are documented here.
+All notable changes to Overture are documented here.
+
+Overture is a fork of [dAVEBOx](https://github.com/legsmechanical/schwung-davebox)
+(MIT, © Josh Gaines), branched at dAVEBOx `v1.0b3+19` and substantially diverged.
+Versioning restarted at `0.x` under the Overture name; the pre-fork `1.0b*`
+history below predates the rename and is kept for lineage. See
+[docs/UPSTREAM.md](docs/UPSTREAM.md) for the fork point and upstream-tracking process.
 
 Format follows [Keep a Changelog](https://keepachangelog.com). Add entries to
 `[Unreleased]` as user-facing changes land; `scripts/cut_release.sh` finalizes
@@ -8,6 +14,8 @@ the section into a versioned heading at release time.
 
 ## [Unreleased]
 ### Features
+- **Improved boot splash.** New animated "OVERTURE" boot animation (1-bit,
+  load-driven) replacing the static splash bitmaps.
 - **Sound Edit presets.** Schwung Sound Edit can now save and load named presets
   for the selected MIDI FX, Synth, FX 1, or FX 2 module without adding permanent
   OLED clutter. Use Copy+jog-click to browse presets and Capture+jog-click to
@@ -29,6 +37,9 @@ the section into a versioned heading at release time.
 - **Transport stop returns to resting values.** When transport stops, all CC lanes emit their resting values so parameters don't get stuck.
 
 ### Fixes
+- **Boot splash shows on new sets.** Previously a new/empty set showed a black
+  screen then "Configuring routing…" instead of the splash; the splash now
+  covers the new-set routing setup.
 - **On-device module paths point at the right directory.** The DSP read its files from `modules/tools/davebox/` while the module installs as `modules/tools/overture/` (the `module.json` id), so the metronome click sample silently failed to load on device. Aligned all on-device paths (the `click-seq8.wav` loader and the wasm-glue default module dir) to `overture`.
 
 ## [1.0b3] — 2026-05-30

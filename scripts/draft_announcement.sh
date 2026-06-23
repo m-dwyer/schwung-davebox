@@ -18,7 +18,7 @@ fi
 
 VERSION="${1#v}"
 TAG="v${VERSION}"
-URL="https://github.com/legsmechanical/schwung-davebox/releases/tag/${TAG}"
+URL="https://github.com/m-dwyer/overture/releases/tag/${TAG}"
 
 if ! BODY=$(gh release view "$TAG" --json body -q .body 2>/dev/null); then
     echo "error: no GitHub release found for $TAG" >&2
